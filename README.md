@@ -38,7 +38,7 @@ ordena/
 
 ### 🔷 Clonar el repositorio
 
-git clone https://github.com/tu-usuario/ordena.git
+https://github.com/fabianolate0320/Proyecto-ordena.git
 cd ordena
 
 🖥️ Frontend (React + Vite)
