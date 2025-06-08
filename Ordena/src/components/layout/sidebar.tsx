@@ -12,6 +12,7 @@ const links = [
     { to: "/pedidos", icon: LocalShippingIcon, label: "Pedidos" },
     { to: "/empleados", icon: PeopleAltIcon, label: "Empleados" },
     { to: "/historial", icon: ManageHistoryIcon, label: "Historial y Reportes" },
+    { to: "/solicitudes", icon: AssignmentIcon, label: "Solicitudes" },
 ];
 
 export default function Sidebar() {
@@ -33,7 +34,7 @@ export default function Sidebar() {
             <nav>
                 <ul style={{ listStyle: "none", padding: 0 }}>
                     {links.map(link => {
-                        const isActive = location.pathname === link.to;
+                        const isActive = location.pathname.startsWith(link.to);
                         const Icon = link.icon;
                         return (
                             <li
