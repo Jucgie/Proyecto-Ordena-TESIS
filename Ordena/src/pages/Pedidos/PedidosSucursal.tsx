@@ -4,34 +4,31 @@ import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
     Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, TextField
 } from "@mui/material";
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import { useBodegaStore } from "../../store/useBodegaStore";
+import { generarGuiaDespacho } from "../../utils/pdf/generarGuiaDespacho";
 
 export default function PedidosSucursal() {
+    const { pedidos, updatePedido } = useBodegaStore();
     const [estado, setEstado] = useState("");
     const [fecha, setFecha] = useState("");
     const [modalOpen, setModalOpen] = useState(false);
     const [pedidoSeleccionado, setPedidoSeleccionado] = useState<any>(null);
+    const sucursalActual = "Sucursal";
 
-    // Simulación de pedidos asignados a la sucursal
-    const [pedidos, setPedidos] = useState<any[]>([
-        {
-            id: 1,
-            fecha: "2024-06-01",
-            sucursalDestino: "Sucursal Norte",
-            cantidad: 5,
-            estado: "En proceso",
-            responsable: "Juan Pérez",
-            productos: [{ nombre: "Producto A", cantidad: 2 }, { nombre: "Producto B", cantidad: 3 }]
-        }
-    ]);
 
     const pedidosFiltrados = useMemo(() => {
-        return pedidos.filter((row) => {
-            if (estado && row.estado !== estado) return false;
-            if (fecha && row.fecha !== fecha) return false;
-            return true;
-        });
-    }, [pedidos, estado, fecha]);
+        return pedidos.filter((row) =>
+            row.tipo === "salida" &&
+            row.sucursalDestino === sucursalActual &&
+            (row.estado === "En camino" || row.estado === "Completado")
+        );
+    }, [pedidos, sucursalActual]);
 
+    const handleConfirmarRecepcion = (id: number) => {
+        updatePedido(id, { estado: "Completado" });
+    };
+    
     const handleOpenModal = (pedido: any) => {
         setPedidoSeleccionado(pedido);
         setModalOpen(true);
@@ -44,12 +41,13 @@ export default function PedidosSucursal() {
 
     return (
         <Layout>
-            {/* Contenedor principal con padding uniforme */}
-            <div style={{ padding: "24px",
+            <div style={{
+                padding: "24px",
                 maxWidth: "1200px",
                 margin: "0 auto",
                 width: "100%",
-                boxSizing: "border-box"}}>
+                boxSizing: "border-box"
+            }}>
                 {/* Barra superior de la tabla */}
                 <div
                     style={{
@@ -64,7 +62,6 @@ export default function PedidosSucursal() {
                     <h2 style={{ color: "#FFD700", margin: 0 }}>Pedidos asignados a mi sucursal</h2>
                     {/* Filtros */}
                     <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-                        {/* Estado */}
                         <FormControl
                             size="small"
                             variant="outlined"
@@ -101,7 +98,6 @@ export default function PedidosSucursal() {
                                 <MenuItem value="Anulado">Anulado</MenuItem>
                             </Select>
                         </FormControl>
-                        {/* Fecha */}
                         <TextField
                             size="small"
                             label="Fecha"
@@ -161,9 +157,23 @@ export default function PedidosSucursal() {
                                             {row.estado}
                                         </TableCell>
                                         <TableCell>
+                                            {row.estado === "En camino" && (
+                                                <Button
+                                                    variant="contained"
+                                                    color="success"
+                                                    style={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
+                                                    onClick={() => handleConfirmarRecepcion(row.id)}
+                                                >
+                                                    Confirmar recepción
+                                                </Button>
+                                            )}
+                                            {row.estado === "Completado" && (
+                                                <span style={{ color: "#FFD700", fontWeight: 600 }}>Recibido</span>
+                                            )}
                                             <Button
                                                 variant="outlined"
-                                                style={{ borderColor: "#FFD700", color: "#FFD700" }}
+                                                startIcon={<VisibilityIcon />}
+                                                style={{ borderColor: "#FFD700", color: "#FFD700", marginLeft: 8 }}
                                                 onClick={() => handleOpenModal(row)}
                                             >
                                                 Ver detalles
@@ -176,21 +186,99 @@ export default function PedidosSucursal() {
                     </Table>
                 </TableContainer>
                 {/* Modal de detalles */}
-                <Dialog open={modalOpen} onClose={handleCloseModal}>
-                    <DialogTitle>Detalles del pedido</DialogTitle>
-                    <DialogContent>
-                        {pedidoSeleccionado ? (
-                            <div>
-                                <div><b>ID:</b> {pedidoSeleccionado.id}</div>
-                                <div><b>Fecha:</b> {pedidoSeleccionado.fecha}</div>
-                                <div><b>Responsable:</b> {pedidoSeleccionado.responsable}</div>
-                                <div><b>N° de productos:</b> {pedidoSeleccionado.cantidad}</div>
-                                <div><b>Estado:</b> {pedidoSeleccionado.estado}</div>
+                <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
+                    <DialogTitle style={{ color: "#B0B0B0", background: "#232323" }}>
+                        Detalles del pedido
+                    </DialogTitle>
+                    <DialogContent style={{ background: "#181818" }}>
+                        {pedidoSeleccionado && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "8px" }}>
+                                <TextField
+                                    label="ID"
+                                    value={pedidoSeleccionado.id}
+                                    variant="filled"
+                                    disabled
+                                    size="small"
+                                    InputProps={{
+                                        disableUnderline: true,
+                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
+                                    }}
+                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
+                                />
+                                <TextField
+                                    label="Fecha"
+                                    value={pedidoSeleccionado.fecha}
+                                    variant="filled"
+                                    disabled
+                                    size="small"
+                                    InputProps={{
+                                        disableUnderline: true,
+                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
+                                    }}
+                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
+                                />
+                                <TextField
+                                    label="Responsable"
+                                    value={pedidoSeleccionado.responsable}
+                                    variant="filled"
+                                    disabled
+                                    size="small"
+                                    InputProps={{
+                                        disableUnderline: true,
+                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
+                                    }}
+                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
+                                />
+                                <TextField
+                                    label="N° de productos"
+                                    value={pedidoSeleccionado.cantidad}
+                                    variant="filled"
+                                    disabled
+                                    size="small"
+                                    InputProps={{
+                                        disableUnderline: true,
+                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
+                                    }}
+                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
+                                />
+                                <TextField
+                                    label="Estado"
+                                    value={pedidoSeleccionado.estado}
+                                    variant="filled"
+                                    disabled
+                                    size="small"
+                                    InputProps={{
+                                        disableUnderline: true,
+                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
+                                    }}
+                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
+                                />
+                                <div style={{ marginTop: "12px" }}>
+                                    <b style={{ color: "#B0B0B0" }}>Productos del pedido:</b>
+                                    <ul style={{ color: "#B0B0B0", marginTop: 8 }}>
+                                        {pedidoSeleccionado.productos && pedidoSeleccionado.productos.length > 0 ? (
+                                            pedidoSeleccionado.productos.map((prod: any, idx: number) => (
+                                                <li key={idx}>{prod.nombre} — {prod.cantidad}</li>
+                                            ))
+                                        ) : (
+                                            <li>No hay productos en este pedido.</li>
+                                        )}
+                                    </ul>
+                                </div>
                             </div>
-                        ) : null}
+                        )}
                     </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseModal} style={{ color: "#FFD700" }}>Cerrar</Button>
+                    <DialogActions style={{ background: "#232323" }}>
+                        <Button onClick={handleCloseModal} style={{ color: "#B0B0B0" }}>Cerrar</Button>
+                        {pedidoSeleccionado && (
+                            <Button
+                                variant="outlined"
+                                style={{ borderColor: "#4CAF50", color: "#4CAF50" }}
+                                onClick={() => generarGuiaDespacho(pedidoSeleccionado)}
+                            >
+                                Ver Guía de Despacho
+                            </Button>
+                        )}
                     </DialogActions>
                 </Dialog>
             </div>

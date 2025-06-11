@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import { useBodegaStore } from "../../store/useBodegaStore";
 
 export default function Topbar() {
+    const { vista, setVista } = useBodegaStore();
     const [sucursal, setSucursal] = useState("Bodega Central");
 
     return (
@@ -25,8 +27,8 @@ export default function Topbar() {
             {/* Perfil de usuario y selector de sucursal */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <select
-                    value={sucursal}
-                    onChange={e => setSucursal(e.target.value)}
+                    value={vista}
+                    onChange={e => setVista(e.target.value as "bodega" | "sucursal")}
                     style={{
                         background: "#232323",
                         color: "#FFD700",
@@ -38,8 +40,8 @@ export default function Topbar() {
                         fontWeight: 500,
                     }}
                 >
-                    <option value="Bodega Central">Bodega Central</option>
-                    {/* Aquí puedes agregar más sucursales en el futuro */}
+                    <option value="bodega">Bodega</option>
+                    <option value="sucursal">Sucursal</option>
                 </select>
 
                 <AccountCircleIcon style={{ color: "#FFD700", fontSize: 32 }} />
