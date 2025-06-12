@@ -7,6 +7,8 @@ import { useState } from "react";
 
 interface Props {
   setState: ()=>void;
+
+
 }
 
 export function RegUsuario({setState}:Props) {
