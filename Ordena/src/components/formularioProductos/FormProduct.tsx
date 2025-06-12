@@ -1,7 +1,7 @@
 import styled from "styled-components";
 import InfoIcon from '@mui/icons-material/Info';
 import { useState } from "react";
-import type { ProductInt } from "../../components/inventario/InventoryPage";
+import type { ProductInt } from "../../pages/inventario/inventario";   
 
 
 
@@ -207,8 +207,7 @@ const Container = styled.div`
   background: #1E1E1E;
   box-shadow: -10px 15px 30px rgba(10, 9, 9, 0.4);
   padding: 13px 26px 20px 26px;
-  z-index: 400;
-  display:flex;
+  z-index: 200;
   align-items:center;
   flex-direction:column;
   justify-content:center;

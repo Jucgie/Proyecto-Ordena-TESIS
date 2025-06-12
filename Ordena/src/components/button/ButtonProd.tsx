@@ -12,7 +12,7 @@ interface CProps{
     $color?:string;
 }
 
-export function Btn ({funcion, titulo, background, url,color}:Props) {
+export function BtnProd ({funcion, titulo, background, url,color}:Props) {
     return(
         <Container type="button" onClick={funcion} $background={background}>
             <span className="btn" >
