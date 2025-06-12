@@ -7,23 +7,24 @@ import {
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useBodegaStore } from "../../store/useBodegaStore";
 import { generarGuiaDespacho } from "../../utils/pdf/generarGuiaDespacho";
+import { useAuthStore } from "../../store/useAuthStore";
 
 export default function PedidosSucursal() {
     const { pedidos, updatePedido } = useBodegaStore();
+    const usuario = useAuthStore(state => state.usuario);
     const [estado, setEstado] = useState("");
     const [fecha, setFecha] = useState("");
     const [modalOpen, setModalOpen] = useState(false);
     const [pedidoSeleccionado, setPedidoSeleccionado] = useState<any>(null);
-    const sucursalActual = "Sucursal";
 
-
+    const sucursalActualId = usuario?.sucursal?.id || "";
     const pedidosFiltrados = useMemo(() => {
         return pedidos.filter((row) =>
             row.tipo === "salida" &&
-            row.sucursalDestino === sucursalActual &&
+            row.sucursalDestino === sucursalActualId &&
             (row.estado === "En camino" || row.estado === "Completado")
         );
-    }, [pedidos, sucursalActual]);
+    }, [pedidos, sucursalActualId]);
 
     const handleConfirmarRecepcion = (id: number) => {
         updatePedido(id, { estado: "Completado" });
@@ -39,6 +40,10 @@ export default function PedidosSucursal() {
         setPedidoSeleccionado(null);
     };
 
+console.log("Usuario:", usuario);
+console.log("Pedidos:", JSON.stringify(pedidos, null, 2));
+console.log("Sucursal actual id:", sucursalActualId);
+console.log("Pedidos filtrados:", pedidosFiltrados);
     return (
         <Layout>
             <div style={{
@@ -94,7 +99,7 @@ export default function PedidosSucursal() {
                             >
                                 <MenuItem value=""><em>Todos</em></MenuItem>
                                 <MenuItem value="Completado">Completado</MenuItem>
-                                <MenuItem value="En proceso">En proceso</MenuItem>
+                                <MenuItem value="En camino">En camino</MenuItem>
                                 <MenuItem value="Anulado">Anulado</MenuItem>
                             </Select>
                         </FormControl>
@@ -129,7 +134,8 @@ export default function PedidosSucursal() {
                             <TableRow>
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>ID</TableCell>
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
-                                <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Responsable</TableCell>
+                                <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Asignado a entrega</TableCell>
+                                <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Sucursal destino</TableCell>
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>N° de productos</TableCell>
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Estado</TableCell>
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Acción</TableCell>
@@ -138,7 +144,7 @@ export default function PedidosSucursal() {
                         <TableBody>
                             {pedidosFiltrados.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} align="center" style={{ color: "#8A8A8A" }}>
+                                    <TableCell colSpan={7} align="center" style={{ color: "#8A8A8A" }}>
                                         No hay registros para mostrar.
                                     </TableCell>
                                 </TableRow>
@@ -147,13 +153,16 @@ export default function PedidosSucursal() {
                                     <TableRow key={row.id}>
                                         <TableCell style={{ color: "#fff" }}>{row.id}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.fecha}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.responsable}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{row.asignado || "-"}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>
+                                            {row.sucursalDestino || "-"}
+                                        </TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
                                                 ? row.productos.reduce((acc, prod) => acc + Number(prod.cantidad), 0)
                                                 : row.cantidad || 0}
                                         </TableCell>
-                                        <TableCell style={{ color: row.estado === "Completado" ? "#FFD700" : row.estado === "En proceso" ? "#8A8A8A" : "#FF4D4F" }}>
+                                        <TableCell style={{ color: row.estado === "Completado" ? "#FFD700" : row.estado === "En camino" ? "#8A8A8A" : "#FF4D4F" }}>
                                             {row.estado}
                                         </TableCell>
                                         <TableCell>

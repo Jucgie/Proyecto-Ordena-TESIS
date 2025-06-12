@@ -36,6 +36,7 @@ export const useBodegaStore = create(
             p.id === id ? { ...p, ...cambios } : p
           ),
         })),
+      clearPedidos: () => set({ pedidos: [] }),
     }),
     {
       name: "bodega-storage", // nombre de la clave en localStorage

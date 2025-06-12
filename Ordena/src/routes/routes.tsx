@@ -8,6 +8,7 @@ import SolicitudesBodega from "../pages/Solicitudes/SolicitudesBodega"; // crea 
 //import HistorialSucursal from "../pages/Historial/HistorialSucursal"; // crea este archivo si no existe
 import Redirectxrol from "./RedirectXrol";
 import { useBodegaStore } from "../store/useBodegaStore";
+import { InicioS } from "../pages/IniciarSesion/IniciarSesion";
 // Simulación de usuario autenticado
 
 
@@ -31,7 +32,7 @@ export default function AppRoutes() {
                 {/* <Route path="/historial/sucursal" element={<HistorialSucursal />} /> */}
                 {/* Ruta para no encontrados */}
                 <Route path="*" element={<Navigate to="/pedidos" replace />} />
-                
+                <Route path="/login" element={<InicioS/>}/>
             </Routes>
         </BrowserRouter>
     );

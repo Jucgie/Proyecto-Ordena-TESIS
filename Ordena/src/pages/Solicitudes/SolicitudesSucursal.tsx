@@ -7,26 +7,32 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useBodegaStore } from "../../store/useBodegaStore";
+import { useAuthStore } from "../../store/useAuthStore";
 import { generarOCI } from "../../utils/pdf/generarOCI"; // Asegúrate de que esta función esté implementada correctamente
 
 export default function SolicitudesSucursal() {
     const { solicitudes, addSolicitud } = useBodegaStore();
+    const usuario = useAuthStore(state => state.usuario);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalResumenOpen, setModalResumenOpen] = useState(false);
     const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<any>(null);
 
-    // Simulación de usuario y sucursal
-    const sucursal = "Sucursal Norte";
-    const bodega = "Bodega Central";
+ // Obténemos sucursal y bodega desde el usuario
+    const sucursal = usuario?.sucursal?.nombre || "";
+    const bodega = "Bodega Central"; // Si tienes más de una bodega, usa usuario.bodega?.nombre
+    const responsable = usuario?.nombre || "Usuario Actual";
 
 
-    // Estado para nueva solicitud
+        // Estado para nueva solicitud
     const [nuevaSolicitud, setNuevaSolicitud] = useState<any>({
         id: solicitudes.length + 1,
-        sucursal,
+        sucursal: {
+        id: usuario?.sucursal?.id,
+        nombre: usuario?.sucursal?.nombre
+        },
         bodega,
         fecha: new Date().toISOString().slice(0, 10),
-        responsable: "Usuario Actual", // Puedes cambiarlo por el usuario logueado
+        responsable,
         observaciones: "",
         productos: [],
         estado: "pendiente"
@@ -55,7 +61,7 @@ export default function SolicitudesSucursal() {
             sucursal,
             bodega,
             fecha: new Date().toISOString().slice(0, 10),
-            responsable: "Usuario Actual",
+            responsable,
             observaciones: "",
             productos: [],
             estado: "pendiente"

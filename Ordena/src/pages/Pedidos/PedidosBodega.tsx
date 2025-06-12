@@ -16,6 +16,8 @@ import ModalFormularioPedido from "../../components/pedidos/modalform";
 import { useBodegaStore } from "../../store/useBodegaStore";
 
 import { generarGuiaDespacho } from "../../utils/pdf/generarGuiaDespacho";
+import { useAuthStore } from "../../store/useAuthStore"; 
+import { SUCURSALES } from "../../constants/ubicaciones";
 
 // Componente reutilizable para los botones de acción
 function BotonAccion({ children, startIcon, ...props }: { children: React.ReactNode, startIcon?: React.ReactNode, [key: string]: any }) {
@@ -42,8 +44,8 @@ function BotonAccion({ children, startIcon, ...props }: { children: React.ReactN
 }
 
 export default function PedidosBodega() {
-    const { pedidos, setPedidos, transferencias, setTransferencias, solicitudesTransferidas, addPedido, removeSolicitudTransferida } = useBodegaStore();
-
+    const { pedidos, setPedidos, clearPedidos, transferencias, setTransferencias, solicitudesTransferidas, addPedido, removeSolicitudTransferida } = useBodegaStore();
+    const usuario = useAuthStore(state => state.usuario);
     // Inicializa showSnackbar en true si transferencias > 0
     const [showSnackbar, setShowSnackbar] = useState(transferencias > 0);
 
@@ -68,40 +70,56 @@ export default function PedidosBodega() {
     };
 
     const despacharSolicitud = (solicitud: any) => {
-    // Crea el pedido de salida
-    addPedido({
-        id: Date.now(),
-        fecha: new Date().toISOString().slice(0, 10),
-        responsable: solicitud.responsable,
-        productos: solicitud.productos,
-        estado: "En camino",
-        sucursalDestino: solicitud.sucursalActual,
-        cantidad: solicitud.productos.reduce((acc: number, p: any) => acc + p.cantidad, 0),
-        tipo: "salida",
-        asignado: solicitud.responsable,
-        // Puedes agregar aquí más campos si los necesitas para el PDF
-        ociAsociada: solicitud.id,
-        observaciones: solicitud.observaciones,
-        bodegaOrigen: "Nombre de la bodega", // Completa según tu lógica
-        direccionBodega: "Dirección de la bodega", // Completa según tu lógica
-        direccionSucursal: solicitud.direccion || "-", // Si tienes este campo
-        patenteVehiculo: solicitud.patenteVehiculo || "-", // Si tienes este campo
-    });
+        let sucursalId = solicitud.sucursal?.id || solicitud.sucursalId;
+        // Si tampoco hay nombre, puedes intentar obtenerlo de otro campo
+        if (!sucursalId && solicitud.sucursal?.nombre) {
+            const sucursalObj = SUCURSALES.find(s => s.nombre === solicitud.sucursal.nombre);
+            sucursalId = sucursalObj?.id;
+        }
+        // Si aún no hay sucursalId, puedes intentar obtenerlo de la solicitud directamente
+        if (!sucursalId && solicitud.sucursalDestino) {
+            sucursalId = solicitud.sucursalDestino;
+        }
+        // Si aún no hay, muestra un error
+        if (!sucursalId) {
+            alert("No se pudo determinar la sucursal destino para este pedido.");
+            return;
+        }
 
-    // Genera el PDF de la Guía de Despacho
-    generarGuiaDespacho({
-        id: Date.now(),
-        fecha: new Date().toISOString().slice(0, 10),
-        responsable: solicitud.responsable,
-        productos: solicitud.productos,
-        sucursalDestino: solicitud.sucursal,
-        ociAsociada: solicitud.id,
-        observaciones: solicitud.observaciones,
-        bodegaOrigen: "Nombre de la bodega",
-        direccionBodega: "Dirección de la bodega",
-        direccionSucursal: solicitud.direccion || "-",
-        patenteVehiculo: solicitud.patenteVehiculo || "-",
-    });
+        addPedido({
+            id: Date.now(),
+            fecha: new Date().toISOString().slice(0, 10),
+            responsable: usuario?.nombre || "Responsable Bodega",
+            productos: solicitud.productos,
+            sucursalDestino: sucursalId, // <-- ¡AQUÍ! Debe ser sucursalId
+            cantidad: solicitud.productos.reduce((acc: number, p: any) => acc + p.cantidad, 0),
+            tipo: "salida",
+            asignado: usuario?.nombre || solicitud.responsable,
+            ociAsociada: solicitud.id,
+            observaciones: solicitud.observaciones,
+            bodegaOrigen: usuario?.bodega?.nombre || "Bodega Central",
+            direccionBodega: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción",
+            direccionSucursal: solicitud.direccion || "-",
+            patenteVehiculo: solicitud.patenteVehiculo || "-",
+            estado: "En camino",
+        });
+
+
+    // Genera el PDF de la Guía de Despacho con los datos dinámicos
+        generarGuiaDespacho({
+            id: Date.now(),
+            fecha: new Date().toISOString().slice(0, 10),
+            responsable: usuario?.nombre || "Responsable Bodega",
+            productos: solicitud.productos,
+            sucursalDestino: solicitud.sucursal,
+            ociAsociada: solicitud.id,
+            observaciones: solicitud.observaciones,
+            bodegaOrigen: usuario?.bodega?.nombre || "Bodega Central",
+            direccionBodega: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción",
+            direccionSucursal: solicitud.direccion || "-",
+            patenteVehiculo: solicitud.patenteVehiculo || "-",
+        });
+
         removeSolicitudTransferida(solicitud.id);
     };
 
@@ -190,12 +208,6 @@ export default function PedidosBodega() {
                         onClick={() => setModalTipo("ingreso")}
                     >
                         Nuevo Ingreso
-                    </BotonAccion>
-                    <BotonAccion
-                        startIcon={<OutboundIcon />}
-                        onClick={() => setModalTipo("salida")}
-                    >
-                        Nueva Salida
                     </BotonAccion>
                     <ModalFormularioPedido
                         open={!!modalTipo}
@@ -290,7 +302,9 @@ export default function PedidosBodega() {
                         {/* ... */}
                     </div>
                 </div>
-
+                <Button onClick={clearPedidos} color="error" variant="contained">
+                Limpiar todos los pedidos
+                </Button>
                 <TableContainer component={Paper} style={{ background: "#181818" }}>
                     <Table>
                         <TableHead>

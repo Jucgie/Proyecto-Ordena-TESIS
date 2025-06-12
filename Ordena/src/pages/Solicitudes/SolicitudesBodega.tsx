@@ -12,7 +12,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useBodegaStore } from "../../store/useBodegaStore";
 
 import { generarOCI } from "../../utils/pdf/generarOCI";
-
+import { useAuthStore } from "../../store/useAuthStore";
 
 export default function SolicitudesBodega() {
     const {
@@ -22,6 +22,7 @@ export default function SolicitudesBodega() {
         setTransferencias,
         addSolicitudesTransferidas,
     } = useBodegaStore();
+    const usuario = useAuthStore(state => state.usuario);
     const [modalOpen, setModalOpen] = useState(false);
     const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<any>(null);
 
@@ -79,11 +80,13 @@ export default function SolicitudesBodega() {
                     addPedido({
                         id: Date.now(),
                         fecha: solicitud.fecha,
-                        responsable: solicitud.responsable,
+                        responsable: usuario?.nombre || "Responsable Bodega",
                         productos: solicitud.productos,
                         estado: "En proceso",
-                        sucursalDestino: solicitud.sucursal,
+                        sucursalDestino: solicitud.sucursal.id,
                         cantidad: solicitud.productos.reduce((acc, p) => acc + p.cantidad, 0),
+                        bodega: usuario?.bodega?.nombre || "Bodega Central",
+                        tipo: "salida"
                     });
                     transferidasArr.push(solicitud);
                 }
