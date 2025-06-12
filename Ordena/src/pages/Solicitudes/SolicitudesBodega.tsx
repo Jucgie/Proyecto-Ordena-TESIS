@@ -222,7 +222,9 @@ export default function SolicitudesBodega() {
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.id}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.fecha}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.sucursal}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>
+                                        {row.sucursal?.nombre || "-"}
+                                        </TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.responsable}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
@@ -276,7 +278,11 @@ export default function SolicitudesBodega() {
                             <div>
                                 <div><b>ID:</b> {solicitudSeleccionada.id}</div>
                                 <div><b>Fecha:</b> {solicitudSeleccionada.fecha}</div>
-                                <div><b>Sucursal:</b> {solicitudSeleccionada.sucursal}</div>
+                                <div>
+                                    <b>Sucursal:</b> {solicitudSeleccionada.sucursal?.nombre || "-"}<br />
+                                    <b>Dirección:</b> {solicitudSeleccionada.sucursal?.direccion || "-"}<br />
+                                    <b>RUT:</b> {solicitudSeleccionada.sucursal?.rut || "-"}
+                                </div>
                                 <div><b>Responsable:</b> {solicitudSeleccionada.responsable}</div>
                                 <div><b>Observaciones:</b> {solicitudSeleccionada.observaciones || "Sin observaciones"}</div>
                                 <div><b>Estado:</b> {solicitudSeleccionada.estado.charAt(0).toUpperCase() + solicitudSeleccionada.estado.slice(1)}</div>

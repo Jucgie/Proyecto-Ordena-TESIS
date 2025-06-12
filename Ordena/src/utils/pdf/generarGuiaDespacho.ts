@@ -1,8 +1,13 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { SUCURSALES, BODEGA_CENTRAL } from "../../constants/ubicaciones";
 
 export function generarGuiaDespacho(pedido: any) {
     const doc = new jsPDF();
+
+    // Buscar sucursal destino y bodega origen
+    const sucursal = SUCURSALES.find(s => s.id === pedido.sucursalDestino);
+    const bodega = BODEGA_CENTRAL;
 
     // Título
     doc.setFontSize(16);
@@ -13,11 +18,11 @@ export function generarGuiaDespacho(pedido: any) {
     doc.text(`N° Guía de Despacho: ${pedido.id}`, 14, 30);
     doc.text(`Fecha de emisión: ${pedido.fecha}`, 14, 38);
 
-    doc.text(`Sucursal de destino: ${pedido.sucursalDestino || "-"}`, 14, 46);
-    doc.text(`Dirección sucursal: ${pedido.direccionSucursal || "-"}`, 14, 54);
+    doc.text(`Sucursal de destino: ${sucursal?.nombre || pedido.sucursalDestino || "-"}`, 14, 46);
+    doc.text(`Dirección sucursal: ${sucursal?.direccion || "-"}`, 14, 54);
 
-    doc.text(`Bodega de origen: ${pedido.bodegaOrigen || "-"}`, 14, 62);
-    doc.text(`Dirección bodega: ${pedido.direccionBodega || "-"}`, 14, 70);
+    doc.text(`Bodega de origen: ${bodega.nombre}`, 14, 62);
+    doc.text(`Dirección bodega: ${bodega.direccion}`, 14, 70);
 
     doc.text(`Responsable del despacho: ${pedido.responsable || "-"}`, 14, 78);
     doc.text(`Patente vehículo: ${pedido.patenteVehiculo || "-"}`, 14, 86);

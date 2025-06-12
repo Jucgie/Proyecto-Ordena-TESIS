@@ -11,13 +11,17 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import OutboundIcon from '@mui/icons-material/Outbound';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-
-import ModalFormularioPedido from "../../components/pedidos/modalform";
-import { useBodegaStore } from "../../store/useBodegaStore";
-
+import DescriptionIcon from '@mui/icons-material/Description';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import { generarActaRecepcion } from "../../utils/pdf/generarActaRecepcion";
+import { generarOCI } from "../../utils/pdf/generarOCI";
 import { generarGuiaDespacho } from "../../utils/pdf/generarGuiaDespacho";
 import { useAuthStore } from "../../store/useAuthStore"; 
 import { SUCURSALES } from "../../constants/ubicaciones";
+import { useBodegaStore } from "../../store/useBodegaStore";
+import ModalFormularioPedido from "../../components/pedidos/modalform";
+import { useUsuariosStore } from "../../store/useUsuarioStore";
 
 // Componente reutilizable para los botones de acción
 function BotonAccion({ children, startIcon, ...props }: { children: React.ReactNode, startIcon?: React.ReactNode, [key: string]: any }) {
@@ -48,6 +52,16 @@ export default function PedidosBodega() {
     const usuario = useAuthStore(state => state.usuario);
     // Inicializa showSnackbar en true si transferencias > 0
     const [showSnackbar, setShowSnackbar] = useState(transferencias > 0);
+    const { usuarios } = useUsuariosStore();
+    const transportistas = usuarios.filter(
+    (u: any) =>
+        u.rol === "transportista" &&
+        (u.bodega?.id === "bodega-central" || u.sucursal?.id === "bodega-central")
+    );
+
+    const [modalDespachoOpen, setModalDespachoOpen] = useState(false);
+    const [solicitudADespachar, setSolicitudADespachar] = useState<any>(null);
+    const [transportistaSeleccionado, setTransportistaSeleccionado] = useState<string>("");
 
     useEffect(() => {
         if (transferencias > 0) {
@@ -70,20 +84,20 @@ export default function PedidosBodega() {
     };
 
     const despacharSolicitud = (solicitud: any) => {
-        let sucursalId = solicitud.sucursal?.id || solicitud.sucursalId;
-        // Si tampoco hay nombre, puedes intentar obtenerlo de otro campo
-        if (!sucursalId && solicitud.sucursal?.nombre) {
+        let sucursalId = "";
+        if (solicitud.sucursal?.id) {
+            sucursalId = solicitud.sucursal.id;
+        } else if (typeof solicitud.sucursal === "string") {
+            // Buscar el objeto sucursal por nombre y obtener el id
+            const sucursalObj = SUCURSALES.find(s => s.nombre === solicitud.sucursal);
+            sucursalId = sucursalObj?.id || solicitud.sucursal;
+        } else if (solicitud.sucursalDestino) {
+            // Buscar el objeto sucursal por nombre y obtener el id
+            const sucursalObj = SUCURSALES.find(s => s.nombre === solicitud.sucursalDestino);
+            sucursalId = sucursalObj?.id || solicitud.sucursalDestino;
+        } else if (solicitud.sucursal?.nombre) {
             const sucursalObj = SUCURSALES.find(s => s.nombre === solicitud.sucursal.nombre);
-            sucursalId = sucursalObj?.id;
-        }
-        // Si aún no hay sucursalId, puedes intentar obtenerlo de la solicitud directamente
-        if (!sucursalId && solicitud.sucursalDestino) {
-            sucursalId = solicitud.sucursalDestino;
-        }
-        // Si aún no hay, muestra un error
-        if (!sucursalId) {
-            alert("No se pudo determinar la sucursal destino para este pedido.");
-            return;
+            sucursalId = sucursalObj?.id || "";
         }
 
         addPedido({
@@ -94,7 +108,7 @@ export default function PedidosBodega() {
             sucursalDestino: sucursalId, // <-- ¡AQUÍ! Debe ser sucursalId
             cantidad: solicitud.productos.reduce((acc: number, p: any) => acc + p.cantidad, 0),
             tipo: "salida",
-            asignado: usuario?.nombre || solicitud.responsable,
+            asignado: solicitud.asignado || usuario?.nombre || solicitud.responsable,
             ociAsociada: solicitud.id,
             observaciones: solicitud.observaciones,
             bodegaOrigen: usuario?.bodega?.nombre || "Bodega Central",
@@ -111,7 +125,7 @@ export default function PedidosBodega() {
             fecha: new Date().toISOString().slice(0, 10),
             responsable: usuario?.nombre || "Responsable Bodega",
             productos: solicitud.productos,
-            sucursalDestino: solicitud.sucursal,
+            sucursalDestino: sucursalId,
             ociAsociada: solicitud.id,
             observaciones: solicitud.observaciones,
             bodegaOrigen: usuario?.bodega?.nombre || "Bodega Central",
@@ -148,6 +162,7 @@ export default function PedidosBodega() {
         let datos = Array.isArray(pedidos) ? pedidos : [];
         datos = datos.filter((row) => {
             if (opcion === "ingresos" && row.tipo !== "ingreso") return false;
+            if (opcion === "salidas" && row.tipo === "salida" && !row.sucursalDestino) return false; // <-- Solo mostrar salidas con sucursalDestino
             if (opcion === "salidas" && row.tipo !== "salida") return false;
             if (producto && row.producto !== producto) return false;
             if (estado && row.estado !== estado) return false;
@@ -340,7 +355,10 @@ export default function PedidosBodega() {
                                         <TableCell style={{ color: "#fff" }}>
                                             {opcion === "ingresos"
                                                 ? (row.proveedor || row.sucursalDestino || "-")
-                                                : (row.sucursalDestino || "-")}
+                                                : (
+                                                    SUCURSALES.find(s => s.id === row.sucursalDestino)?.nombre || row.sucursalDestino || "-"
+                                                )
+                                            }
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
@@ -394,7 +412,11 @@ export default function PedidosBodega() {
                                         <TableRow key={s.id}>
                                             <TableCell style={{ color: "#fff" }}>{s.id}</TableCell>
                                             <TableCell style={{ color: "#fff" }}>{s.fecha}</TableCell>
-                                            <TableCell style={{ color: "#fff" }}>{s.sucursal}</TableCell>
+                                            <TableCell style={{ color: "#fff" }}>
+                                            {typeof s.sucursal === "object"
+                                                ? s.sucursal?.nombre
+                                                : s.sucursal}
+                                            </TableCell>
                                             <TableCell style={{ color: "#fff" }}>{s.responsable}</TableCell>
                                             <TableCell style={{ color: "#fff" }}>{s.estado}</TableCell>
                                             <TableCell style={{ color: "#fff" }}>{s.observaciones || "-"}</TableCell>
@@ -411,7 +433,10 @@ export default function PedidosBodega() {
                                                         variant="contained"
                                                         color="primary"
                                                         style={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
-                                                        onClick={() => despacharSolicitud(s)}
+                                                        onClick={() => {
+                                                            setSolicitudADespachar(s);
+                                                            setModalDespachoOpen(true);
+                                                        }}
                                                     >
                                                         Despachar
                                                     </Button>
@@ -471,9 +496,11 @@ export default function PedidosBodega() {
                                 />
                                 <TextField
                                     label={opcion === "ingresos" ? "Proveedor" : "Sucursal destino"}
-                                    value={opcion === "ingresos"
-                                        ? (pedidoSeleccionado.proveedor || pedidoSeleccionado.sucursalDestino || "-")
-                                        : (pedidoSeleccionado.sucursalDestino || "-")}
+                                    value={
+                                        opcion === "ingresos"
+                                            ? (pedidoSeleccionado.proveedor || SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || "-")
+                                            : (SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || "-")
+                                    }
                                     variant="filled"
                                     disabled
                                     size="small"
@@ -521,9 +548,124 @@ export default function PedidosBodega() {
                                 </div>
                             </div>
                         )}
+                        {pedidoSeleccionado && (
+                            <div
+                                style={{
+                                    background: "#232323",
+                                    borderRadius: "8px",
+                                    padding: "16px",
+                                    marginBottom: "8px",
+                                    boxShadow: "0 2px 8px rgba(0,0,0,0.15)"
+                                }}
+                            >
+                                <b style={{ color: "#FFD700", fontSize: 16 }}>Documentos del pedido</b>
+                                <div style={{ display: "flex", gap: "16px", marginTop: "12px" }}>
+                                    <Button
+                                        variant="outlined"
+                                        startIcon={<DescriptionIcon />}
+                                        style={{ borderColor: "#FFD700", color: "#FFD700", fontWeight: 600 }}
+                                        onClick={() => generarGuiaDespacho(pedidoSeleccionado)}
+                                    >
+                                        Guía de Despacho
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        startIcon={<AssignmentTurnedInIcon />}
+                                        style={{ borderColor: "#4CAF50", color: "#4CAF50", fontWeight: 600 }}
+                                        onClick={() => generarActaRecepcion({
+                                            numeroActa: String(pedidoSeleccionado.id),
+                                            fechaRecepcion: pedidoSeleccionado.fecha,
+                                            sucursal: {
+                                                nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
+                                                direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
+                                            },
+                                            personaRecibe: {
+                                                nombre: pedidoSeleccionado.asignado || "-",
+                                                cargo: "Responsable de Sucursal",
+                                            },
+                                            productos: (pedidoSeleccionado.productos || []).map((prod: any, idx: number) => ({
+                                                codigo: prod.codigo || `P${idx + 1}`,
+                                                descripcion: prod.nombre || prod.descripcion || "-",
+                                                cantidad: prod.cantidad || 0,
+                                            })),
+                                            observaciones: pedidoSeleccionado.observaciones || "",
+                                            conformidad: "Recibido conforme",
+                                            responsable: pedidoSeleccionado.asignado || "-",
+                                        })}
+                                    >
+                                        Acta de Recepción
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        startIcon={<LocalShippingIcon />}
+                                        style={{ borderColor: "#2196F3", color: "#2196F3", fontWeight: 600 }}
+                                        onClick={() => {
+                                            generarOCI({
+                                                numeroOCI: String(pedidoSeleccionado.ociAsociada || pedidoSeleccionado.id),
+                                                fecha: pedidoSeleccionado.fecha,
+                                                sucursal: {
+                                                    nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
+                                                    direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
+                                                },
+                                                responsable: pedidoSeleccionado.responsable || "-",
+                                                productos: (pedidoSeleccionado.productos || []).map((prod: any, idx: number) => ({
+                                                    codigo: prod.codigo || `P${idx + 1}`,
+                                                    descripcion: prod.nombre || prod.descripcion || "-",
+                                                    cantidad: prod.cantidad || 0,
+                                                })),
+                                                observaciones: pedidoSeleccionado.observaciones || "",
+                                            });
+                                        }}
+                                    >
+                                        Orden de Compra Interna (OCI)
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                     </DialogContent>
                     <DialogActions style={{ background: "#232323" }}>
                         <Button onClick={handleCloseDetailModal} style={{ color: "#B0B0B0" }}>Cerrar</Button>
+                    </DialogActions>
+                </Dialog>
+                <Dialog open={modalDespachoOpen} onClose={() => setModalDespachoOpen(false)} maxWidth="xs" fullWidth>
+                    <DialogTitle>Asignar transportista</DialogTitle>
+                    <DialogContent>
+                        <FormControl fullWidth>
+                            <InputLabel>Transportista</InputLabel>
+                            <Select
+                                value={transportistaSeleccionado}
+                                label="Transportista"
+                                onChange={e => setTransportistaSeleccionado(e.target.value)}
+                            >
+                                {transportistas.map((t: any) => (
+                                    <MenuItem key={t.id} value={t.nombre}>{t.nombre}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setModalDespachoOpen(false)}>Cancelar</Button>
+                        <Button
+                            onClick={() => {
+                                if (!transportistaSeleccionado) return;
+                                // Llama a despacharSolicitud pasando el transportista
+                                despacharSolicitud({ ...solicitudADespachar, asignado: transportistaSeleccionado });
+
+                                // Genera la Guía de Despacho con el transportista asignado
+                                generarGuiaDespacho({
+                                    ...solicitudADespachar,
+                                    asignado: transportistaSeleccionado,
+                                    responsable: transportistaSeleccionado // O puedes usar otro campo si corresponde
+                                });
+                                setModalDespachoOpen(false);
+                                setTransportistaSeleccionado("");
+                            }}
+                            disabled={!transportistaSeleccionado}
+                            variant="contained"
+                            style={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
+                        >
+                            Confirmar despacho
+                        </Button>
                     </DialogActions>
                 </Dialog>
             </div>

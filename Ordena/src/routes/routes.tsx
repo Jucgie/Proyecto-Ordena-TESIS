@@ -9,6 +9,8 @@ import SolicitudesBodega from "../pages/Solicitudes/SolicitudesBodega"; // crea 
 import Redirectxrol from "./RedirectXrol";
 import { useBodegaStore } from "../store/useBodegaStore";
 import { InicioS } from "../pages/IniciarSesion/IniciarSesion";
+
+import Empleados from "../pages/Empleados/empleados";
 // Simulación de usuario autenticado
 
 
@@ -25,7 +27,7 @@ export default function AppRoutes() {
 
                 {/* Rutas para los pedidos */}
                 <Route path="/pedidos" element={vista === "bodega" ? <PedidosBodega /> : <PedidosSucursal />} />
-
+                <Route path="/empleados" element={<Empleados />} />
                 {/* Rutas para el historial */}
                 {/* <Route path="/historial" element={<Redirectxrol user={user} module="historial" />}  />
                 <Route path="/historial/bodega" element={<Historial />} /> */}

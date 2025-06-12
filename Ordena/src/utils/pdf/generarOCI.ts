@@ -12,8 +12,9 @@ export function generarOCI(solicitud: any) {
     doc.setFontSize(11);
     doc.text(`N° OCI: ${solicitud.id}`, 14, 30);
     doc.text(`Fecha de emisión: ${solicitud.fecha}`, 14, 38);
-    doc.text(`Sucursal solicitante: ${solicitud.sucursal}`, 14, 46);
-    doc.text(`RUT: ${solicitud.rut || "No especificado"}`, 14, 62);
+    doc.text(`Sucursal solicitante: ${solicitud.sucursal?.nombre || "-"}`, 14, 46);
+    doc.text(`Dirección: ${solicitud.sucursal?.direccion || "-"}`, 14, 54);
+    doc.text(`RUT: ${solicitud.sucursal?.rut || "No especificado"}`, 14, 62);
     doc.text(`Persona solicitante: ${solicitud.responsable}`, 14, 70);
     doc.text(`Cargo: ${solicitud.cargo || "No especificado"}`, 14, 78);
 
@@ -22,8 +23,8 @@ export function generarOCI(solicitud: any) {
         startY: 86,
         head: [["Código", "Descripción", "Cantidad solicitada"]],
         body: solicitud.productos.map((prod: any, idx: number) => [
-            prod.codigo || (idx + 1), // Si tienes código, úsalo, si no, usa el índice
-            prod.nombre,
+            prod.codigo || (idx + 1),
+            prod.descripcion || prod.nombre || "-",
             prod.cantidad
         ]),
     });
@@ -34,7 +35,7 @@ export function generarOCI(solicitud: any) {
 
     // Estado y firma
     doc.text(`Estado de la OCI: ${solicitud.estado}`, 14, obsY + 10);
-    doc.text(`Aprobador: Sistema OCI Digital`, 14, obsY + 20);
+    doc.text(`Aprobador: ${solicitud.aprobador || "Sistema OCI Digital"}`, 14, obsY + 20);
 
     // Guardar PDF
     doc.save(`OCI_${solicitud.id}.pdf`);

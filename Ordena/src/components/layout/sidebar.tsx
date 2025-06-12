@@ -5,19 +5,24 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ManageHistoryIcon from '@mui/icons-material/ManageHistory';
 import OrdenaLogo from "../../assets/ordena.svg";
+import { useAuthStore } from "../../store/useAuthStore";
 
-const links = [
-    { to: "/dashboard", icon: DonutSmallIcon, label: "Dashboard" },
-    { to: "/inventario", icon: AssignmentIcon, label: "Inventario" },
-    { to: "/pedidos", icon: LocalShippingIcon, label: "Pedidos" },
-    { to: "/empleados", icon: PeopleAltIcon, label: "Empleados" },
-    { to: "/historial", icon: ManageHistoryIcon, label: "Historial y Reportes" },
-    { to: "/solicitudes", icon: AssignmentIcon, label: "Solicitudes" },
-];
 
 export default function Sidebar() {
     const location = useLocation();
+    const usuario = useAuthStore(state => state.usuario);
 
+    const links = [
+        { to: "/dashboard", icon: DonutSmallIcon, label: "Dashboard" },
+        { to: "/inventario", icon: AssignmentIcon, label: "Inventario" },
+        { to: "/pedidos", icon: LocalShippingIcon, label: "Pedidos" },
+        ...(usuario?.rol === "supervisor"
+            ? [{ to: "/empleados", icon: PeopleAltIcon, label: "Empleados" }]
+            : []),
+        { to: "/historial", icon: ManageHistoryIcon, label: "Historial y Reportes" },
+        { to: "/solicitudes", icon: AssignmentIcon, label: "Solicitudes" },
+    ];
+    
     return (
         <aside style={{ width: "200px",
                         height: "100vh",

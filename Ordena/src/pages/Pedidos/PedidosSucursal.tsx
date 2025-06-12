@@ -5,9 +5,15 @@ import {
     Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, TextField
 } from "@mui/material";
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import DescriptionIcon from '@mui/icons-material/Description';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import { useBodegaStore } from "../../store/useBodegaStore";
 import { generarGuiaDespacho } from "../../utils/pdf/generarGuiaDespacho";
 import { useAuthStore } from "../../store/useAuthStore";
+import { SUCURSALES } from "../../constants/ubicaciones";
+import { generarActaRecepcion } from "../../utils/pdf/generarActaRecepcion";
+import { generarOCI } from "../../utils/pdf/generarOCI";
 
 export default function PedidosSucursal() {
     const { pedidos, updatePedido } = useBodegaStore();
@@ -18,15 +24,45 @@ export default function PedidosSucursal() {
     const [pedidoSeleccionado, setPedidoSeleccionado] = useState<any>(null);
 
     const sucursalActualId = usuario?.sucursal?.id || "";
+    
     const pedidosFiltrados = useMemo(() => {
         return pedidos.filter((row) =>
             row.tipo === "salida" &&
-            row.sucursalDestino === sucursalActualId &&
-            (row.estado === "En camino" || row.estado === "Completado")
+            String(row.sucursalDestino) === String(sucursalActualId) &&
+            (estado === "" || row.estado === estado) &&
+            (fecha === "" || row.fecha === fecha)
         );
-    }, [pedidos, sucursalActualId]);
+    }, [pedidos, sucursalActualId, estado, fecha]);
 
     const handleConfirmarRecepcion = (id: number) => {
+        const pedido = pedidos.find((p: any) => p.id === id);
+        if (pedido) {
+            // Buscar sucursal receptora
+            const sucursal = SUCURSALES.find(s => s.id === pedido.sucursalDestino);
+            // Generar productos recibidos
+            const productos = (pedido.productos || []).map((prod: any, idx: number) => ({
+                codigo: prod.codigo || `P${idx + 1}`,
+                descripcion: prod.nombre || prod.descripcion || "-",
+                cantidad: prod.cantidad || 0,
+            }));
+
+            generarActaRecepcion({
+                numeroActa: String(pedido.id),
+                fechaRecepcion: pedido.fecha,
+                sucursal: {
+                    nombre: sucursal?.nombre || pedido.sucursalDestino || "-",
+                    direccion: sucursal?.direccion || pedido.direccionSucursal || "-",
+                },
+                personaRecibe: {
+                    nombre: usuario?.nombre || "-",
+                    cargo: usuario?.rol || "-",
+                },
+                productos,
+                observaciones: pedido.observaciones || "",
+                conformidad: "Recibido conforme",
+                responsable: usuario?.nombre || "-",
+            });
+        }
         updatePedido(id, { estado: "Completado" });
     };
     
@@ -40,10 +76,7 @@ export default function PedidosSucursal() {
         setPedidoSeleccionado(null);
     };
 
-console.log("Usuario:", usuario);
-console.log("Pedidos:", JSON.stringify(pedidos, null, 2));
-console.log("Sucursal actual id:", sucursalActualId);
-console.log("Pedidos filtrados:", pedidosFiltrados);
+
     return (
         <Layout>
             <div style={{
@@ -155,7 +188,7 @@ console.log("Pedidos filtrados:", pedidosFiltrados);
                                         <TableCell style={{ color: "#fff" }}>{row.fecha}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.asignado || "-"}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
-                                            {row.sucursalDestino || "-"}
+                                            {SUCURSALES.find(s => s.id === row.sucursalDestino)?.nombre || row.sucursalDestino || "-"}
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
@@ -201,7 +234,14 @@ console.log("Pedidos filtrados:", pedidosFiltrados);
                     </DialogTitle>
                     <DialogContent style={{ background: "#181818" }}>
                         {pedidoSeleccionado && (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "8px" }}>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "16px",
+                                    marginTop: "8px"
+                                }}
+                            >
                                 <TextField
                                     label="ID"
                                     value={pedidoSeleccionado.id}
@@ -262,6 +302,79 @@ console.log("Pedidos filtrados:", pedidosFiltrados);
                                     }}
                                     InputLabelProps={{ style: { color: "#B0B0B0" } }}
                                 />
+                                {/* Apartado de documentos */}
+                                <div
+                                    style={{
+                                        background: "#232323",
+                                        borderRadius: "8px",
+                                        padding: "16px",
+                                        marginBottom: "8px",
+                                        boxShadow: "0 2px 8px rgba(0,0,0,0.15)"
+                                    }}
+                                >
+                                    <b style={{ color: "#FFD700", fontSize: 16 }}>Documentos del pedido</b>
+                                    <div style={{ display: "flex", gap: "16px", marginTop: "12px" }}>
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={<DescriptionIcon />}
+                                            style={{ borderColor: "#FFD700", color: "#FFD700", fontWeight: 600 }}
+                                            onClick={() => generarGuiaDespacho(pedidoSeleccionado)}
+                                        >
+                                            Guía de Despacho
+                                        </Button>
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={<AssignmentTurnedInIcon />}
+                                            style={{ borderColor: "#4CAF50", color: "#4CAF50", fontWeight: 600 }}
+                                            onClick={() => generarActaRecepcion({
+                                                numeroActa: String(pedidoSeleccionado.id),
+                                                fechaRecepcion: pedidoSeleccionado.fecha,
+                                                sucursal: {
+                                                    nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
+                                                    direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
+                                                },
+                                                personaRecibe: {
+                                                    nombre: usuario?.nombre || "-",
+                                                    cargo: usuario?.rol || "-",
+                                                },
+                                                productos: (pedidoSeleccionado.productos || []).map((prod: any, idx: number) => ({
+                                                    codigo: prod.codigo || `P${idx + 1}`,
+                                                    descripcion: prod.nombre || prod.descripcion || "-",
+                                                    cantidad: prod.cantidad || 0,
+                                                })),
+                                                observaciones: pedidoSeleccionado.observaciones || "",
+                                                conformidad: "Recibido conforme",
+                                                responsable: usuario?.nombre || "-",
+                                            })}
+                                        >
+                                            Acta de Recepción
+                                        </Button>
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={<LocalShippingIcon />}
+                                            style={{ borderColor: "#2196F3", color: "#2196F3", fontWeight: 600 }}
+                                            onClick={() => {
+                                                generarOCI({
+                                                    numeroOCI: String(pedidoSeleccionado.ociAsociada || pedidoSeleccionado.id),
+                                                    fecha: pedidoSeleccionado.fecha,
+                                                    sucursal: {
+                                                        nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
+                                                        direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
+                                                    },
+                                                    responsable: pedidoSeleccionado.responsable || "-",
+                                                    productos: (pedidoSeleccionado.productos || []).map((prod: any, idx: number) => ({
+                                                        codigo: prod.codigo || `P${idx + 1}`,
+                                                        descripcion: prod.nombre || prod.descripcion || "-",
+                                                        cantidad: prod.cantidad || 0,
+                                                    })),
+                                                    observaciones: pedidoSeleccionado.observaciones || "",
+                                                });
+                                            }}
+                                        >
+                                            Orden de Compra Interna (OCI)
+                                        </Button>
+                                    </div>
+                                </div>
                                 <div style={{ marginTop: "12px" }}>
                                     <b style={{ color: "#B0B0B0" }}>Productos del pedido:</b>
                                     <ul style={{ color: "#B0B0B0", marginTop: 8 }}>
@@ -279,15 +392,6 @@ console.log("Pedidos filtrados:", pedidosFiltrados);
                     </DialogContent>
                     <DialogActions style={{ background: "#232323" }}>
                         <Button onClick={handleCloseModal} style={{ color: "#B0B0B0" }}>Cerrar</Button>
-                        {pedidoSeleccionado && (
-                            <Button
-                                variant="outlined"
-                                style={{ borderColor: "#4CAF50", color: "#4CAF50" }}
-                                onClick={() => generarGuiaDespacho(pedidoSeleccionado)}
-                            >
-                                Ver Guía de Despacho
-                            </Button>
-                        )}
                     </DialogActions>
                 </Dialog>
             </div>
