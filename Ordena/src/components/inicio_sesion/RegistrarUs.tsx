@@ -8,7 +8,7 @@ import { useState } from "react";
 import { SUCURSALES } from "../../constants/ubicaciones";
 
 interface Props {
-  setState: () => void;
+  setState: ()=>void;
 }
 
 export function RegUsuario({ setState }: Props) {
