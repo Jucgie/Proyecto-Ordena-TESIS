@@ -4,32 +4,33 @@ import { RegUsuario } from "./RegistrarUs";
 import { useState } from "react";
 import ordena from "../../assets/ordena.svg";
 import Swal from "sweetalert2";
+import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/useAuthStore";
+
 export function InicioFormulario() {
+    const navigate = useNavigate();
     const setUsuario = useAuthStore(state => state.setUsuario);
     const [state, setState] = useState(false);
     const [correo, setCorreo] = useState("");
     const [password, setPassword] = useState("");
 
-    // Función para validar login
+
     const manejarLogin = (e: React.FormEvent) => {
-        e.preventDefault();
-        const usuarioGuardado = localStorage.getItem("usuario");
-        if (!usuarioGuardado) {
-            Swal.fire("Error", "No hay usuarios registrados.", "error");
+        e.preventDefault(); // <-- Esto evita el reload
+        const usuariosGuardados = JSON.parse(localStorage.getItem("usuarios") || "[]");
+        const usuario = usuariosGuardados.find(
+            (u: any) => u.correo === correo && u.password === password
+        );
+        if (!usuario) {
+            Swal.fire("Error", "Correo o contraseña incorrectos.", "error");
             return;
         }
-        const usuario = JSON.parse(usuarioGuardado);
-        if (usuario.correo === correo && usuario.password === password) {
-            setUsuario(usuario); // Guarda en el store de autenticación
-            Swal.fire("Bienvenido", "Inicio de sesión exitoso.", "success");
-            // Aquí puedes guardar el usuario en Zustand, Context o redirigir
-            window.location.href = "/pedidos";
-        } else {
-            Swal.fire("Error", "Correo o contraseña incorrectos.", "error");
-        }
+        setUsuario(usuario); // Guarda en Zustand
+        Swal.fire("Bienvenido", "Inicio de sesión exitoso.", "success").then(() => {
+            navigate("/pedidos"); // Redirección correcta en React
+        });
     };
-
+    
     return (
         <Container>
             <div className="contentCard">

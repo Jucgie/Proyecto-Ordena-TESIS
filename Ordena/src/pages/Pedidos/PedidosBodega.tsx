@@ -22,6 +22,8 @@ import { SUCURSALES } from "../../constants/ubicaciones";
 import { useBodegaStore } from "../../store/useBodegaStore";
 import ModalFormularioPedido from "../../components/pedidos/modalform";
 import { useUsuariosStore } from "../../store/useUsuarioStore";
+import { useProveedoresStore } from "../../store/useProveedorStore";
+
 
 // Componente reutilizable para los botones de acción
 function BotonAccion({ children, startIcon, ...props }: { children: React.ReactNode, startIcon?: React.ReactNode, [key: string]: any }) {
@@ -50,13 +52,14 @@ function BotonAccion({ children, startIcon, ...props }: { children: React.ReactN
 export default function PedidosBodega() {
     const { pedidos, setPedidos, clearPedidos, transferencias, setTransferencias, solicitudesTransferidas, addPedido, removeSolicitudTransferida } = useBodegaStore();
     const usuario = useAuthStore(state => state.usuario);
+    const { addProveedor } = useProveedoresStore.getState();
     // Inicializa showSnackbar en true si transferencias > 0
     const [showSnackbar, setShowSnackbar] = useState(transferencias > 0);
     const { usuarios } = useUsuariosStore();
     const transportistas = usuarios.filter(
-    (u: any) =>
-        u.rol === "transportista" &&
-        (u.bodega?.id === "bodega-central" || u.sucursal?.id === "bodega-central")
+        (u: any) =>
+            u.rol === "transportista" &&
+            (u.bodega?.id === "bodega-central" || u.sucursal?.id === "bodega-central")
     );
 
     const [modalDespachoOpen, setModalDespachoOpen] = useState(false);
@@ -161,14 +164,24 @@ export default function PedidosBodega() {
     const pedidosFiltrados = useMemo(() => {
         let datos = Array.isArray(pedidos) ? pedidos : [];
         datos = datos.filter((row) => {
-            if (opcion === "ingresos" && row.tipo !== "ingreso") return false;
-            if (opcion === "salidas" && row.tipo === "salida" && !row.sucursalDestino) return false; // <-- Solo mostrar salidas con sucursalDestino
-            if (opcion === "salidas" && row.tipo !== "salida") return false;
-            if (producto && row.producto !== producto) return false;
-            if (estado && row.estado !== estado) return false;
-            if (sucursal && row.sucursal !== sucursal) return false;
-            if (fecha && row.fecha !== fecha) return false;
-            return true;
+            if (opcion === "ingresos") {
+                if (row.tipo !== "ingreso") return false;
+                // Filtros solo aplicables a ingresos
+                if (producto && !row.productos.some((p: any) => p.nombre === producto)) return false;
+                if (fecha && row.fecha !== fecha) return false;
+                // No filtrar por estado ni sucursal en ingresos
+                return true;
+            }
+            if (opcion === "salidas") {
+                if (row.tipo !== "salida") return false;
+                if (!row.sucursalDestino) return false;
+                if (producto && !row.productos.some((p: any) => p.nombre === producto)) return false;
+                if (estado && row.estado !== estado) return false;
+                if (sucursal && row.sucursalDestino !== sucursal && row.sucursal !== sucursal) return false;
+                if (fecha && row.fecha !== fecha) return false;
+                return true;
+            }
+            return false;
         });
         if (orden === "desc") {
             datos = [...datos].sort((a, b) => b.cantidad - a.cantidad);
@@ -224,22 +237,48 @@ export default function PedidosBodega() {
                     >
                         Nuevo Ingreso
                     </BotonAccion>
-                    <ModalFormularioPedido
-                        open={!!modalTipo}
-                        onClose={() => setModalTipo(null)}
-                        tipo={modalTipo as "ingreso" | "salida"}
-                        onSubmit={data => {
-                            setPedidos((prev: any[]) => [
-                                ...prev,
-                                {
-                                    ...data,
-                                    id: prev.length ? prev[prev.length - 1].id + 1 : 1,
-                                    tipo: modalTipo,
-                                }
-                            ]);
-                            setModalTipo(null);
-                        }}
-                    />
+                    {/* Solo este modal debe quedar */}
+                        <ModalFormularioPedido
+                            open={!!modalTipo}
+                            onClose={() => setModalTipo(null)}
+                            tipo={modalTipo as "ingreso"}
+                            onSubmit={data => {
+                                setPedidos((prev: any[]) => [
+                                    ...prev,
+                                    {
+                                        id: prev.length ? prev[prev.length - 1].id + 1 : 1,
+                                        tipo: "ingreso",
+                                        fecha: data.fecha,
+                                        numRem: data.numRem,
+                                        numFactura: data.numFactura,
+                                        numOrden: data.numOrden,
+                                        proveedor: data.proveedor,
+                                        productos: data.productos,
+                                        cantidad: Array.isArray(data.productos)
+                                            ? data.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
+                                            : 0,
+                                    }
+                                ]);
+                                setOpcion("ingresos"); // <-- Fuerza mostrar ingresos tras agregar uno
+                                setTimeout(() => {
+                                    // eslint-disable-next-line no-console
+                                    console.log('PEDIDOS después de agregar ingreso:', JSON.stringify([...pedidos, {
+                                        id: pedidos.length ? pedidos[pedidos.length - 1].id + 1 : 1,
+                                        tipo: "ingreso",
+                                        fecha: data.fecha,
+                                        numRem: data.numRem,
+                                        numFactura: data.numFactura,
+                                        numOrden: data.numOrden,
+                                        proveedor: data.proveedor,
+                                        productos: data.productos,
+                                        cantidad: Array.isArray(data.productos)
+                                            ? data.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
+                                            : 0,
+                                    }], null, 2));
+                                }, 100);
+                                setModalTipo(null);
+                            }}
+                        />
                 </div>
 
                 {/* Barra superior de la tabla */}
@@ -333,7 +372,6 @@ export default function PedidosBodega() {
                                     {opcion === "ingresos" ? "Proveedor" : "Sucursal destino"}
                                 </TableCell>
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>N° de productos</TableCell>
-                                <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Estado</TableCell>
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Acción</TableCell>
                             </TableRow>
                         </TableHead>
@@ -354,7 +392,7 @@ export default function PedidosBodega() {
                                         )}
                                         <TableCell style={{ color: "#fff" }}>
                                             {opcion === "ingresos"
-                                                ? (row.proveedor || row.sucursalDestino || "-")
+                                                ? (row.proveedor?.nombre || row.proveedor || row.sucursalDestino || "-")
                                                 : (
                                                     SUCURSALES.find(s => s.id === row.sucursalDestino)?.nombre || row.sucursalDestino || "-"
                                                 )
@@ -362,11 +400,8 @@ export default function PedidosBodega() {
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
-                                                ? row.productos.reduce((acc, prod) => acc + Number(prod.cantidad), 0)
+                                                ? row.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
                                                 : row.cantidad || 0}
-                                        </TableCell>
-                                        <TableCell style={{ color: row.estado === "Completado" ? "#FFD700" : row.estado === "En proceso" ? "#8A8A8A" : "#FF4D4F" }}>
-                                            {row.estado}
                                         </TableCell>
                                         <TableCell>
                                             <Button

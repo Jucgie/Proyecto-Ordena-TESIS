@@ -6,64 +6,61 @@ import Swal from "sweetalert2";
 // ...otros imports...
 import { useState } from "react";
 import { SUCURSALES } from "../../constants/ubicaciones";
+import { useAuthStore } from "../../store/useAuthStore";
+import { useUsuariosStore } from "../../store/useUsuarioStore";
+
 
 interface Props {
-  setState: ()=>void;
+  setState: () => void;
+
+
 }
 
 export function RegUsuario({ setState }: Props) {
   const [nombre, setNombre] = useState("");
+  const setUsuario = useAuthStore(state => state.setUsuario);
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
   const [confirmar, setConfirmar] = useState("");
   const [perfil, setPerfil] = useState<"sucursal" | "bodega-central" | "">("");
   const [sucursalId, setSucursalId] = useState<string>("");
   const [rol, setRol] = useState<"bodeguero" | "transportista" | "supervisor" | "">(""); // Nuevo estado
+  const addUsuario = useUsuariosStore(state => state.addUsuario);
+
 
   const manejarRegistro = () => {
-    if (
-      !nombre ||
-      !correo ||
-      !password ||
-      !confirmar ||
-      !perfil ||
-      !rol ||
-      (perfil === "sucursal" && !sucursalId)
-    ) {
-      Swal.fire("Campos incompletos", "Completa todos los campos y selecciona un perfil y rol.", "warning");
+    const usuariosGuardados = JSON.parse(localStorage.getItem("usuarios") || "[]");
+
+    // Verifica que el correo no exista ya
+    if (usuariosGuardados.some((u: any) => u.correo === correo)) {
+      Swal.fire("Error", "Ya existe un usuario con ese correo.", "error");
       return;
     }
-    if (password !== confirmar) {
-      Swal.fire("Error", "Las contraseñas no coinciden.", "error");
-      return;
-    }
-    Swal.fire({
-      title: "¿Seguro que quieres registrarte?",
-      text: "Confirma para completar el registro.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Sí, registrarme",
-      cancelButtonText: "Cancelar"
-    }).then((resultado) => {
-      if (resultado.isConfirmed) {
-        let sucursalSeleccionada = null;
-        if (perfil === "sucursal") {
-          sucursalSeleccionada = SUCURSALES.find(s => s.id === sucursalId);
-        }
-        localStorage.setItem("usuario", JSON.stringify({
-          nombre,
-          correo,
-          password,
-          perfil,
-          rol, // Guardar rol
-          sucursal: perfil === "sucursal" && sucursalSeleccionada
-            ? { id: sucursalSeleccionada.id, nombre: sucursalSeleccionada.nombre }
-            : null
-        }));
-        Swal.fire("¡Registro exitoso!", "Tu cuenta ha sido creada.", "success");
-        setState(); // Vuelve a inicio de sesión
-      }
-    });
+
+    // Construye el objeto usuario para el store
+    const usuarioNuevo = {
+      nombre,
+      correo,
+      password,
+      tipo: perfil === "bodega-central" ? "bodega" : "sucursal",
+      rol,
+      sucursalId: perfil === "sucursal" ? sucursalId : null,
+      bodega: perfil === "bodega-central"
+        ? { id: "bodega-central", nombre: "Bodega Central" }
+        : undefined
+    };
+
+    usuariosGuardados.push(usuarioNuevo);
+    localStorage.setItem("usuarios", JSON.stringify(usuariosGuardados));
+
+    // Guarda el usuario en el store global de usuarios
+    addUsuario(usuarioNuevo);
+
+    // Guarda el usuario autenticado en Zustand
+    setUsuario(usuarioNuevo);
+
+    Swal.fire("¡Registro exitoso!", "Tu cuenta ha sido creada.", "success");
+    setState();
   };
 
   return (

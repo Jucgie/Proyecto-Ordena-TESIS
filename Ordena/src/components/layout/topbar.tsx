@@ -2,6 +2,9 @@ import React, { useState } from "react";
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import { useBodegaStore } from "../../store/useBodegaStore";
 import { useAuthStore } from "../../store/useAuthStore";
+import { BODEGA_CENTRAL } from "../../constants/ubicaciones";
+import { SUCURSALES } from "../../constants/ubicaciones"; // Asegúrate de tener este array con tus sucursales
+
 
 export default function Topbar() {
     const { vista, setVista } = useBodegaStore();
@@ -14,6 +17,14 @@ export default function Topbar() {
         window.location.href = "/login";
     };
 
+        // Obtener nombre de la ubicación
+    let ubicacionNombre = "";
+    if (usuario?.tipo === "bodega") {
+        ubicacionNombre = BODEGA_CENTRAL.nombre;
+    } else if (usuario?.tipo === "sucursal" && usuario.sucursalId) {
+        const sucursal = SUCURSALES.find(s => s.id === usuario.sucursalId);
+        ubicacionNombre = sucursal ? sucursal.nombre : "Sucursal desconocida";
+    }
     return (
         <header
             style={{
@@ -75,6 +86,8 @@ export default function Topbar() {
                     >
                         <div style={{ padding: "12px 16px", color: "#FFD700", borderBottom: "1px solid #FFD700" }}>
                             Rol: <b>{usuario?.rol ? usuario.rol.charAt(0).toUpperCase() + usuario.rol.slice(1) : "Sin rol"}</b>
+                            <br />
+                            Ubicación: <b>{ubicacionNombre || "No asignada"}</b>
                         </div>
                         <div
                             style={{
@@ -86,8 +99,8 @@ export default function Topbar() {
                             onClick={handleLogout}
                         >
                             Cerrar sesión
-                        </div>
                     </div>
+                </div>
                 )}
             </div>
         </header>

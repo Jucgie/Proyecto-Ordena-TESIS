@@ -9,6 +9,8 @@ import SolicitudesBodega from "../pages/Solicitudes/SolicitudesBodega"; // crea 
 import Redirectxrol from "./RedirectXrol";
 import { useBodegaStore } from "../store/useBodegaStore";
 import { InicioS } from "../pages/IniciarSesion/IniciarSesion";
+import Inventario from "../pages/inventario/inventario";
+import Proveedores from "../pages/proveedores/proveedores";
 
 import Empleados from "../pages/Empleados/empleados";
 // Simulación de usuario autenticado
@@ -24,7 +26,8 @@ export default function AppRoutes() {
                 <Route path="/" element={<Navigate to="/pedidos" replace />} />
                 {/* Rutas para las solicitudes */}
                 <Route path="/solicitudes" element={vista === "bodega" ? <SolicitudesBodega /> : <SolicitudesSucursal />} />
-
+                <Route path="/inventario" element={<Inventario />} />
+                {/* Rutas para el historial */}
                 {/* Rutas para los pedidos */}
                 <Route path="/pedidos" element={vista === "bodega" ? <PedidosBodega /> : <PedidosSucursal />} />
                 <Route path="/empleados" element={<Empleados />} />
@@ -32,6 +35,9 @@ export default function AppRoutes() {
                 {/* <Route path="/historial" element={<Redirectxrol user={user} module="historial" />}  />
                 <Route path="/historial/bodega" element={<Historial />} /> */}
                 {/* <Route path="/historial/sucursal" element={<HistorialSucursal />} /> */}
+                <Route path="/historial" element={<Historial />} />
+                {/* Rutas para proveedores */}
+                <Route path="/proveedores" element={<Proveedores />} />
                 {/* Ruta para no encontrados */}
                 <Route path="*" element={<Navigate to="/pedidos" replace />} />
                 <Route path="/login" element={<InicioS/>}/>
