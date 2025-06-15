@@ -13,6 +13,7 @@ import { generarOCI } from "../../utils/pdf/generarOCI"; // Asegúrate de que es
 import { SUCURSALES } from "../../constants/ubicaciones";
 import { useInventariosStore } from "../../store/useProductoStore";
 import { BODEGA_CENTRAL } from "../../constants/ubicaciones";
+import sin_imagen from "../../assets/sin_imagen.png";
 
 
 export default function SolicitudesSucursal() {

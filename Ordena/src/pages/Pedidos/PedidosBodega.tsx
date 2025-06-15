@@ -24,6 +24,56 @@ import ModalFormularioPedido from "../../components/pedidos/modalform";
 import { useUsuariosStore } from "../../store/useUsuarioStore";
 import { useProveedoresStore } from "../../store/useProveedorStore";
 
+// Interfaces
+interface Producto {
+    nombre: string;
+    cantidad: number;
+    codigo?: string;
+    descripcion?: string;
+}
+
+interface Proveedor {
+    nombre: string;
+    rut: string;
+    contacto: string;
+}
+
+interface Pedido {
+    id: number;
+    tipo: "ingreso" | "salida";
+    fecha: string;
+    numRem: string;
+    numFactura: string;
+    numOrden: string;
+    proveedor: Proveedor;
+    productos: Producto[];
+    cantidad: number;
+    estado: string;
+    responsable: string;
+    sucursalDestino?: string;
+    asignado?: string;
+    observaciones?: string;
+    ociAsociada?: string;
+    sucursal?: string;
+    bodegaOrigen?: string;
+    direccionBodega?: string;
+    direccionSucursal?: string;
+    patenteVehiculo?: string;
+}
+
+interface Usuario {
+    id: string;
+    nombre: string;
+    rol: string;
+    bodega?: {
+        id: string;
+        nombre: string;
+    };
+    sucursal?: {
+        id: string;
+        nombre: string;
+    };
+}
 
 // Componente reutilizable para los botones de acción
 function BotonAccion({ children, startIcon, ...props }: { children: React.ReactNode, startIcon?: React.ReactNode, [key: string]: any }) {
@@ -50,17 +100,28 @@ function BotonAccion({ children, startIcon, ...props }: { children: React.ReactN
 }
 
 export default function PedidosBodega() {
-    const { pedidos, setPedidos, clearPedidos, transferencias, setTransferencias, solicitudesTransferidas, addPedido, removeSolicitudTransferida } = useBodegaStore();
-    const usuario = useAuthStore(state => state.usuario);
-    const { addProveedor } = useProveedoresStore.getState();
-    // Inicializa showSnackbar en true si transferencias > 0
+    const { pedidos, setPedidos, clearPedidos, transferencias, setTransferencias, solicitudesTransferidas, addPedido, removeSolicitudTransferida } = useBodegaStore() as {
+        pedidos: Pedido[];
+        setPedidos: (pedidos: Pedido[]) => void;
+        clearPedidos: () => void;
+        transferencias: number;
+        setTransferencias: (cantidad: number) => void;
+        solicitudesTransferidas: any[];
+        addPedido: (pedido: Pedido) => void;
+        removeSolicitudTransferida: (id: number) => void;
+    };
+
+    const usuario = useAuthStore((state: any) => state.usuario);
+    const { addProveedor } = useProveedoresStore.getState() as { addProveedor: (proveedor: Proveedor) => void };
     const [showSnackbar, setShowSnackbar] = useState(transferencias > 0);
-    const { usuarios } = useUsuariosStore();
+    const { usuarios } = useUsuariosStore() as { usuarios: Usuario[] };
     const transportistas = usuarios.filter(
-        (u: any) =>
+        (u: Usuario) =>
             u.rol === "transportista" &&
             (u.bodega?.id === "bodega-central" || u.sucursal?.id === "bodega-central")
     );
+
+    const pedidosArray = Array.isArray(pedidos) ? pedidos : [];
 
     const [modalDespachoOpen, setModalDespachoOpen] = useState(false);
     const [solicitudADespachar, setSolicitudADespachar] = useState<any>(null);
@@ -91,11 +152,9 @@ export default function PedidosBodega() {
         if (solicitud.sucursal?.id) {
             sucursalId = solicitud.sucursal.id;
         } else if (typeof solicitud.sucursal === "string") {
-            // Buscar el objeto sucursal por nombre y obtener el id
             const sucursalObj = SUCURSALES.find(s => s.nombre === solicitud.sucursal);
             sucursalId = sucursalObj?.id || solicitud.sucursal;
         } else if (solicitud.sucursalDestino) {
-            // Buscar el objeto sucursal por nombre y obtener el id
             const sucursalObj = SUCURSALES.find(s => s.nombre === solicitud.sucursalDestino);
             sucursalId = sucursalObj?.id || solicitud.sucursalDestino;
         } else if (solicitud.sucursal?.nombre) {
@@ -103,14 +162,16 @@ export default function PedidosBodega() {
             sucursalId = sucursalObj?.id || "";
         }
 
-        addPedido({
+        console.log('Creando pedido de salida con sucursalId:', sucursalId);
+
+        const nuevoPedido: Pedido = {
             id: Date.now(),
             fecha: new Date().toISOString().slice(0, 10),
             responsable: usuario?.nombre || "Responsable Bodega",
             productos: solicitud.productos,
-            sucursalDestino: sucursalId, // <-- ¡AQUÍ! Debe ser sucursalId
+            sucursalDestino: sucursalId,
             cantidad: solicitud.productos.reduce((acc: number, p: any) => acc + p.cantidad, 0),
-            tipo: "salida",
+            tipo: "salida" as const,
             asignado: solicitud.asignado || usuario?.nombre || solicitud.responsable,
             ociAsociada: solicitud.id,
             observaciones: solicitud.observaciones,
@@ -119,25 +180,35 @@ export default function PedidosBodega() {
             direccionSucursal: solicitud.direccion || "-",
             patenteVehiculo: solicitud.patenteVehiculo || "-",
             estado: "En camino",
-        });
+            numRem: "",
+            numFactura: "",
+            numOrden: "",
+            proveedor: {
+                nombre: "",
+                rut: "",
+                contacto: ""
+            }
+        };
 
-
-    // Genera el PDF de la Guía de Despacho con los datos dinámicos
-        generarGuiaDespacho({
-            id: Date.now(),
-            fecha: new Date().toISOString().slice(0, 10),
-            responsable: usuario?.nombre || "Responsable Bodega",
-            productos: solicitud.productos,
-            sucursalDestino: sucursalId,
-            ociAsociada: solicitud.id,
-            observaciones: solicitud.observaciones,
-            bodegaOrigen: usuario?.bodega?.nombre || "Bodega Central",
-            direccionBodega: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción",
-            direccionSucursal: solicitud.direccion || "-",
-            patenteVehiculo: solicitud.patenteVehiculo || "-",
-        });
-
+        console.log('Nuevo pedido de salida a agregar:', nuevoPedido);
+        
+        addPedido(nuevoPedido);
         removeSolicitudTransferida(solicitud.id);
+        
+        // Generar la guía de despacho
+        generarGuiaDespacho({
+            id: nuevoPedido.id,
+            fecha: nuevoPedido.fecha,
+            responsable: nuevoPedido.responsable,
+            productos: nuevoPedido.productos,
+            sucursalDestino: nuevoPedido.sucursalDestino,
+            ociAsociada: nuevoPedido.ociAsociada,
+            observaciones: nuevoPedido.observaciones,
+            bodegaOrigen: nuevoPedido.bodegaOrigen,
+            direccionBodega: nuevoPedido.direccionBodega,
+            direccionSucursal: nuevoPedido.direccionSucursal,
+            patenteVehiculo: nuevoPedido.patenteVehiculo
+        });
     };
 
     const tablaTransferidasRef = useRef<HTMLDivElement>(null);
@@ -162,19 +233,34 @@ export default function PedidosBodega() {
 
     // Filtros aplicados a los datos
     const pedidosFiltrados = useMemo(() => {
-        let datos = Array.isArray(pedidos) ? pedidos : [];
+        console.log('Estado actual de pedidos:', pedidosArray);
+        console.log('Opción actual:', opcion);
+        
+        let datos = pedidosArray;
+        console.log('Datos antes del filtrado:', datos);
+        
         datos = datos.filter((row) => {
+            console.log('Filtrando pedido:', row);
             if (opcion === "ingresos") {
-                if (row.tipo !== "ingreso") return false;
-                // Filtros solo aplicables a ingresos
+                const esIngreso = row.tipo === "ingreso";
+                console.log('Es ingreso?', esIngreso);
+                if (!esIngreso) return false;
+                
                 if (producto && !row.productos.some((p: any) => p.nombre === producto)) return false;
                 if (fecha && row.fecha !== fecha) return false;
-                // No filtrar por estado ni sucursal en ingresos
                 return true;
             }
             if (opcion === "salidas") {
-                if (row.tipo !== "salida") return false;
-                if (!row.sucursalDestino) return false;
+                console.log('Verificando pedido de salida:', row);
+                const esSalida = row.tipo === "salida";
+                console.log('Es salida?', esSalida);
+                if (!esSalida) return false;
+                
+                // Verificar si tiene sucursal destino
+                const tieneSucursalDestino = row.sucursalDestino || row.sucursal;
+                console.log('Tiene sucursal destino?', tieneSucursalDestino);
+                if (!tieneSucursalDestino) return false;
+                
                 if (producto && !row.productos.some((p: any) => p.nombre === producto)) return false;
                 if (estado && row.estado !== estado) return false;
                 if (sucursal && row.sucursalDestino !== sucursal && row.sucursal !== sucursal) return false;
@@ -183,13 +269,17 @@ export default function PedidosBodega() {
             }
             return false;
         });
+        
+        console.log('Datos después del filtrado:', datos);
+        
         if (orden === "desc") {
             datos = [...datos].sort((a, b) => b.cantidad - a.cantidad);
         } else if (orden === "asc") {
             datos = [...datos].sort((a, b) => a.cantidad - b.cantidad);
         }
+        
         return datos;
-    }, [pedidos, producto, estado, sucursal, fecha, opcion, orden]);
+    }, [pedidosArray, producto, estado, sucursal, fecha, opcion, orden]);
 
     const handleOpenDetailModal = (pedido: any) => {
         setPedidoSeleccionado(pedido);
@@ -243,39 +333,56 @@ export default function PedidosBodega() {
                             onClose={() => setModalTipo(null)}
                             tipo={modalTipo as "ingreso"}
                             onSubmit={data => {
-                                setPedidos((prev: any[]) => [
-                                    ...prev,
-                                    {
-                                        id: prev.length ? prev[prev.length - 1].id + 1 : 1,
-                                        tipo: "ingreso",
-                                        fecha: data.fecha,
-                                        numRem: data.numRem,
-                                        numFactura: data.numFactura,
-                                        numOrden: data.numOrden,
-                                        proveedor: data.proveedor,
-                                        productos: data.productos,
-                                        cantidad: Array.isArray(data.productos)
-                                            ? data.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
-                                            : 0,
+                                console.log('Creando nuevo pedido con datos:', data);
+                                
+                                const nuevoPedido: Pedido = {
+                                    id: pedidosArray.length ? pedidosArray[pedidosArray.length - 1].id + 1 : 1,
+                                    tipo: "ingreso" as const,
+                                    fecha: data.fecha,
+                                    numRem: data.numRem,
+                                    numFactura: data.numFactura,
+                                    numOrden: data.numOrden,
+                                    proveedor: data.proveedor,
+                                    productos: data.productos,
+                                    cantidad: Array.isArray(data.productos)
+                                        ? data.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
+                                        : 0,
+                                    estado: "Pendiente",
+                                    responsable: usuario?.nombre || "Responsable Bodega"
+                                };
+                                
+                                console.log('Nuevo pedido a agregar:', nuevoPedido);
+                                
+                                addPedido(nuevoPedido);
+
+                                // Generar Acta de Recepción
+                                generarActaRecepcion({
+                                    numeroActa: String(nuevoPedido.id),
+                                    fechaRecepcion: nuevoPedido.fecha,
+                                    sucursal: {
+                                        nombre: "Bodega Central",
+                                        direccion: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción"
+                                    },
+                                    personaRecibe: {
+                                        nombre: nuevoPedido.responsable,
+                                        cargo: "Responsable de Bodega"
+                                    },
+                                    productos: nuevoPedido.productos.map((prod: any) => ({
+                                        codigo: `${prod.nombre}-${prod.marca}-${prod.categoria}`.replace(/\s+/g, "-").toLowerCase(),
+                                        descripcion: `${prod.nombre} - ${prod.marca} - ${prod.categoria}`,
+                                        cantidad: prod.cantidad
+                                    })),
+                                    observaciones: `Guía de Despacho Proveedor: ${data.numRem || "No especificada"}\nN° Orden de Compra: ${data.numOrden || "No especificada"}`,
+                                    conformidad: "Recibido conforme",
+                                    responsable: nuevoPedido.responsable,
+                                    proveedor: {
+                                        nombre: data.proveedor.nombre,
+                                        rut: data.proveedor.rut,
+                                        contacto: data.proveedor.contacto
                                     }
-                                ]);
-                                setOpcion("ingresos"); // <-- Fuerza mostrar ingresos tras agregar uno
-                                setTimeout(() => {
-                                    // eslint-disable-next-line no-console
-                                    console.log('PEDIDOS después de agregar ingreso:', JSON.stringify([...pedidos, {
-                                        id: pedidos.length ? pedidos[pedidos.length - 1].id + 1 : 1,
-                                        tipo: "ingreso",
-                                        fecha: data.fecha,
-                                        numRem: data.numRem,
-                                        numFactura: data.numFactura,
-                                        numOrden: data.numOrden,
-                                        proveedor: data.proveedor,
-                                        productos: data.productos,
-                                        cantidad: Array.isArray(data.productos)
-                                            ? data.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
-                                            : 0,
-                                    }], null, 2));
-                                }, 100);
+                                });
+                                
+                                setOpcion("ingresos");
                                 setModalTipo(null);
                             }}
                         />
@@ -595,65 +702,100 @@ export default function PedidosBodega() {
                             >
                                 <b style={{ color: "#FFD700", fontSize: 16 }}>Documentos del pedido</b>
                                 <div style={{ display: "flex", gap: "16px", marginTop: "12px" }}>
-                                    <Button
-                                        variant="outlined"
-                                        startIcon={<DescriptionIcon />}
-                                        style={{ borderColor: "#FFD700", color: "#FFD700", fontWeight: 600 }}
-                                        onClick={() => generarGuiaDespacho(pedidoSeleccionado)}
-                                    >
-                                        Guía de Despacho
-                                    </Button>
-                                    <Button
-                                        variant="outlined"
-                                        startIcon={<AssignmentTurnedInIcon />}
-                                        style={{ borderColor: "#4CAF50", color: "#4CAF50", fontWeight: 600 }}
-                                        onClick={() => generarActaRecepcion({
-                                            numeroActa: String(pedidoSeleccionado.id),
-                                            fechaRecepcion: pedidoSeleccionado.fecha,
-                                            sucursal: {
-                                                nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
-                                                direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
-                                            },
-                                            personaRecibe: {
-                                                nombre: pedidoSeleccionado.asignado || "-",
-                                                cargo: "Responsable de Sucursal",
-                                            },
-                                            productos: (pedidoSeleccionado.productos || []).map((prod: any, idx: number) => ({
-                                                codigo: prod.codigo || `P${idx + 1}`,
-                                                descripcion: prod.nombre || prod.descripcion || "-",
-                                                cantidad: prod.cantidad || 0,
-                                            })),
-                                            observaciones: pedidoSeleccionado.observaciones || "",
-                                            conformidad: "Recibido conforme",
-                                            responsable: pedidoSeleccionado.asignado || "-",
-                                        })}
-                                    >
-                                        Acta de Recepción
-                                    </Button>
-                                    <Button
-                                        variant="outlined"
-                                        startIcon={<LocalShippingIcon />}
-                                        style={{ borderColor: "#2196F3", color: "#2196F3", fontWeight: 600 }}
-                                        onClick={() => {
-                                            generarOCI({
-                                                numeroOCI: String(pedidoSeleccionado.ociAsociada || pedidoSeleccionado.id),
-                                                fecha: pedidoSeleccionado.fecha,
+                                    {pedidoSeleccionado.tipo === "ingreso" ? (
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={<AssignmentTurnedInIcon />}
+                                            style={{ borderColor: "#4CAF50", color: "#4CAF50", fontWeight: 600 }}
+                                            onClick={() => generarActaRecepcion({
+                                                numeroActa: String(pedidoSeleccionado.id),
+                                                fechaRecepcion: pedidoSeleccionado.fecha,
                                                 sucursal: {
-                                                    nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
-                                                    direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
+                                                    nombre: "Bodega Central",
+                                                    direccion: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción"
                                                 },
-                                                responsable: pedidoSeleccionado.responsable || "-",
-                                                productos: (pedidoSeleccionado.productos || []).map((prod: any, idx: number) => ({
-                                                    codigo: prod.codigo || `P${idx + 1}`,
-                                                    descripcion: prod.nombre || prod.descripcion || "-",
-                                                    cantidad: prod.cantidad || 0,
+                                                personaRecibe: {
+                                                    nombre: pedidoSeleccionado.responsable,
+                                                    cargo: "Responsable de Bodega"
+                                                },
+                                                productos: pedidoSeleccionado.productos.map((prod: any) => ({
+                                                    codigo: `${prod.nombre}-${prod.marca}-${prod.categoria}`.replace(/\s+/g, "-").toLowerCase(),
+                                                    descripcion: `${prod.nombre} - ${prod.marca} - ${prod.categoria}`,
+                                                    cantidad: prod.cantidad
                                                 })),
-                                                observaciones: pedidoSeleccionado.observaciones || "",
-                                            });
-                                        }}
-                                    >
-                                        Orden de Compra Interna (OCI)
-                                    </Button>
+                                                observaciones: `Guía de Despacho Proveedor: ${pedidoSeleccionado.numRem || "No especificada"}\nN° Orden de Compra: ${pedidoSeleccionado.numOrden || "No especificada"}`,
+                                                conformidad: "Recibido conforme",
+                                                responsable: pedidoSeleccionado.responsable,
+                                                proveedor: {
+                                                    nombre: pedidoSeleccionado.proveedor.nombre,
+                                                    rut: pedidoSeleccionado.proveedor.rut,
+                                                    contacto: pedidoSeleccionado.proveedor.contacto
+                                                }
+                                            })}
+                                        >
+                                            Acta de Recepción
+                                        </Button>
+                                    ) : (
+                                        <>
+                                            <Button
+                                                variant="outlined"
+                                                startIcon={<DescriptionIcon />}
+                                                style={{ borderColor: "#FFD700", color: "#FFD700", fontWeight: 600 }}
+                                                onClick={() => generarGuiaDespacho(pedidoSeleccionado)}
+                                            >
+                                                Guía de Despacho
+                                            </Button>
+                                            <Button
+                                                variant="outlined"
+                                                startIcon={<AssignmentTurnedInIcon />}
+                                                style={{ borderColor: "#4CAF50", color: "#4CAF50", fontWeight: 600 }}
+                                                onClick={() => generarActaRecepcion({
+                                                    numeroActa: String(pedidoSeleccionado.id),
+                                                    fechaRecepcion: pedidoSeleccionado.fecha,
+                                                    sucursal: {
+                                                        nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
+                                                        direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
+                                                    },
+                                                    personaRecibe: {
+                                                        nombre: pedidoSeleccionado.asignado || "-",
+                                                        cargo: "Responsable de Sucursal",
+                                                    },
+                                                    productos: pedidoSeleccionado.productos.map((prod: any) => ({
+                                                        codigo: prod.codigo || `P${Math.random().toString(36).substr(2, 9)}`,
+                                                        descripcion: prod.nombre,
+                                                        cantidad: prod.cantidad
+                                                    })),
+                                                    observaciones: pedidoSeleccionado.observaciones || "",
+                                                    conformidad: "Recibido conforme",
+                                                    responsable: pedidoSeleccionado.asignado || "-",
+                                                })}
+                                            >
+                                                Acta de Recepción
+                                            </Button>
+                                            <Button
+                                                variant="outlined"
+                                                startIcon={<LocalShippingIcon />}
+                                                style={{ borderColor: "#2196F3", color: "#2196F3", fontWeight: 600 }}
+                                                onClick={() => generarOCI({
+                                                    numeroOCI: String(pedidoSeleccionado.ociAsociada || pedidoSeleccionado.id),
+                                                    fecha: pedidoSeleccionado.fecha,
+                                                    sucursal: {
+                                                        nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
+                                                        direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
+                                                    },
+                                                    responsable: pedidoSeleccionado.responsable || "-",
+                                                    productos: pedidoSeleccionado.productos.map((prod: any) => ({
+                                                        codigo: prod.codigo || `P${Math.random().toString(36).substr(2, 9)}`,
+                                                        descripcion: prod.nombre,
+                                                        cantidad: prod.cantidad
+                                                    })),
+                                                    observaciones: pedidoSeleccionado.observaciones || "",
+                                                })}
+                                            >
+                                                Orden de Compra Interna (OCI)
+                                            </Button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         )}

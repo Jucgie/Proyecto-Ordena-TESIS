@@ -7,6 +7,12 @@ interface ProductoRecibido {
     cantidad: number;
 }
 
+interface Proveedor {
+    nombre: string;
+    rut: string;
+    contacto: string;
+}
+
 interface ActaRecepcionData {
     numeroActa: string;
     fechaRecepcion: string;
@@ -16,6 +22,7 @@ interface ActaRecepcionData {
     observaciones?: string;
     conformidad: "Recibido conforme" | "No conforme";
     responsable: string; // Firma o nombre
+    proveedor?: Proveedor; // Información del proveedor (opcional)
 }
 
 export function generarActaRecepcion(data: ActaRecepcionData) {
@@ -28,20 +35,27 @@ export function generarActaRecepcion(data: ActaRecepcionData) {
     doc.text(`N° de Acta: ${data.numeroActa}`, 14, 30);
     doc.text(`Fecha de recepción: ${data.fechaRecepcion}`, 14, 38);
 
-    doc.text(`Sucursal receptora: ${data.sucursal.nombre}`, 14, 46);
-    doc.text(`Dirección: ${data.sucursal.direccion}`, 14, 54);
+    // Información del proveedor si existe
+    if (data.proveedor) {
+        doc.text(`Proveedor: ${data.proveedor.nombre}`, 14, 46);
+        doc.text(`RUT Proveedor: ${data.proveedor.rut}`, 14, 54);
+        doc.text(`Contacto: ${data.proveedor.contacto}`, 14, 62);
+    }
 
-    doc.text(`Persona que recibe: ${data.personaRecibe.nombre}`, 14, 62);
-    doc.text(`Cargo: ${data.personaRecibe.cargo}`, 14, 70);
+    doc.text(`Sucursal receptora: ${data.sucursal.nombre}`, 14, data.proveedor ? 70 : 46);
+    doc.text(`Dirección: ${data.sucursal.direccion}`, 14, data.proveedor ? 78 : 54);
+
+    doc.text(`Persona que recibe: ${data.personaRecibe.nombre}`, 14, data.proveedor ? 86 : 62);
+    doc.text(`Cargo: ${data.personaRecibe.cargo}`, 14, data.proveedor ? 94 : 70);
 
     autoTable(doc, {
-        startY: 78,
+        startY: data.proveedor ? 102 : 78,
         head: [["Código", "Descripción", "Cantidad recibida"]],
         body: data.productos.map(p => [p.codigo, p.descripcion, p.cantidad.toString()]),
         styles: { fontSize: 10 },
     });
 
-    let y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : 90;
+    let y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : (data.proveedor ? 110 : 86);
     doc.text("Observaciones:", 14, y);
     doc.text(data.observaciones || "-", 40, y);
 
