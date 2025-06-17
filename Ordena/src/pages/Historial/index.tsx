@@ -1,4 +1,5 @@
 import Layout from "../../components/layout/layout";
+import { HistorialTemplate } from "../../components/historial/HistorialTemplate";
 
 export default function Historial() {
     return (
@@ -8,6 +9,7 @@ export default function Historial() {
                 Aquí podrás ver el historial de tu sucursal
             </p>
             {/* Aquí puedes agregar más contenido relacionado con el historial */}
+            <HistorialTemplate />
         </Layout>
     );
 }
