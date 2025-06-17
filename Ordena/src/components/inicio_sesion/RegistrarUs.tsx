@@ -3,17 +3,15 @@ import styled from "styled-components";
 import ferr from "../../assets/ferreteria.png";
 import invt from "../../assets/invent.png";
 import Swal from "sweetalert2";
-// ...otros imports...
 import { useState } from "react";
 import { SUCURSALES } from "../../constants/ubicaciones";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useUsuariosStore } from "../../store/useUsuarioStore";
-
+import { authService } from '../../services/authService';
+import { useBodegaStore } from "../../store/useBodegaStore";
 
 interface Props {
   setState: () => void;
-
-
 }
 
 export function RegUsuario({ setState }: Props) {
@@ -22,46 +20,73 @@ export function RegUsuario({ setState }: Props) {
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
   const [confirmar, setConfirmar] = useState("");
+  const [rut, setRut] = useState(""); // Nuevo estado para RUT
   const [perfil, setPerfil] = useState<"sucursal" | "bodega-central" | "">("");
   const [sucursalId, setSucursalId] = useState<string>("");
-  const [rol, setRol] = useState<"bodeguero" | "transportista" | "supervisor" | "">(""); // Nuevo estado
-  const addUsuario = useUsuariosStore(state => state.addUsuario);
+  const [rol, setRol] = useState<"bodeguero" | "transportista" | "supervisor" | "">("");
+  const addUsuario = useUsuariosStore((state: any) => state.addUsuario); // Corregido el tipo
+  const setVista = useBodegaStore(state => state.setVista);
 
-
-  const manejarRegistro = () => {
-    const usuariosGuardados = JSON.parse(localStorage.getItem("usuarios") || "[]");
-
-    // Verifica que el correo no exista ya
-    if (usuariosGuardados.some((u: any) => u.correo === correo)) {
-      Swal.fire("Error", "Ya existe un usuario con ese correo.", "error");
-      return;
+  const manejarRegistro = async () => {
+    // Validaciones existentes
+    if (!nombre || !correo || !password || !confirmar || !perfil || !rol || !rut) {
+        Swal.fire("Error", "Todos los campos son obligatorios", "error");
+        return;
     }
 
-    // Construye el objeto usuario para el store
-    const usuarioNuevo = {
-      nombre,
-      correo,
-      password,
-      tipo: perfil === "bodega-central" ? "bodega" : "sucursal",
-      rol,
-      sucursalId: perfil === "sucursal" ? sucursalId : null,
-      bodega: perfil === "bodega-central"
-        ? { id: "bodega-central", nombre: "Bodega Central" }
-        : undefined
-    };
+    // Agregar validación de correo electrónico
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(correo)) {
+        Swal.fire("Error", "Por favor, introduce un correo electrónico válido", "error");
+        return;
+    }
 
-    usuariosGuardados.push(usuarioNuevo);
-    localStorage.setItem("usuarios", JSON.stringify(usuariosGuardados));
+    if (password !== confirmar) {
+        Swal.fire("Error", "Las contraseñas no coinciden", "error");
+        return;
+    }
 
-    // Guarda el usuario en el store global de usuarios
-    addUsuario(usuarioNuevo);
+    if (perfil === "sucursal" && !sucursalId) {
+        Swal.fire("Error", "Debes seleccionar una sucursal", "error");
+        return;
+    }
 
-    // Guarda el usuario autenticado en Zustand
-    setUsuario(usuarioNuevo);
+    // Validación de formato RUT chileno
+    const rutRegex = /^[0-9]{1,2}\.[0-9]{3}\.[0-9]{3}-[0-9kK]{1}$/;
+    if (!rutRegex.test(rut)) {
+        Swal.fire("Error", "El formato del RUT no es válido (ejemplo: 12.345.678-9)", "error");
+        return;
+    }
 
-    Swal.fire("¡Registro exitoso!", "Tu cuenta ha sido creada.", "success");
-    setState();
-  };
+      try {
+        const usuarioNuevo = {
+            nombre,
+            correo,
+            contrasena: password,
+            rut,
+            rol,
+            bodega: perfil === "bodega-central" ? "2" : undefined,
+            sucursal: perfil === "sucursal" ? parseInt(sucursalId) : undefined // Convertir a número
+        };
+
+        console.log('Enviando datos de registro:', usuarioNuevo);
+
+        const response = await authService.register(usuarioNuevo);
+        setUsuario(response.usuario, response.token);
+        
+        // Establecer la vista según el perfil
+        setVista(perfil === "bodega-central" ? "bodega" : "sucursal");
+        
+        Swal.fire("¡Registro exitoso!", "Tu cuenta ha sido creada.", "success");
+        setState();
+    } catch (error: any) {
+        console.error('Error en registro:', error);
+        const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.correo?.[0] || 
+                          "Hubo un error al registrar el usuario.";
+        Swal.fire("Error", errorMessage, "error");
+    }
+};
 
   return (
     <Container>
@@ -85,7 +110,16 @@ export function RegUsuario({ setState }: Props) {
               <input
                 className="form_field"
                 type="text"
-                placeholder="correo"
+                placeholder="RUT (ejemplo: 12.345.678-9)"
+                value={rut}
+                onChange={e => setRut(e.target.value)}
+              />
+            </article>
+            <article>
+              <input
+                className="form_field"
+                type="text"
+                placeholder="Correo electrónico"
                 value={correo}
                 onChange={e => setCorreo(e.target.value)}
               />
@@ -94,7 +128,7 @@ export function RegUsuario({ setState }: Props) {
               <input
                 className="form_field"
                 type="password"
-                placeholder="contraseña"
+                placeholder="Contraseña"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
               />

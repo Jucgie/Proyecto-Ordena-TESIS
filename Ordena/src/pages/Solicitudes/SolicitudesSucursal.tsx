@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import Layout from "../../components/layout/layout";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
@@ -9,134 +9,201 @@ import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useBodegaStore } from "../../store/useBodegaStore";
 import { useAuthStore } from "../../store/useAuthStore";
-import { generarOCI } from "../../utils/pdf/generarOCI"; // Asegúrate de que esta función esté implementada correctamente
+import { generarOCI } from "../../utils/pdf/generarOCI";
 import { SUCURSALES } from "../../constants/ubicaciones";
 import { useInventariosStore } from "../../store/useProductoStore";
 import { BODEGA_CENTRAL } from "../../constants/ubicaciones";
 import sin_imagen from "../../assets/sin_imagen.png";
 
+interface Usuario {
+    id: number;
+    nombre: string;
+    correo: string;
+    rol: string;
+    sucursalId?: string;
+    sucursal?: number;
+}
+
+interface AuthState {
+    usuario: Usuario | null;
+    token: string | null;
+    setUsuario: (usuario: Usuario, token: string) => void;
+    logout: () => void;
+}
+
+interface BodegaState {
+    solicitudes: Solicitud[];
+    addSolicitud: (solicitud: Solicitud) => void;
+}
+
+interface InventarioState {
+    inventarios: { [key: string]: Producto[] };
+    marcas: { [key: string]: string[] };
+    categorias: { [key: string]: string[] };
+}
+
+interface Producto {
+    code: string;
+    name: string;
+    description: string;
+    stock: number;
+    brand: string;
+    category: string;
+    im?: string | File | null;
+}
+
+interface Solicitud {
+    id: number;
+    sucursal: {
+        id: string;
+        nombre: string;
+        direccion: string;
+        rut: string;
+    };
+    bodega: string;
+    fecha: string;
+    responsable: string;
+    cargo: string;
+    observaciones: string;
+    productos: Array<{
+        codigo: string;
+        nombre: string;
+        descripcion: string;
+        cantidad: number;
+    }>;
+    estado: string;
+    aprobador: string;
+}
 
 export default function SolicitudesSucursal() {
-    const { solicitudes, addSolicitud } = useBodegaStore();
-    const usuario = useAuthStore(state => state.usuario);
-    const puedeSolicitar = usuario?.rol === "supervisor" || usuario?.rol === "bodeguero";
+    // Hooks de estado global - Modificamos cómo accedemos al estado
+    const solicitudes = useBodegaStore((state: any) => state.solicitudes as Solicitud[]);
+    const addSolicitud = useBodegaStore((state: any) => state.addSolicitud as (solicitud: Solicitud) => void);
+    const usuario = useAuthStore((state: any) => state.usuario as AuthState['usuario']);
+    
+    // Separamos los selectores del inventario
+    const inventarios = useInventariosStore((state: any) => state.inventarios as InventarioState['inventarios']);
+    const marcas = useInventariosStore((state: any) => state.marcas as InventarioState['marcas']);
+    const categorias = useInventariosStore((state: any) => state.categorias as InventarioState['categorias']);
+
+    // Memoizamos los datos del inventario
+    const inventarioBodegaCentral = useMemo(() => 
+        inventarios[BODEGA_CENTRAL.id] || [],
+        [inventarios]
+    );
+
+    const marcasBodegaCentral = useMemo(() => 
+        marcas[BODEGA_CENTRAL.id] || [],
+        [marcas]
+    );
+
+    const categoriasBodegaCentral = useMemo(() => 
+        categorias[BODEGA_CENTRAL.id] || [],
+        [categorias]
+    );
+
+    // Estados locales
     const [modalOpen, setModalOpen] = useState(false);
     const [modalResumenOpen, setModalResumenOpen] = useState(false);
-    const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<any>(null);
-    const inventarioBodegaCentral = useInventariosStore(state => state.inventarios[BODEGA_CENTRAL.id] || []);
-    const [cantidadSeleccionada, setCantidadSeleccionada] = useState<{ [code: string]: number }>({});
-    const [modalSeleccionarProductos, setModalSeleccionarProductos] = useState(false);
-    const [productoSeleccionado, setProductoSeleccionado] = useState<any>(null);
-    const [cantidadProducto, setCantidadProducto] = useState<number>(1);
-    const sucursalData = SUCURSALES.find(s => s.id === usuario?.sucursalId) || {};
-
-
-    //modales de productos
+    const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<Solicitud | null>(null);
     const [search, setSearch] = useState("");
     const [filtroMarca, setFiltroMarca] = useState("");
     const [filtroCategoria, setFiltroCategoria] = useState("");
+    const [modalSeleccionarProductos, setModalSeleccionarProductos] = useState(false);
+    const [productoSeleccionado, setProductoSeleccionado] = useState<Producto | null>(null);
+    const [cantidadProducto, setCantidadProducto] = useState<number>(1);
 
-    const marcasBodegaCentral = useInventariosStore(state => state.marcas[BODEGA_CENTRAL.id] || []);
-    const categoriasBodegaCentral = useInventariosStore(state => state.categorias[BODEGA_CENTRAL.id] || []);
+    // Memoizamos la sucursal del usuario
+    const sucursalData = useMemo(() => {
+        const sucursalId = usuario?.sucursalId?.toString(); // Convertimos a string si es número
+        console.log('Sucursal ID:', sucursalId); // Para debugging
+        const sucursal = SUCURSALES.find(s => s.id === sucursalId);
+        console.log('Sucursal encontrada:', sucursal); // Para debugging
+        return sucursal || {
+            id: "",
+            nombre: "",
+            direccion: "",
+            rut: "",
+            tipo: "sucursal"
+        };
+    }, [usuario?.sucursalId]);
 
-    const productosFiltrados = inventarioBodegaCentral.filter(prod =>
-    prod.name.toLowerCase().includes(search.toLowerCase()) &&
-    (!filtroMarca || prod.brand === filtroMarca) &&
-    (!filtroCategoria || prod.category === filtroCategoria)
+    // Memoizamos los productos filtrados
+    const productosFiltrados = useMemo(() => 
+        inventarioBodegaCentral.filter(prod =>
+            prod.name.toLowerCase().includes(search.toLowerCase()) &&
+            (!filtroMarca || prod.brand === filtroMarca) &&
+            (!filtroCategoria || prod.category === filtroCategoria)
+        ),
+        [inventarioBodegaCentral, search, filtroMarca, filtroCategoria]
     );
 
- // Obténemos sucursal y bodega desde el usuario
-    const sucursal = usuario?.sucursal?.nombre || "";
-    const bodega = "Bodega Central"; // Si tienes más de una bodega, usa usuario.bodega?.nombre
-    const responsable = usuario?.nombre || "Usuario Actual";
-
-
-        // Estado para nueva solicitud
-    const [nuevaSolicitud, setNuevaSolicitud] = useState<any>({
+    // Memoizamos el estado inicial de nuevaSolicitud
+    const estadoInicialSolicitud = useMemo(() => ({
         id: solicitudes.length + 1,
         sucursal: {
-            id: usuario?.sucursal?.id,
-            nombre: usuario?.sucursal?.nombre,
-            direccion: usuario?.sucursal?.direccion || "",
-            rut: usuario?.sucursal?.rut || ""
+            id: sucursalData.id,
+            nombre: sucursalData.nombre,
+            direccion: sucursalData.direccion,
+            rut: sucursalData.rut
         },
-        bodega,
+        bodega: "Bodega Central",
         fecha: new Date().toISOString().slice(0, 10),
-        responsable,
+        responsable: usuario?.nombre || "",
         cargo: usuario?.rol || "",
         observaciones: "",
         productos: [],
         estado: "pendiente",
-        aprobador: "",
-    });
+        aprobador: ""
+    }), [solicitudes.length, sucursalData, usuario]);
 
-    const handleAgregarProducto = (prod: any) => {
-    const cantidad = cantidadSeleccionada[prod.code];
-    if (!cantidad || cantidad > prod.stock) return;
-    setNuevaSolicitud(prev => ({
-        ...prev,
-        productos: [
-        ...prev.productos,
-        {
-            codigo: prod.code,
-            nombre: prod.name,
-            descripcion: prod.description,
-            cantidad
-        }
-        ]
-    }));
-    setCantidadSeleccionada(prev => ({ ...prev, [prod.code]: "" }));
-    };
+    const [nuevaSolicitud, setNuevaSolicitud] = useState<Solicitud>(estadoInicialSolicitud);
 
+    // Funciones memoizadas
+    const handleOpenCrear = useCallback(() => {
+        setNuevaSolicitud(estadoInicialSolicitud);
+        setModalOpen(true);
+    }, [estadoInicialSolicitud]);
 
+    const handleCloseCrear = useCallback(() => {
+        setModalOpen(false);
+    }, []);
 
-    const handleOpenResumen = (solicitud: any) => {
+    const handleOpenResumen = useCallback((solicitud: Solicitud) => {
         setSolicitudSeleccionada(solicitud);
         setModalResumenOpen(true);
-    };
+    }, []);
 
-    const handleCloseResumen = () => {
+    const handleCloseResumen = useCallback(() => {
         setModalResumenOpen(false);
         setSolicitudSeleccionada(null);
-    };
+    }, []);
 
-    const handleOpenCrear = () => {
-        setNuevaSolicitud({
-            id: solicitudes.length + 1,
-            sucursal: {
-                id: sucursalData.id || "",
-                nombre: sucursalData.nombre || "",
-                direccion: sucursalData.direccion || "",
-                rut: sucursalData.rut || ""
-            },
-            bodega,
-            fecha: new Date().toISOString().slice(0, 10),
-            responsable: usuario?.nombre || "",
-            cargo: usuario?.rol || "",
-            observaciones: "",
-            productos: [],
-            estado: "pendiente",
-            aprobador: ""
-        });
-        setModalOpen(true);
-    };
+    const handleSeleccionarProducto = useCallback((prod: Producto) => {
+        setProductoSeleccionado(prod);
+        setCantidadProducto(1);
+    }, []);
 
-    const handleCloseCrear = () => {
-        setModalOpen(false);
-    };
-
-    // Simula agregar productos desde la "mini tienda"
-    const handleAgregarProductos = () => {
-        setNuevaSolicitud((prev: any) => ({
+    const handleAgregarProductoSeleccionado = useCallback(() => {
+        if (!productoSeleccionado || cantidadProducto < 1 || cantidadProducto > productoSeleccionado.stock) return;
+        
+        setNuevaSolicitud(prev => ({
             ...prev,
             productos: [
                 ...prev.productos,
-                { codigo: `P${prev.productos.length + 1}`, nombre: "Producto Demo", descripcion: "Descripción demo", cantidad: 1 }
+                {
+                    codigo: productoSeleccionado.code,
+                    nombre: productoSeleccionado.name,
+                    descripcion: productoSeleccionado.description,
+                    cantidad: cantidadProducto
+                }
             ]
         }));
-    };
+        setProductoSeleccionado(null);
+        setCantidadProducto(1);
+    }, [productoSeleccionado, cantidadProducto]);
 
-    const handleCrearSolicitud = () => {
+    const handleCrearSolicitud = useCallback(() => {
         generarOCI({
             numeroOCI: nuevaSolicitud.id,
             fecha: nuevaSolicitud.fecha,
@@ -154,35 +221,13 @@ export default function SolicitudesSucursal() {
         });
         addSolicitud({ ...nuevaSolicitud });
         setModalOpen(false);
-    };
+    }, [nuevaSolicitud, addSolicitud]);
 
-        // Al hacer click en un producto, abre el mini-modal
-    const handleSeleccionarProducto = (prod: any) => {
-        setProductoSeleccionado(prod);
-        setCantidadProducto(1);
-    };
-
-    // Al confirmar cantidad, agrega el producto a la solicitud
-    const handleAgregarProductoSeleccionado = () => {
-        if (!productoSeleccionado || cantidadProducto < 1 || cantidadProducto > productoSeleccionado.stock) return;
-        setNuevaSolicitud(prev => ({
-            ...prev,
-            productos: [
-                ...prev.productos,
-                {
-                    codigo: productoSeleccionado.code,
-                    nombre: productoSeleccionado.name,
-                    descripcion: productoSeleccionado.description,
-                    cantidad: cantidadProducto
-                }
-            ]
-        }));
-        setProductoSeleccionado(null);
-        setCantidadProducto(1);
-    };
-
-    console.log("usuario", usuario);
-
+    // Constantes memoizadas
+    const puedeSolicitar = useMemo(() => 
+        usuario?.rol === "supervisor" || usuario?.rol === "bodeguero",
+        [usuario?.rol]
+    );
 
     return (
         <Layout>
@@ -247,7 +292,7 @@ export default function SolicitudesSucursal() {
                                         <TableCell style={{ color: "#fff" }}>{row.responsable}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
-                                                ? row.productos.reduce((acc, prod) => acc + Number(prod.cantidad), 0)
+                                                ? row.productos.reduce((acc: number, prod: { cantidad: number }) => acc + Number(prod.cantidad), 0)
                                                 : 0}
                                         </TableCell>
                                         <TableCell style={{

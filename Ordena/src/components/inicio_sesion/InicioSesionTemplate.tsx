@@ -6,6 +6,8 @@ import ordena from "../../assets/ordena.svg";
 import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/useAuthStore";
+import { authService } from '../../services/authService';
+import { useBodegaStore } from "../../store/useBodegaStore";
 
 export function InicioFormulario() {
     const navigate = useNavigate();
@@ -13,22 +15,48 @@ export function InicioFormulario() {
     const [state, setState] = useState(false);
     const [correo, setCorreo] = useState("");
     const [password, setPassword] = useState("");
+    const setVista = useBodegaStore(state => state.setVista);
 
 
-    const manejarLogin = (e: React.FormEvent) => {
-        e.preventDefault(); // <-- Esto evita el reload
-        const usuariosGuardados = JSON.parse(localStorage.getItem("usuarios") || "[]");
-        const usuario = usuariosGuardados.find(
-            (u: any) => u.correo === correo && u.password === password
-        );
-        if (!usuario) {
-            Swal.fire("Error", "Correo o contraseña incorrectos.", "error");
-            return;
+    const manejarLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            // Validar correo electrónico antes de enviar
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(correo)) {
+                Swal.fire("Error", "Por favor, introduce un correo electrónico válido", "error");
+                return;
+            }
+    
+            const response = await authService.login(correo, password);
+            
+            // Transformar la respuesta para asegurar que sucursalId sea string
+            const usuarioTransformado = {
+                ...response.usuario,
+                sucursalId: response.usuario.sucursal?.toString() || response.usuario.sucursalId?.toString()
+            };
+            
+            console.log('Usuario transformado:', usuarioTransformado); // Para debugging
+            
+            setUsuario(usuarioTransformado, response.token);
+            
+            // Establecer la vista según el tipo de usuario
+            if (response.usuario.bodega) {
+                setVista("bodega");
+            } else if (response.usuario.sucursal) {
+                setVista("sucursal");
+            }
+            
+            Swal.fire("Bienvenido", "Inicio de sesión exitoso.", "success").then(() => {
+                navigate("/pedidos");
+            });
+        } catch (error: any) {
+            console.error('Error en login:', error);
+            const errorMessage = error.response?.data?.error || 
+                               error.response?.data?.correo?.[0] || 
+                               "Correo o contraseña incorrectos.";
+            Swal.fire("Error", errorMessage, "error");
         }
-        setUsuario(usuario); // Guarda en Zustand
-        Swal.fire("Bienvenido", "Inicio de sesión exitoso.", "success").then(() => {
-            navigate("/pedidos"); // Redirección correcta en React
-        });
     };
     
     return (

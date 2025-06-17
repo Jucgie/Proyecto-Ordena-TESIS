@@ -23,6 +23,7 @@ import { useBodegaStore } from "../../store/useBodegaStore";
 import ModalFormularioPedido from "../../components/pedidos/modalform";
 import { useUsuariosStore } from "../../store/useUsuarioStore";
 import { useProveedoresStore } from "../../store/useProveedorStore";
+import { useInventariosStore } from "../../store/useProductoStore";
 
 // Interfaces
 interface Producto {
@@ -126,6 +127,13 @@ export default function PedidosBodega() {
     const [modalDespachoOpen, setModalDespachoOpen] = useState(false);
     const [solicitudADespachar, setSolicitudADespachar] = useState<any>(null);
     const [transportistaSeleccionado, setTransportistaSeleccionado] = useState<string>("");
+    const marcas = useMemo(() => {
+        return useInventariosStore.getState().marcas["bodega-central"] || [];
+    }, []);
+    
+    const categorias = useMemo(() => {
+        return useInventariosStore.getState().categorias["bodega-central"] || [];
+    }, []);
 
     useEffect(() => {
         if (transferencias > 0) {
@@ -230,6 +238,7 @@ export default function PedidosBodega() {
 
     // Modal para nuevo ingreso/salida
     const [modalTipo, setModalTipo] = useState<"ingreso" | "salida" | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Filtros aplicados a los datos
     const pedidosFiltrados = useMemo(() => {
@@ -323,69 +332,77 @@ export default function PedidosBodega() {
                 >
                     <BotonAccion
                         startIcon={<AddCircleOutlineIcon />}
-                        onClick={() => setModalTipo("ingreso")}
+                        onClick={() => {
+                            setModalTipo("ingreso");
+                            setIsModalOpen(true);
+                        }}
                     >
                         Nuevo Ingreso
                     </BotonAccion>
-                    {/* Solo este modal debe quedar */}
-                        <ModalFormularioPedido
-                            open={!!modalTipo}
-                            onClose={() => setModalTipo(null)}
-                            tipo={modalTipo as "ingreso"}
-                            onSubmit={data => {
-                                console.log('Creando nuevo pedido con datos:', data);
-                                
-                                const nuevoPedido: Pedido = {
-                                    id: pedidosArray.length ? pedidosArray[pedidosArray.length - 1].id + 1 : 1,
-                                    tipo: "ingreso" as const,
-                                    fecha: data.fecha,
-                                    numRem: data.numRem,
-                                    numFactura: data.numFactura,
-                                    numOrden: data.numOrden,
-                                    proveedor: data.proveedor,
-                                    productos: data.productos,
-                                    cantidad: Array.isArray(data.productos)
-                                        ? data.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
-                                        : 0,
-                                    estado: "Pendiente",
-                                    responsable: usuario?.nombre || "Responsable Bodega"
-                                };
-                                
-                                console.log('Nuevo pedido a agregar:', nuevoPedido);
-                                
-                                addPedido(nuevoPedido);
+                    <ModalFormularioPedido
+                        open={isModalOpen}
+                        onClose={() => {
+                            setIsModalOpen(false);
+                            setModalTipo(null);
+                        }}
+                        tipo={modalTipo as "ingreso"}
+                        marcas={marcas}
+                        categorias={categorias}
+                        onSubmit={data => {
+                            console.log('Creando nuevo pedido con datos:', data);
+                            
+                            const nuevoPedido: Pedido = {
+                                id: pedidosArray.length ? pedidosArray[pedidosArray.length - 1].id + 1 : 1,
+                                tipo: "ingreso" as const,
+                                fecha: data.fecha,
+                                numRem: data.numRem,
+                                numFactura: data.numFactura,
+                                numOrden: data.numOrden,
+                                proveedor: data.proveedor,
+                                productos: data.productos,
+                                cantidad: Array.isArray(data.productos)
+                                    ? data.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
+                                    : 0,
+                                estado: "Pendiente",
+                                responsable: usuario?.nombre || "Responsable Bodega"
+                            };
+                            
+                            console.log('Nuevo pedido a agregar:', nuevoPedido);
+                            
+                            addPedido(nuevoPedido);
 
-                                // Generar Acta de Recepción
-                                generarActaRecepcion({
-                                    numeroActa: String(nuevoPedido.id),
-                                    fechaRecepcion: nuevoPedido.fecha,
-                                    sucursal: {
-                                        nombre: "Bodega Central",
-                                        direccion: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción"
-                                    },
-                                    personaRecibe: {
-                                        nombre: nuevoPedido.responsable,
-                                        cargo: "Responsable de Bodega"
-                                    },
-                                    productos: nuevoPedido.productos.map((prod: any) => ({
-                                        codigo: `${prod.nombre}-${prod.marca}-${prod.categoria}`.replace(/\s+/g, "-").toLowerCase(),
-                                        descripcion: `${prod.nombre} - ${prod.marca} - ${prod.categoria}`,
-                                        cantidad: prod.cantidad
-                                    })),
-                                    observaciones: `Guía de Despacho Proveedor: ${data.numRem || "No especificada"}\nN° Orden de Compra: ${data.numOrden || "No especificada"}`,
-                                    conformidad: "Recibido conforme",
-                                    responsable: nuevoPedido.responsable,
-                                    proveedor: {
-                                        nombre: data.proveedor.nombre,
-                                        rut: data.proveedor.rut,
-                                        contacto: data.proveedor.contacto
-                                    }
-                                });
-                                
-                                setOpcion("ingresos");
-                                setModalTipo(null);
-                            }}
-                        />
+                            // Generar Acta de Recepción
+                            generarActaRecepcion({
+                                numeroActa: String(nuevoPedido.id),
+                                fechaRecepcion: nuevoPedido.fecha,
+                                sucursal: {
+                                    nombre: "Bodega Central",
+                                    direccion: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción"
+                                },
+                                personaRecibe: {
+                                    nombre: nuevoPedido.responsable,
+                                    cargo: "Responsable de Bodega"
+                                },
+                                productos: nuevoPedido.productos.map((prod: any) => ({
+                                    codigo: `${prod.nombre}-${prod.marca}-${prod.categoria}`.replace(/\s+/g, "-").toLowerCase(),
+                                    descripcion: `${prod.nombre} - ${prod.marca} - ${prod.categoria}`,
+                                    cantidad: prod.cantidad
+                                })),
+                                observaciones: `Guía de Despacho Proveedor: ${data.numRem || "No especificada"}\nN° Orden de Compra: ${data.numOrden || "No especificada"}`,
+                                conformidad: "Recibido conforme",
+                                responsable: nuevoPedido.responsable,
+                                proveedor: {
+                                    nombre: data.proveedor.nombre,
+                                    rut: data.proveedor.rut,
+                                    contacto: data.proveedor.contacto
+                                }
+                            });
+                            
+                            setOpcion("ingresos");
+                            setIsModalOpen(false);
+                            setModalTipo(null);
+                        }}
+                    />
                 </div>
 
                 {/* Barra superior de la tabla */}

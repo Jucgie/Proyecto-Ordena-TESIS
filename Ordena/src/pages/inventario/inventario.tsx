@@ -55,33 +55,56 @@ export default function Inventario() {
 
     const inventarios = useInventariosStore(state => state.inventarios);
     const productos = inventarios[ubicacionId] || [];
+   // Funciones del store
     const addProducto = useCallback(
-    (ubicacionId: string, producto: ProductInt) => useInventariosStore.getState().addProducto(ubicacionId, producto),
-    []
+        (ubicacionId: string, producto: ProductInt) => useInventariosStore.getState().addProducto(ubicacionId, producto),
+        []
     );
+
     const updateProducto = useCallback(
-    (ubicacionId: string, producto: ProductInt) => useInventariosStore.getState().updateProducto(ubicacionId, producto),
-    []
+        (ubicacionId: string, producto: ProductInt) => useInventariosStore.getState().updateProducto(ubicacionId, producto),
+        []
     );
+
     const deleteProductos = useCallback(
-    (ubicacionId: string, codes: string[]) => useInventariosStore.getState().deleteProductos(ubicacionId, codes),
-    []
+        (ubicacionId: string, codes: string[]) => useInventariosStore.getState().deleteProductos(ubicacionId, codes),
+        []
     );
+
     const addMarca = useCallback(
-    (marca: string) => useInventariosStore.getState().addMarca(ubicacionId, marca),
-    [ubicacionId]
+        (marca: string) => useInventariosStore.getState().addMarca(ubicacionId, marca),
+        [ubicacionId]
     );
+
     const deleteMarca = useCallback(
-    (marca: string) => useInventariosStore.getState().deleteMarca(ubicacionId, marca),
-    [ubicacionId]
+        (marca: string) => useInventariosStore.getState().deleteMarca(ubicacionId, marca),
+        [ubicacionId]
     );
+
     const addCategoria = useCallback(
-    (categoria: string) => useInventariosStore.getState().addCategoria(ubicacionId, categoria),
-    [ubicacionId]
+        (categoria: string) => useInventariosStore.getState().addCategoria(ubicacionId, categoria),
+        [ubicacionId]
     );
+
     const deleteCategoria = useCallback(
-    (categoria: string) => useInventariosStore.getState().deleteCategoria(ubicacionId, categoria),
-    [ubicacionId]
+        (categoria: string) => useInventariosStore.getState().deleteCategoria(ubicacionId, categoria),
+        [ubicacionId]
+    );
+
+    // Agregar estas tres nuevas funciones
+    const fetchProductos = useCallback(
+        (ubicacionId: string) => useInventariosStore.getState().fetchProductos(ubicacionId),
+        []
+    );
+
+    const fetchMarcas = useCallback(
+        (ubicacionId: string) => useInventariosStore.getState().fetchMarcas(ubicacionId),
+        []
+    );
+
+    const fetchCategorias = useCallback(
+        (ubicacionId: string) => useInventariosStore.getState().fetchCategorias(ubicacionId),
+        []
     );
     const [search, setSearch] = useState("");
     const [filtros, setFiltros] = useState<{ categoria?: string; marca?: string }>({});
@@ -590,6 +613,14 @@ export default function Inventario() {
     }
 
     // --- Render principal ---
+    useEffect(() => {
+        if (ubicacionId) {
+            fetchProductos(ubicacionId);
+            fetchMarcas(ubicacionId);
+            fetchCategorias(ubicacionId);
+        }
+    }, [ubicacionId]);
+
     return (
         <Layout>
             <Box sx={{ maxWidth: 1200, margin: "0 auto", padding: 3 }}>

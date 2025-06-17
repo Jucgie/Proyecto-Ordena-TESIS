@@ -5,7 +5,6 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useProveedoresStore } from "../../store/useProveedorStore";
-import { useInventariosStore } from "../../store/useProductoStore";
 import { Select, MenuItem, InputLabel, FormControl } from "@mui/material";
 
 interface Producto {
@@ -20,11 +19,12 @@ interface Props {
     onClose: () => void;
     tipo: "ingreso" | "salida";
     onSubmit: (data: any) => void;
+    marcas: string[];
+    categorias: string[];
 }
 
-export default function ModalFormularioPedido({ open, onClose, tipo, onSubmit }: Props) {
+export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, onSubmit, marcas, categorias }: Props) {
     const addIngresoProveedor = useProveedoresStore(state => state.addIngresoProveedor);
-    const { addProducto } = useInventariosStore.getState();
 
     // Inputs comunes
     const [fecha, setFecha] = useState("");
@@ -40,8 +40,6 @@ export default function ModalFormularioPedido({ open, onClose, tipo, onSubmit }:
     // Productos
     const [productos, setProductos] = useState<Producto[]>([]);
     const [nuevoProducto, setNuevoProducto] = useState({ nombre: "", cantidad: 1, marca: "", categoria: "" });
-    const marcas = useInventariosStore(state => state.marcas["bodega-central"] || []);
-    const categorias = useInventariosStore(state => state.categorias["bodega-central"] || []);
 
     const handleAddProducto = () => {
         if (nuevoProducto.nombre && nuevoProducto.cantidad > 0 && nuevoProducto.marca && nuevoProducto.categoria) {
@@ -78,21 +76,6 @@ export default function ModalFormularioPedido({ open, onClose, tipo, onSubmit }:
                     }
                 }
             );
-
-            // Actualiza el inventario de la bodega central
-            productos.forEach(prod => {
-                // Genera un código único si no existe
-                const code = `${prod.nombre}-${prod.marca}-${prod.categoria}`.replace(/\s+/g, "-").toLowerCase();
-                addProducto("bodega-central", {
-                    name: prod.nombre,
-                    code,
-                    brand: prod.marca,
-                    category: prod.categoria,
-                    description: "",
-                    stock: prod.cantidad,
-                    im: null
-                });
-            });
         }
 
         onSubmit({
@@ -424,4 +407,4 @@ export default function ModalFormularioPedido({ open, onClose, tipo, onSubmit }:
             </DialogActions>
         </Dialog>
     );
-}
+});

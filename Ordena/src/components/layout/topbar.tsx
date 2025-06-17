@@ -7,7 +7,6 @@ import { SUCURSALES } from "../../constants/ubicaciones"; // Asegúrate de tener
 
 
 export default function Topbar() {
-    const { vista, setVista } = useBodegaStore();
     const usuario = useAuthStore(state => state.usuario);
     const logout = useAuthStore(state => state.logout);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -44,23 +43,6 @@ export default function Topbar() {
             }}
         >
             <div style={{ display: "flex", alignItems: "center", gap: "10px", position: "relative" }}>
-                <select
-                    value={vista}
-                    onChange={e => setVista(e.target.value as "bodega" | "sucursal")}
-                    style={{
-                        background: "#232323",
-                        color: "#FFD700",
-                        border: "none",
-                        borderRadius: "6px",
-                        padding: "8px 16px",
-                        fontSize: "16px",
-                        outline: "none",
-                        fontWeight: 500,
-                    }}
-                >
-                    <option value="bodega">Bodega</option>
-                    <option value="sucursal">Sucursal</option>
-                </select>
 
                 <AccountCircleIcon style={{ color: "#FFD700", fontSize: 32 }} />
                 <span

@@ -1,46 +1,74 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ProtectedRoute } from "../components/ProtectedRoute";
 import PedidosBodega from "../pages/Pedidos/PedidosBodega";
 import PedidosSucursal from "../pages/Pedidos/PedidosSucursal";
 import Historial from "../pages/Historial";
-
 import SolicitudesSucursal from "../pages/Solicitudes/SolicitudesSucursal";
-import SolicitudesBodega from "../pages/Solicitudes/SolicitudesBodega"; // crea este archivo si no existe
-//import HistorialSucursal from "../pages/Historial/HistorialSucursal"; // crea este archivo si no existe
-import Redirectxrol from "./RedirectXrol";
+import SolicitudesBodega from "../pages/Solicitudes/SolicitudesBodega";
 import { useBodegaStore } from "../store/useBodegaStore";
 import { InicioS } from "../pages/IniciarSesion/IniciarSesion";
 import Inventario from "../pages/inventario/inventario";
 import Proveedores from "../pages/proveedores/proveedores";
-
 import Empleados from "../pages/Empleados/empleados";
-// Simulación de usuario autenticado
-
-
 
 export default function AppRoutes() {
     const { vista } = useBodegaStore();
+    
     return (
-
         <BrowserRouter>
             <Routes>
-                <Route path="/" element={<Navigate to="/pedidos" replace />} />
-                {/* Rutas para las solicitudes */}
-                <Route path="/solicitudes" element={vista === "bodega" ? <SolicitudesBodega /> : <SolicitudesSucursal />} />
-                <Route path="/inventario" element={<Inventario />} />
-                {/* Rutas para el historial */}
-                {/* Rutas para los pedidos */}
-                <Route path="/pedidos" element={vista === "bodega" ? <PedidosBodega /> : <PedidosSucursal />} />
-                <Route path="/empleados" element={<Empleados />} />
-                {/* Rutas para el historial */}
-                {/* <Route path="/historial" element={<Redirectxrol user={user} module="historial" />}  />
-                <Route path="/historial/bodega" element={<Historial />} /> */}
-                {/* <Route path="/historial/sucursal" element={<HistorialSucursal />} /> */}
-                <Route path="/historial" element={<Historial />} />
-                {/* Rutas para proveedores */}
-                <Route path="/proveedores" element={<Proveedores />} />
-                {/* Ruta para no encontrados */}
-                <Route path="*" element={<Navigate to="/pedidos" replace />} />
-                <Route path="/login" element={<InicioS/>}/>
+                {/* Ruta pública */}
+                <Route path="/login" element={<InicioS />} />
+
+                {/* Rutas protegidas */}
+                <Route path="/" element={
+                    <ProtectedRoute>
+                        <Navigate to="/pedidos" replace />
+                    </ProtectedRoute>
+                } />
+
+                <Route path="/pedidos" element={
+                    <ProtectedRoute>
+                        {vista === "bodega" ? <PedidosBodega /> : <PedidosSucursal />}
+                    </ProtectedRoute>
+                } />
+
+                <Route path="/solicitudes" element={
+                    <ProtectedRoute>
+                        {vista === "bodega" ? <SolicitudesBodega /> : <SolicitudesSucursal />}
+                    </ProtectedRoute>
+                } />
+
+                <Route path="/inventario" element={
+                    <ProtectedRoute>
+                        <Inventario />
+                    </ProtectedRoute>
+                } />
+
+                <Route path="/historial" element={
+                    <ProtectedRoute>
+                        <Historial />
+                    </ProtectedRoute>
+                } />
+
+                <Route path="/proveedores" element={
+                    <ProtectedRoute>
+                        <Proveedores />
+                    </ProtectedRoute>
+                } />
+
+                <Route path="/empleados" element={
+                    <ProtectedRoute>
+                        <Empleados />
+                    </ProtectedRoute>
+                } />
+
+                {/* Ruta para no encontrados - redirige a pedidos */}
+                <Route path="*" element={
+                    <ProtectedRoute>
+                        <Navigate to="/pedidos" replace />
+                    </ProtectedRoute>
+                } />
             </Routes>
         </BrowserRouter>
     );

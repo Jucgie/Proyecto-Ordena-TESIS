@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { productoService } from '../services/productoService';
 
 export interface ProductInt {
     name: string;
@@ -15,13 +16,16 @@ interface InventariosState {
     inventarios: { [ubicacionId: string]: ProductInt[] };
     marcas: { [ubicacionId: string]: string[] };
     categorias: { [ubicacionId: string]: string[] };
-    addProducto: (ubicacionId: string, producto: ProductInt) => void;
-    updateProducto: (ubicacionId: string, producto: ProductInt) => void;
-    deleteProductos: (ubicacionId: string, codes: string[]) => void;
-    addMarca: (ubicacionId: string, marca: string) => void;
-    deleteMarca: (ubicacionId: string, marca: string) => void;
-    addCategoria: (ubicacionId: string, categoria: string) => void;
-    deleteCategoria: (ubicacionId: string, categoria: string) => void;
+    addProducto: (ubicacionId: string, producto: ProductInt) => Promise<void>;
+    updateProducto: (ubicacionId: string, producto: ProductInt) => Promise<void>;
+    deleteProductos: (ubicacionId: string, codes: string[]) => Promise<void>;
+    addMarca: (ubicacionId: string, marca: string) => Promise<void>;
+    deleteMarca: (ubicacionId: string, marca: string) => Promise<void>;
+    addCategoria: (ubicacionId: string, categoria: string) => Promise<void>;
+    deleteCategoria: (ubicacionId: string, categoria: string) => Promise<void>;
+    fetchProductos: (ubicacionId: string) => Promise<void>;
+    fetchMarcas: (ubicacionId: string) => Promise<void>;
+    fetchCategorias: (ubicacionId: string) => Promise<void>;
 }
 
 export const useInventariosStore = create<InventariosState>()(
@@ -30,73 +34,121 @@ export const useInventariosStore = create<InventariosState>()(
             inventarios: {},
             marcas: {},
             categorias: {},
-            addProducto: (ubicacionId, producto) =>
-                set(state => {
-                const inventario = state.inventarios[ubicacionId] || [];
-                const idx = inventario.findIndex(p => p.code === producto.code);
-                if (idx !== -1) {
-                    // Sumar stock si ya existe
-                    const actualizado = [...inventario];
-                    actualizado[idx] = {
-                        ...actualizado[idx],
-                        stock: actualizado[idx].stock + producto.stock
-                    };
-                    return {
+
+            fetchProductos: async (ubicacionId: string) => {
+                try {
+                    const productos = await productoService.getProductos(ubicacionId);
+                    set(state => ({
                         inventarios: {
                             ...state.inventarios,
-                            [ubicacionId]: actualizado
+                            [ubicacionId]: productos.map((p: any) => ({
+                                name: p.nombre_prodc,
+                                code: p.codigo_interno,
+                                brand: p.marca_fk,
+                                category: p.categoria_fk,
+                                description: p.descripcion_prodc,
+                                stock: 0,
+                                im: null
+                            }))
                         }
-                    };
-                } else {
-                    // Agregar nuevo producto
-                    return {
-                        inventarios: {
-                            ...state.inventarios,
-                            [ubicacionId]: [...inventario, producto]
+                    }));
+                } catch (error) {
+                    console.error('Error fetching productos:', error);
+                }
+            },
+
+            fetchMarcas: async (ubicacionId: string) => {
+                try {
+                    const marcas = await productoService.getMarcas();
+                    set(state => ({
+                        marcas: {
+                            ...state.marcas,
+                            [ubicacionId]: marcas.map((m: any) => m.nombre_mprod)
                         }
-                    };
+                    }));
+                } catch (error) {
+                    console.error('Error fetching marcas:', error);
                 }
-            }),
-            updateProducto: (ubicacionId, productoActualizado) =>
-                set(state => ({
-                    inventarios: {
-                        ...state.inventarios,
-                        [ubicacionId]: (state.inventarios[ubicacionId] || []).map(p =>
-                            p.code === productoActualizado.code ? productoActualizado : p
-                        )
-                    }
-                })),
-            deleteProductos: (ubicacionId, codes) =>
-                set(state => ({
-                    inventarios: {
-                        ...state.inventarios,
-                        [ubicacionId]: (state.inventarios[ubicacionId] || []).filter(p => !codes.includes(p.code))
-                    }
-                })),
-            addMarca: (ubicacionId, marca) => set(state => ({
-                marcas: {
-                ...state.marcas,
-                [ubicacionId]: [...(state.marcas[ubicacionId] || []), marca]
+            },
+
+            fetchCategorias: async (ubicacionId: string) => {
+                try {
+                    const categorias = await productoService.getCategorias();
+                    set(state => ({
+                        categorias: {
+                            ...state.categorias,
+                            [ubicacionId]: categorias.map((c: any) => c.nombre)
+                        }
+                    }));
+                } catch (error) {
+                    console.error('Error fetching categorias:', error);
                 }
-            })),
-            deleteMarca: (ubicacionId, marca) => set(state => ({
-                marcas: {
-                ...state.marcas,
-                [ubicacionId]: (state.marcas[ubicacionId] || []).filter(m => m !== marca)
+            },
+
+            addProducto: async (ubicacionId: string, producto: ProductInt) => {
+                try {
+                    await productoService.createProducto(producto, ubicacionId);
+                    await get().fetchProductos(ubicacionId);
+                } catch (error) {
+                    console.error('Error adding producto:', error);
                 }
-            })),
-            addCategoria: (ubicacionId, categoria) => set(state => ({
-                categorias: {
-                ...state.categorias,
-                [ubicacionId]: [...(state.categorias[ubicacionId] || []), categoria]
+            },
+
+            updateProducto: async (ubicacionId: string, producto: ProductInt) => {
+                try {
+                    await productoService.updateProducto(producto.code, producto);
+                    await get().fetchProductos(ubicacionId);
+                } catch (error) {
+                    console.error('Error updating producto:', error);
                 }
-            })),
-            deleteCategoria: (ubicacionId, categoria) => set(state => ({
-                categorias: {
-                ...state.categorias,
-                [ubicacionId]: (state.categorias[ubicacionId] || []).filter(c => c !== categoria)
+            },
+
+            deleteProductos: async (ubicacionId: string, codes: string[]) => {
+                try {
+                    await Promise.all(codes.map(code => 
+                        productoService.deleteProducto(code)
+                    ));
+                    await get().fetchProductos(ubicacionId);
+                } catch (error) {
+                    console.error('Error deleting productos:', error);
                 }
-            })),
+            },
+
+            addMarca: async (ubicacionId: string, marca: string) => {
+                try {
+                    await productoService.addMarca(marca);
+                    await get().fetchMarcas(ubicacionId);
+                } catch (error) {
+                    console.error('Error adding marca:', error);
+                }
+            },
+
+            deleteMarca: async (ubicacionId: string, marca: string) => {
+                try {
+                    await productoService.deleteMarca(marca);
+                    await get().fetchMarcas(ubicacionId);
+                } catch (error) {
+                    console.error('Error deleting marca:', error);
+                }
+            },
+
+            addCategoria: async (ubicacionId: string, categoria: string) => {
+                try {
+                    await productoService.addCategoria(categoria);
+                    await get().fetchCategorias(ubicacionId);
+                } catch (error) {
+                    console.error('Error adding categoria:', error);
+                }
+            },
+
+            deleteCategoria: async (ubicacionId: string, categoria: string) => {
+                try {
+                    await productoService.deleteCategoria(categoria);
+                    await get().fetchCategorias(ubicacionId);
+                } catch (error) {
+                    console.error('Error deleting categoria:', error);
+                }
+            },
         }),
         { name: "inventarios-storage" }
     )
