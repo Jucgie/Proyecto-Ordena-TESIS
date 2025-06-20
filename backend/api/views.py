@@ -2,8 +2,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria
-from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer
+from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes
+from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer
 from django.db import transaction
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
@@ -11,6 +11,10 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework_simplejwt.authentication import JWTAuthentication
+import logging
+
+logger = logging.getLogger(__name__)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -22,7 +26,10 @@ def login(request):
         
         try:
             usuario = Usuario.objects.get(correo=correo)
-            if check_password(contrasena, usuario.contrasena):
+            if usuario.check_password(contrasena):
+                # Generar tokens
+                refresh = RefreshToken.for_user(usuario)
+                
                 return Response({
                     'usuario': {
                         'id': usuario.id_us,
@@ -31,7 +38,9 @@ def login(request):
                         'rol': usuario.rol_fk.nombre_rol,
                         'bodega': usuario.bodeg_fk.id_bdg if usuario.bodeg_fk else None,
                         'sucursal': usuario.sucursal_fk.id if usuario.sucursal_fk else None
-                    }
+                    },
+                    'token': str(refresh.access_token),
+                    'refresh': str(refresh)
                 })
             return Response({'error': 'Credenciales inválidas'}, status=status.HTTP_401_UNAUTHORIZED)
         except Usuario.DoesNotExist:
@@ -75,8 +84,8 @@ def register(request):
                     'id': usuario.id_us,
                     'nombre': usuario.nombre,
                     'correo': usuario.correo,
-                    'rol': usuario.rol_fk.nombre_rol,  # Cambiado de nombre a nombre_rol
-                    'bodega': usuario.bodeg_fk.id_bdg if usuario.bodeg_fk else None,  # Cambiado de id a id_bdg
+                    'rol': usuario.rol_fk.nombre_rol,
+                    'bodega': usuario.bodeg_fk.id_bdg if usuario.bodeg_fk else None,
                     'sucursal': usuario.sucursal_fk.id if usuario.sucursal_fk else None
                 }
             }, status=status.HTTP_201_CREATED)
@@ -89,37 +98,92 @@ def register(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ProductoViewSet(viewsets.ModelViewSet):
-    serializer_class = ProductoSerializer
     queryset = Productos.objects.all()
+    serializer_class = ProductoSerializer
+    lookup_field = 'id_prodc'
+    authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy', 
-                          'agregar_marca', 'agregar_categoria', 
-                          'eliminar_marca', 'eliminar_categoria']:
-            return [IsAuthenticated()]
-        return [AllowAny()]
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
+        queryset = Productos.objects.all()
         bodega_id = self.request.query_params.get('bodega_id')
         sucursal_id = self.request.query_params.get('sucursal_id')
         
-        queryset = Productos.objects.all()
+        logger.info(f"DEBUG - Parámetros recibidos: bodega_id={bodega_id}, sucursal_id={sucursal_id}")
+        logger.info(f"DEBUG - Productos totales: {queryset.count()}")
         
         if bodega_id:
             queryset = queryset.filter(bodega_fk=bodega_id)
-        elif sucursal_id:
+            logger.info(f"DEBUG - Productos filtrados por bodega {bodega_id}: {queryset.count()}")
+        if sucursal_id:
             queryset = queryset.filter(sucursal_fk=sucursal_id)
+            logger.info(f"DEBUG - Productos filtrados por sucursal {sucursal_id}: {queryset.count()}")
             
+        logger.info(f"DEBUG - Productos finales a devolver: {queryset.count()}")
         return queryset
 
     def perform_create(self, serializer):
-        bodega_id = self.request.data.get('bodega_fk')
-        sucursal_id = self.request.data.get('sucursal_fk')
-        
-        if not bodega_id and not sucursal_id:
-            raise serializers.ValidationError("Se requiere bodega_fk o sucursal_fk")
+        if not (self.request.data.get('bodega_fk') or self.request.data.get('sucursal_fk')):
+            raise serializers.ValidationError(
+                "Se requiere especificar bodega_fk o sucursal_fk"
+            )
+        serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        try:
+            logger.info(f"Creando producto con datos: {request.data}")
+            logger.info(f"Tipo de marca_fk: {type(request.data.get('marca_fk'))}, valor: {request.data.get('marca_fk')}")
+            logger.info(f"Tipo de categoria_fk: {type(request.data.get('categoria_fk'))}, valor: {request.data.get('categoria_fk')}")
+            logger.info(f"Stock recibido: {request.data.get('stock')}, tipo: {type(request.data.get('stock'))}")
             
-        serializer.save(fecha_creacion=timezone.now())
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            logger.info(f"Datos validados: {serializer.validated_data}")
+            
+            self.perform_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except serializers.ValidationError as e:
+            logger.error(f"Error de validación al crear producto: {str(e)}")
+            return Response({'error': e.detail}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error al crear producto: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        try:
+            logger.info(f"Actualizando producto {kwargs.get('id_prodc')} con datos: {request.data}")
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return Response(serializer.data)
+        except Productos.DoesNotExist:
+            logger.error(f"Producto {kwargs.get('id_prodc')} no encontrado")
+            return Response({'error': 'Producto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        except serializers.ValidationError as e:
+            logger.error(f"Error de validación al actualizar producto: {str(e)}")
+            return Response({'error': e.detail}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error al actualizar producto: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            logger.info(f"Eliminando producto {kwargs.get('id_prodc')}")
+            instance = self.get_object()
+            self.perform_destroy(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Productos.DoesNotExist:
+            logger.error(f"Producto {kwargs.get('id_prodc')} no encontrado")
+            return Response({'error': 'Producto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error al eliminar producto: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['get'])
     def marcas(self, request):
@@ -149,32 +213,264 @@ class ProductoViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['delete'])
-    def eliminar_marca(self, request):
-        marca_id = request.query_params.get('id_mprod')
-        if not marca_id:
-            return Response({'error': 'id_mprod es requerido'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+    @api_view(['DELETE'])
+    @permission_classes([IsAuthenticated])
+    def eliminar_categoria(request):
+        if request.method != 'DELETE':
+            return Response(
+                {'error': 'Método no permitido'},
+                status=status.HTTP_405_METHOD_NOT_ALLOWED
+            )
         
-        try:
-            marca = Marca.objects.get(id_mprod=marca_id)
-            marca.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Marca.DoesNotExist:
-            return Response({'error': 'Marca no encontrada'}, 
-                          status=status.HTTP_404_NOT_FOUND)
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': 'No autorizado'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
 
-    @action(detail=False, methods=['delete'])
-    def eliminar_categoria(self, request):
-        categoria_id = request.query_params.get('id')
-        if not categoria_id:
-            return Response({'error': 'id es requerido'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
-        
         try:
-            categoria = Categoria.objects.get(id=categoria_id)
+            categoria_id = request.query_params.get('id')
+            if not categoria_id:
+                return Response(
+                    {'error': 'El ID de la categoría es requerido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            try:
+                categoria_id = int(categoria_id)
+            except ValueError:
+                return Response(
+                    {'error': 'El ID de la categoría debe ser un número'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                categoria = Categoria.objects.get(id=categoria_id)
+            except Categoria.DoesNotExist:
+                return Response(
+                    {'error': f'No existe una categoría con el ID {categoria_id}'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
             categoria.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Categoria.DoesNotExist:
-            return Response({'error': 'Categoría no encontrada'}, 
-                          status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'mensaje': f'Categoría {categoria_id} eliminada exitosamente'},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Error al eliminar la categoría: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @api_view(['DELETE'])
+    @permission_classes([IsAuthenticated])
+    def eliminar_marca(request):
+        if request.method != 'DELETE':
+            return Response(
+                {'error': 'Método no permitido'},
+                status=status.HTTP_405_METHOD_NOT_ALLOWED
+            )
+        
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': 'No autorizado'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        try:
+            marca_id = request.query_params.get('id_mprod')
+            if not marca_id:
+                return Response(
+                    {'error': 'El ID de la marca es requerido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            try:
+                marca_id = int(marca_id)
+            except ValueError:
+                return Response(
+                    {'error': 'El ID de la marca debe ser un número'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                marca = Marca.objects.get(id_mprod=marca_id)
+            except Marca.DoesNotExist:
+                return Response(
+                    {'error': f'No existe una marca con el ID {marca_id}'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            marca.delete()
+            return Response(
+                {'mensaje': f'Marca {marca_id} eliminada exitosamente'},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Error al eliminar la marca: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class MarcaViewSet(viewsets.ModelViewSet):
+    queryset = Marca.objects.all()
+    serializer_class = MarcaSerializer
+    lookup_field = 'id_mprod'
+    authentication_classes = [JWTAuthentication]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def create(self, request, *args, **kwargs):
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            logger.error(f"Error al crear marca: {str(e)}")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def update(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error al actualizar marca: {str(e)}")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            self.perform_destroy(instance)
+            return Response(
+                {'mensaje': f'Marca {instance.id_mprod} eliminada exitosamente'},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            logger.error(f"Error al eliminar marca: {str(e)}")
+            return Response(
+                {'error': f'Error al eliminar la marca: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class CategoriaViewSet(viewsets.ModelViewSet):
+    queryset = Categoria.objects.all()
+    serializer_class = CategoriaSerializer
+    lookup_field = 'id'
+    authentication_classes = [JWTAuthentication]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def create(self, request, *args, **kwargs):
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            logger.error(f"Error al crear categoría: {str(e)}")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def update(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error al actualizar categoría: {str(e)}")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            self.perform_destroy(instance)
+            return Response(
+                {'mensaje': f'Categoría {instance.id} eliminada exitosamente'},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            logger.error(f"Error al eliminar categoría: {str(e)}")
+            return Response(
+                {'error': f'Error al eliminar la categoría: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class SolicitudesViewSet(viewsets.ModelViewSet):
+    queryset = Solicitudes.objects.all()
+    serializer_class = SolicitudesSerializer
+    lookup_field = 'id_solc'
+    authentication_classes = [JWTAuthentication]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return SolicitudesCreateSerializer
+        return SolicitudesSerializer
+
+    def get_queryset(self):
+        queryset = Solicitudes.objects.all()
+        bodega_id = self.request.query_params.get('bodega_id')
+        sucursal_id = self.request.query_params.get('sucursal_id')
+        
+        logger.info(f"DEBUG - SolicitudesViewSet: Parámetros recibidos - bodega_id={bodega_id}, sucursal_id={sucursal_id}")
+        
+        if bodega_id:
+            logger.info(f"DEBUG - SolicitudesViewSet: Filtrando por bodega_id={bodega_id}")
+            queryset = queryset.filter(fk_bodega=bodega_id)
+        if sucursal_id:
+            logger.info(f"DEBUG - SolicitudesViewSet: Filtrando por sucursal_id={sucursal_id}")
+            queryset = queryset.filter(fk_sucursal=sucursal_id)
+        
+        logger.info(f"DEBUG - SolicitudesViewSet: Total de solicitudes encontradas: {queryset.count()}")
+        return queryset.order_by('-fecha_creacion')
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        try:
+            logger.info(f"Actualizando solicitud {kwargs.get('id_solc')} con datos: {request.data}")
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            
+            self.perform_update(serializer)
+            return Response(serializer.data)
+        except Solicitudes.DoesNotExist:
+            logger.error(f"Solicitud {kwargs.get('id_solc')} no encontrada")
+            return Response({'error': 'Solicitud no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+        except serializers.ValidationError as e:
+            logger.error(f"Error de validación al actualizar solicitud: {str(e)}")
+            return Response({'error': e.detail}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error al actualizar solicitud: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

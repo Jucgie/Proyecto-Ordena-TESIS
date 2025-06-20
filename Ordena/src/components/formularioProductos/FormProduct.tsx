@@ -31,6 +31,7 @@ export function AddProduct({ setState, onAddProduct }: Props) {
         brand: "",
         category: "",
         description: "",
+        stock: 0,
         im: null as File | null,
     });
 
@@ -40,6 +41,9 @@ export function AddProduct({ setState, onAddProduct }: Props) {
         const { name, value, type } = e.target;
         if (type === "file") {
             setForm({ ...form, [name]: (e.target as HTMLInputElement).files?.[0] || null });
+        } else if (type === "number") {
+            // Convertir a número para campos numéricos
+            setForm(f => ({ ...f, [name]: value === "" ? 0 : parseInt(value) || 0 }));
         } else {
             setForm(f => ({ ...f, [name]: value }));
         }
@@ -55,12 +59,14 @@ export function AddProduct({ setState, onAddProduct }: Props) {
     if (!form.brand.trim()) newErrors.brand = "Campo obligatorio";
     if (!form.category.trim()) newErrors.category = "Campo obligatorio";
     if (!form.description.trim()) newErrors.description = "Campo obligatorio";
+    if (form.stock < 0) newErrors.stock = "El stock no puede ser negativo";
 
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length > 0) return;
     
         console.log("Producto agregado:", form);
+        console.log("Stock del producto:", form.stock, "tipo:", typeof form.stock);
         // Limpia el formulario si quieres
         onAddProduct(form);
         setForm({
@@ -69,6 +75,7 @@ export function AddProduct({ setState, onAddProduct }: Props) {
             brand: "",
             category: "",
             description: "",
+            stock: 0,
             im: null,
         });
         // Puedes cerrar el modal o mostrar un mensaje
@@ -112,6 +119,18 @@ export function AddProduct({ setState, onAddProduct }: Props) {
                                 onChange={handleChange}
                             />
                             {errors.name && <span style={{ color: "red", marginLeft: 8 }}>{errors.name}</span>}
+                        </article>
+                        <article>
+                            <input
+                                className="form_field"
+                                type="number"
+                                name="stock"
+                                placeholder="Stock inicial"
+                                value={form.stock}
+                                onChange={handleChange}
+                                min="0"
+                            />
+                            {errors.stock && <span style={{ color: "red", marginLeft: 8 }}>{errors.stock}</span>}
                         </article>
                         <article>
                             <select

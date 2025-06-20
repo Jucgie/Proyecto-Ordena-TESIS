@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import Layout from "../../components/layout/layout";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
@@ -34,6 +34,7 @@ interface AuthState {
 interface BodegaState {
     solicitudes: Solicitud[];
     addSolicitud: (solicitud: Solicitud) => void;
+    clearSolicitudes: () => void;
 }
 
 interface InventarioState {
@@ -50,6 +51,7 @@ interface Producto {
     brand: string;
     category: string;
     im?: string | File | null;
+    id_prodc?: string;
 }
 
 interface Solicitud {
@@ -79,28 +81,51 @@ export default function SolicitudesSucursal() {
     // Hooks de estado global - Modificamos cómo accedemos al estado
     const solicitudes = useBodegaStore((state: any) => state.solicitudes as Solicitud[]);
     const addSolicitud = useBodegaStore((state: any) => state.addSolicitud as (solicitud: Solicitud) => void);
+    const clearSolicitudes = useBodegaStore((state: any) => state.clearSolicitudes as () => void);
     const usuario = useAuthStore((state: any) => state.usuario as AuthState['usuario']);
     
     // Separamos los selectores del inventario
     const inventarios = useInventariosStore((state: any) => state.inventarios as InventarioState['inventarios']);
     const marcas = useInventariosStore((state: any) => state.marcas as InventarioState['marcas']);
     const categorias = useInventariosStore((state: any) => state.categorias as InventarioState['categorias']);
+    
+    // Funciones del store de inventario
+    const fetchProductos = useInventariosStore((state: any) => state.fetchProductos);
+    const fetchMarcas = useInventariosStore((state: any) => state.fetchMarcas);
+    const fetchCategorias = useInventariosStore((state: any) => state.fetchCategorias);
+
+    // Cargar productos de la bodega central al montar el componente
+    useEffect(() => {
+        console.log('DEBUG - Cargando productos de bodega central...');
+        // Cargar productos de la bodega central (ID: 2)
+        fetchProductos("bodega_central");
+        fetchMarcas("bodega_central");
+        fetchCategorias("bodega_central");
+    }, [fetchProductos, fetchMarcas, fetchCategorias]);
 
     // Memoizamos los datos del inventario
-    const inventarioBodegaCentral = useMemo(() => 
-        inventarios[BODEGA_CENTRAL.id] || [],
-        [inventarios]
-    );
+    const inventarioBodegaCentral = useMemo(() => {
+        const productos = inventarios["bodega_central"] || [];
+        console.log('DEBUG - Inventario bodega central (memo):', productos);
+        return productos;
+    }, [inventarios]);
 
     const marcasBodegaCentral = useMemo(() => 
-        marcas[BODEGA_CENTRAL.id] || [],
+        marcas["bodega_central"] || [],
         [marcas]
     );
 
     const categoriasBodegaCentral = useMemo(() => 
-        categorias[BODEGA_CENTRAL.id] || [],
+        categorias["bodega_central"] || [],
         [categorias]
     );
+
+    // Debug: verificar que los productos se cargan
+    console.log('DEBUG - Productos bodega central:', inventarioBodegaCentral);
+    console.log('DEBUG - Marcas bodega central:', marcasBodegaCentral);
+    console.log('DEBUG - Categorías bodega central:', categoriasBodegaCentral);
+    console.log('DEBUG - BODEGA_CENTRAL.id:', BODEGA_CENTRAL.id);
+    console.log('DEBUG - Inventarios completo:', inventarios);
 
     // Estados locales
     const [modalOpen, setModalOpen] = useState(false);
@@ -128,6 +153,52 @@ export default function SolicitudesSucursal() {
         };
     }, [usuario?.sucursalId]);
 
+    // Cargar solicitudes existentes al montar el componente (después de que sucursalData esté disponible)
+    useEffect(() => {
+        console.log('DEBUG - Cargando solicitudes existentes...');
+        // Cargar solicitudes de la sucursal del usuario
+        if (usuario?.sucursalId && sucursalData.id) {
+            // Limpiar solicitudes existentes antes de cargar nuevas
+            clearSolicitudes();
+            
+            import('../../services/api').then(({ solicitudesService }) => {
+                solicitudesService.getSolicitudes({ sucursal_id: usuario.sucursalId.toString() })
+                    .then((solicitudesBackend: any[]) => {
+                        console.log('DEBUG - Solicitudes cargadas del backend:', solicitudesBackend);
+                        // Convertir la estructura del backend al formato del frontend
+                        const solicitudesFrontend = solicitudesBackend.map((solicitud: any) => ({
+                            id: solicitud.id_solc,
+                            fecha: solicitud.fecha_creacion,
+                            responsable: solicitud.usuario_nombre,
+                            estado: "Pendiente", // Estado por defecto en el frontend
+                            sucursal: {
+                                id: solicitud.fk_sucursal.toString(),
+                                nombre: solicitud.sucursal_nombre,
+                                direccion: sucursalData.direccion,
+                                rut: sucursalData.rut
+                            },
+                            bodega: solicitud.bodega_nombre,
+                            cargo: usuario?.rol || "",
+                            observaciones: solicitud.observacion || "",
+                            productos: solicitud.productos?.map((prod: any) => ({
+                                codigo: prod.producto_fk.toString(),
+                                nombre: prod.producto_nombre,
+                                descripcion: "",
+                                cantidad: prod.cantidad
+                            })) || [],
+                            aprobador: ""
+                        }));
+                        console.log('DEBUG - Solicitudes convertidas:', solicitudesFrontend);
+                        // Agregar todas las solicitudes al store
+                        solicitudesFrontend.forEach(solicitud => addSolicitud(solicitud));
+                    })
+                    .catch((error: any) => {
+                        console.error('Error al cargar solicitudes:', error);
+                    });
+            });
+        }
+    }, [usuario?.sucursalId, addSolicitud, clearSolicitudes, sucursalData, usuario?.rol]);
+
     // Memoizamos los productos filtrados
     const productosFiltrados = useMemo(() => 
         inventarioBodegaCentral.filter(prod =>
@@ -153,7 +224,7 @@ export default function SolicitudesSucursal() {
         cargo: usuario?.rol || "",
         observaciones: "",
         productos: [],
-        estado: "pendiente",
+        estado: "Pendiente",
         aprobador: ""
     }), [solicitudes.length, sucursalData, usuario]);
 
@@ -192,7 +263,7 @@ export default function SolicitudesSucursal() {
             productos: [
                 ...prev.productos,
                 {
-                    codigo: productoSeleccionado.code,
+                    codigo: productoSeleccionado.id_prodc?.toString() || productoSeleccionado.code,
                     nombre: productoSeleccionado.name,
                     descripcion: productoSeleccionado.description,
                     cantidad: cantidadProducto
@@ -203,25 +274,57 @@ export default function SolicitudesSucursal() {
         setCantidadProducto(1);
     }, [productoSeleccionado, cantidadProducto]);
 
-    const handleCrearSolicitud = useCallback(() => {
-        generarOCI({
-            numeroOCI: nuevaSolicitud.id,
-            fecha: nuevaSolicitud.fecha,
-            sucursal: {
-                nombre: nuevaSolicitud.sucursal.nombre,
-                direccion: nuevaSolicitud.sucursal.direccion,
-                rut: nuevaSolicitud.sucursal.rut,
-            },
-            responsable: nuevaSolicitud.responsable,
-            cargo: nuevaSolicitud.cargo,
-            productos: nuevaSolicitud.productos,
-            observaciones: nuevaSolicitud.observaciones,
-            estado: nuevaSolicitud.estado,
-            aprobador: nuevaSolicitud.aprobador,
-        });
-        addSolicitud({ ...nuevaSolicitud });
-        setModalOpen(false);
-    }, [nuevaSolicitud, addSolicitud]);
+    const handleCrearSolicitud = useCallback(async () => {
+        try {
+            // Preparar datos para el backend
+            const solicitudData = {
+                observacion: nuevaSolicitud.observaciones,
+                fk_sucursal: parseInt(nuevaSolicitud.sucursal.id),
+                fk_bodega: 2, // ID de la bodega central
+                usuarios_fk: usuario?.id || 1, // ID del usuario actual (corregido)
+                productos: nuevaSolicitud.productos.map(prod => ({
+                    producto_id: parseInt(prod.codigo), // Ahora el código es el ID real del producto
+                    cantidad: prod.cantidad
+                }))
+            };
+
+            // Crear solicitud en el backend usando el servicio directamente
+            const { solicitudesService } = await import('../../services/api');
+            const nuevaSolicitudBackend = await solicitudesService.createSolicitud(solicitudData);
+            
+            // Usar los datos del formulario pero con el ID del backend
+            const solicitudFrontend = {
+                ...nuevaSolicitud,
+                id: nuevaSolicitudBackend.id_solc, // Solo usar el ID del backend
+                fecha: nuevaSolicitud.fecha // Mantener la fecha del formulario
+            };
+            
+            // Agregar al store local
+            addSolicitud(solicitudFrontend);
+            
+            // Generar OCI PDF
+            generarOCI({
+                numeroOCI: nuevaSolicitud.id,
+                fecha: nuevaSolicitud.fecha,
+                sucursal: {
+                    nombre: nuevaSolicitud.sucursal.nombre,
+                    direccion: nuevaSolicitud.sucursal.direccion,
+                    rut: nuevaSolicitud.sucursal.rut,
+                },
+                responsable: nuevaSolicitud.responsable,
+                cargo: nuevaSolicitud.cargo,
+                productos: nuevaSolicitud.productos,
+                observaciones: nuevaSolicitud.observaciones,
+                estado: nuevaSolicitud.estado,
+                aprobador: nuevaSolicitud.aprobador
+            });
+            
+            setModalOpen(false);
+        } catch (error) {
+            console.error('Error al crear solicitud:', error);
+            // Aquí podrías mostrar un mensaje de error al usuario
+        }
+    }, [nuevaSolicitud, addSolicitud, usuario, sucursalData]);
 
     // Constantes memoizadas
     const puedeSolicitar = useMemo(() => 
@@ -285,11 +388,11 @@ export default function SolicitudesSucursal() {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                solicitudes.map((row: any) => (
-                                    <TableRow key={row.id}>
+                                solicitudes.map((row: any, index: number) => (
+                                    <TableRow key={`${row.id}-${index}`}>
                                         <TableCell style={{ color: "#fff" }}>{row.id}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.fecha}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.responsable}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{row.fecha || 'N/A'}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{row.responsable || 'N/A'}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
                                                 ? row.productos.reduce((acc: number, prod: { cantidad: number }) => acc + Number(prod.cantidad), 0)
@@ -303,7 +406,7 @@ export default function SolicitudesSucursal() {
                                                         ? "#FF4D4F"
                                                         : "#FFD700"
                                         }}>
-                                            {row.estado.charAt(0).toUpperCase() + row.estado.slice(1)}
+                                            {(row.estado || "Pendiente").charAt(0).toUpperCase() + (row.estado || "Pendiente").slice(1)}
                                         </TableCell>
                                         <TableCell>
                                             <Button

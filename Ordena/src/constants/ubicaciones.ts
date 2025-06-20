@@ -1,5 +1,5 @@
 export const BODEGA_CENTRAL = {
-    id: "bodega-central",
+    id: "2",
     nombre: "Bodega Central",
     tipo: "bodega",
     direccion: "Camino a Penco 2500, Concepción",

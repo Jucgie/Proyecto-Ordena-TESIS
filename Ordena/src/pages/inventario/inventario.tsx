@@ -27,6 +27,7 @@ async function fetchImagenUnsplash(nombre: string): Promise<string> {
 }
 
 export interface ProductInt {
+    id_prodc?: number;
     name: string;
     code: string;
     brand: string;
@@ -41,18 +42,29 @@ export default function Inventario() {
     const usuario = useAuthStore(state => state.usuario);
 
     const ubicacionId =
-        usuario?.tipo === "bodega"
-            ? BODEGA_CENTRAL.id
+        usuario?.bodega
+            ? "bodega_central"
             : usuario?.sucursalId || "";
 
-    // Obtén todas las marcas/categorías y luego filtra por ubicaciónId
+    console.log('DEBUG - usuario:', usuario);
+    console.log('DEBUG - ubicacionId determinado:', ubicacionId);
+
+    // Obtén todas las marcas/categorías y luego filtra por ubicacionId
     const allMarcas = useInventariosStore(state => state.marcas);
     const allCategorias = useInventariosStore(state => state.categorias);
 
     const marcas = allMarcas[ubicacionId] || [];
     const categorias = allCategorias[ubicacionId] || [];
-        // Estado principal
+    
+    // Extraer solo los nombres para los selects - con validación de tipos
+    const marcasNombres = Array.isArray(marcas) 
+        ? marcas.map(m => typeof m === 'object' && m?.nombre ? m.nombre : '').filter(Boolean)
+        : [];
+    const categoriasNombres = Array.isArray(categorias)
+        ? categorias.map(c => typeof c === 'object' && c?.nombre ? c.nombre : '').filter(Boolean)
+        : [];
 
+    // Estado principal
     const inventarios = useInventariosStore(state => state.inventarios);
     const productos = inventarios[ubicacionId] || [];
    // Funciones del store
@@ -137,13 +149,21 @@ export default function Inventario() {
     };
 
     const handleUpdateProduct = (updatedProduct: ProductInt) => {
-        updateProducto(ubicacionId, updatedProduct);
+        if (updatedProduct.id_prodc) {
+            updateProducto(ubicacionId, updatedProduct);
+        }
         setModalEditOpen(false);
         setModalDetailOpen(false);
     };
 
     const handleDeleteProducts = (codes: string[]) => {
-        deleteProductos(ubicacionId, codes);
+        // Convertir códigos a IDs de productos
+        const productosAEliminar = productos.filter(p => codes.includes(p.code));
+        const idsAEliminar = productosAEliminar.map(p => p.id_prodc).filter(Boolean);
+        
+        if (idsAEliminar.length > 0) {
+            deleteProductos(ubicacionId, idsAEliminar.map(id => id!.toString()));
+        }
         setSelected([]);
         setDeleteMode(false);
     };
@@ -459,15 +479,29 @@ export default function Inventario() {
         const [buscaMarca, setBuscaMarca] = useState("");
         const [buscaCategoria, setBuscaCategoria] = useState("");
 
-        // Filtrado local para mostrar solo lo buscado
-        const marcasFiltradas = marcas.filter(m => m.toLowerCase().includes(buscaMarca.toLowerCase()));
-        const categoriasFiltradas = categorias.filter(c => c.toLowerCase().includes(buscaCategoria.toLowerCase()));
+        // Filtrado local para mostrar solo lo buscado - con validación de tipos
+        const marcasFiltradas = Array.isArray(marcas) 
+            ? marcas
+                .filter(m => m && typeof m === 'object' && m.nombre)
+                .filter(m => m.nombre.toLowerCase().includes(buscaMarca.toLowerCase()))
+            : [];
+        const categoriasFiltradas = Array.isArray(categorias)
+            ? categorias
+                .filter(c => c && typeof c === 'object' && c.nombre)
+                .filter(c => c.nombre.toLowerCase().includes(buscaCategoria.toLowerCase()))
+            : [];
 
         const handleDeleteMarca = (marca: string) => {
-            deleteMarca(marca);
+            const marcaObj = marcas.find(m => typeof m === 'object' && m?.nombre === marca);
+            if (marcaObj && typeof marcaObj === 'object' && marcaObj.id) {
+                deleteMarca(marcaObj.id);
+            }
         };
         const handleDeleteCategoria = (cat: string) => {
-            deleteCategoria(cat);
+            const categoriaObj = categorias.find(c => typeof c === 'object' && c?.nombre === cat);
+            if (categoriaObj && typeof categoriaObj === 'object' && categoriaObj.id) {
+                deleteCategoria(categoriaObj.id);
+            }
         };
 
         return (
@@ -486,7 +520,7 @@ export default function Inventario() {
                         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
                             {marcasFiltradas.map(m => (
                                 <Box
-                                    key={m}
+                                    key={m.nombre}
                                     sx={{
                                         bgcolor: "#FFD700",
                                         color: "#232323",
@@ -500,7 +534,7 @@ export default function Inventario() {
                                         "&:hover .delete-icon": { opacity: 1 }
                                     }}
                                 >
-                                    {m}
+                                    {m.nombre}
                                     <Tooltip title="Eliminar marca">
                                         <IconButton
                                             size="small"
@@ -511,7 +545,7 @@ export default function Inventario() {
                                                 transition: "opacity 0.2s",
                                                 "&:hover": { color: "#ff1b00" }
                                             }}
-                                            onClick={() => handleDeleteMarca(m)}
+                                            onClick={() => handleDeleteMarca(m.nombre)}
                                         >
                                             <DeleteIcon fontSize="small" />
                                         </IconButton>
@@ -528,12 +562,13 @@ export default function Inventario() {
                             />
                             <Button
                               onClick={() => {
-                                  if (nuevaMarca && !marcas.includes(nuevaMarca)) {
+                                  if (nuevaMarca && !marcas.some(m => typeof m === 'object' && m?.nombre === nuevaMarca)) {
                                       addMarca(nuevaMarca);
                                       setNuevaMarca("");
                                   }
                               }}
-                              // ...
+                              variant="contained"
+                              size="small"
                           >
                               Agregar
                           </Button>
@@ -551,7 +586,7 @@ export default function Inventario() {
                         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
                             {categoriasFiltradas.map(c => (
                                 <Box
-                                    key={c}
+                                    key={c.nombre}
                                     sx={{
                                         bgcolor: "#FFD700",
                                         color: "#232323",
@@ -565,7 +600,7 @@ export default function Inventario() {
                                         "&:hover .delete-icon": { opacity: 1 }
                                     }}
                                 >
-                                    {c}
+                                    {c.nombre}
                                     <Tooltip title="Eliminar categoría">
                                         <IconButton
                                             size="small"
@@ -576,7 +611,7 @@ export default function Inventario() {
                                                 transition: "opacity 0.2s",
                                                 "&:hover": { color: "#ff1b00" }
                                             }}
-                                            onClick={() => handleDeleteCategoria(c)}
+                                            onClick={() => handleDeleteCategoria(c.nombre)}
                                         >
                                             <DeleteIcon fontSize="small" />
                                         </IconButton>
@@ -593,12 +628,13 @@ export default function Inventario() {
                             />
                             <Button
                               onClick={() => {
-                                  if (nuevaCategoria && !categorias.includes(nuevaCategoria)) {
+                                  if (nuevaCategoria && !categorias.some(c => typeof c === 'object' && c?.nombre === nuevaCategoria)) {
                                       addCategoria(nuevaCategoria);
                                       setNuevaCategoria("");
                                   }
                               }}
-                              // ...
+                              variant="contained"
+                              size="small"
                           >
                               Agregar
                           </Button>
@@ -615,11 +651,17 @@ export default function Inventario() {
     // --- Render principal ---
     useEffect(() => {
         if (ubicacionId) {
-            fetchProductos(ubicacionId);
+            // Solo hacer fetch si no tenemos productos para esta ubicación
+            const productosActuales = useInventariosStore.getState().inventarios[ubicacionId];
+            if (!productosActuales || productosActuales.length === 0) {
+                fetchProductos(ubicacionId);
+            }
             fetchMarcas(ubicacionId);
             fetchCategorias(ubicacionId);
         }
     }, [ubicacionId]);
+
+    console.log('DEBUG productos:', productos);
 
     return (
         <Layout>
@@ -755,7 +797,7 @@ export default function Inventario() {
                                                 {product.brand} | {product.category}
                                             </Typography>
                                             <Typography variant="body2" sx={{ color: "#FFD700", fontWeight: 700 }}>
-                                                Stock: {product.stock}
+                                                Stock: {product.stock ?? 0}
                                             </Typography>
                                         </CardContent>
                                     </CardActionArea>
@@ -792,8 +834,8 @@ export default function Inventario() {
                 <ProductForm
                     onSave={handleAddProduct}
                     onCancel={() => setModalAddOpen(false)}
-                    marcas={marcas}
-                    categorias={categorias}
+                    marcas={marcasNombres}
+                    categorias={categoriasNombres}
                 />
             </Dialog>
             <Dialog open={modalEditOpen} onClose={() => setModalEditOpen(false)}>
@@ -801,8 +843,8 @@ export default function Inventario() {
                     initial={productoActual!}
                     onSave={handleUpdateProduct}
                     onCancel={() => setModalEditOpen(false)}
-                    marcas={marcas}
-                    categorias={categorias}
+                    marcas={marcasNombres}
+                    categorias={categoriasNombres}
                 />
             </Dialog>
             <ProductDetailsModal
@@ -818,8 +860,8 @@ export default function Inventario() {
                 open={modalFiltroOpen}
                 onClose={() => setModalFiltroOpen(false)}
                 onFiltrar={setFiltros}
-                marcas={marcas}
-                categorias={categorias}
+                marcas={marcasNombres}
+                categorias={categoriasNombres}
             />
             <GestionarModal
                 open={modalGestionOpen}

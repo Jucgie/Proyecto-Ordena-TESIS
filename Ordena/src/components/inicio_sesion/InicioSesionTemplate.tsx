@@ -30,13 +30,19 @@ export function InicioFormulario() {
     
             const response = await authService.login(correo, password);
             
-            // Transformar la respuesta para asegurar que sucursalId sea string
+            console.log('Respuesta del login:', response); // Para depuración
+            
             const usuarioTransformado = {
                 ...response.usuario,
+                bodega: response.usuario.bodega?.toString(),
                 sucursalId: response.usuario.sucursal?.toString() || response.usuario.sucursalId?.toString()
             };
             
-            console.log('Usuario transformado:', usuarioTransformado); // Para debugging
+            console.log('Usuario transformado:', usuarioTransformado); // Para depuración
+            
+            if (!response.token) {
+                throw new Error('No se recibió token del servidor');
+            }
             
             setUsuario(usuarioTransformado, response.token);
             
