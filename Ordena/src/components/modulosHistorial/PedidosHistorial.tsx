@@ -50,6 +50,9 @@ export function PedidoHistorial({ setPedido }: Props) {
             <div className="cerr">
                 <span onClick={setPedido} className="vol"> 🠔 Volver</span>
             </div>
+            <div>
+                <h2>Historial Pedidos</h2>
+            </div>
             <section className="Botones">
                 <div className="Boton-start">
                     <input type="text" placeholder="Buscar"/>
@@ -83,12 +86,14 @@ export function PedidoHistorial({ setPedido }: Props) {
 
                 <TableContainer component={Paper}
                         sx={{
-                            maxHeight:400,width: "auto", background: '#5B5B5B',
+                            maxHeight:400,width: "auto",
                             '& .MuiTableCell-root': { color: 'white', textAlign: 'center' }
                         }}
                 >
-                    <Table sx={{ minWidth: 650}} aria-label="simple table">
-                        <TableHead>
+                    <Table sx={{ minWidth: 650}} aria-label="simple table" stickyHeader>
+                        <TableHead sx={{    '& .MuiTableCell-root': {
+      backgroundColor: '#5B5B5B',
+      color: 'white'},}} >
                             <TableRow>
                                 <TableCell>Fecha</TableCell>
                                 <TableCell align="right">Hora</TableCell>
@@ -98,7 +103,9 @@ export function PedidoHistorial({ setPedido }: Props) {
                                 <TableCell align="right">Productos</TableCell>
                             </TableRow>
                         </TableHead>
-                        <TableBody>
+                        <TableBody 
+                        sx={{background:"#747474"}}
+                        >
                             {rows.map((row) => (
                                 <TableRow
                                     key={row.fat}
@@ -113,7 +120,7 @@ export function PedidoHistorial({ setPedido }: Props) {
                                     <TableCell align="right">{row.protein}</TableCell>
                                     <TableCell 
                                     align="right"
-                                    ><button onClick={()=>setDetalle(true)}>Ver</button></TableCell>
+                                    ><button onClick={()=>setDetalle(true)} className="button_det">Ver</button></TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -143,10 +150,12 @@ const Container = styled.div`
   align-items:center;
   flex-direction:column;
   justify-content:center;
+  border:1px solid rgb(122, 119, 119);
 
     .cerr{
         margin-bottom:40px;
         font-size:20px;
+        cursor:pointer;
     }
 
   .table-container {
@@ -189,5 +198,19 @@ const Container = styled.div`
     flex-direction: row;
     width: 100%;
     gap: 10px;
+    }
+
+    .button_det{
+        background:none;
+        color: #bbf0bf;
+        font-size:14px;
+        font-weight:bold;
+        border: 2px solid rgb(17, 152, 23);
+        border-radius:5px;
+
+        &:hover{
+        transition:0.9s;
+        background:#2AC034;
+        }
     }
     `

@@ -4,19 +4,27 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ManageHistoryIcon from '@mui/icons-material/ManageHistory';
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import OrdenaLogo from "../../assets/ordena.svg";
+import { useAuthStore } from "../../store/useAuthStore";
 
-const links = [
-    { to: "/dashboard", icon: DonutSmallIcon, label: "Dashboard" },
-    { to: "/inventario", icon: AssignmentIcon, label: "Inventario" },
-    { to: "/pedidos", icon: LocalShippingIcon, label: "Pedidos" },
-    { to: "/empleados", icon: PeopleAltIcon, label: "Empleados" },
-    { to: "/historial", icon: ManageHistoryIcon, label: "Historial y Reportes" },
-];
 
 export default function Sidebar() {
     const location = useLocation();
+    const usuario = useAuthStore(state => state.usuario);
 
+    const links = [
+        { to: "/dashboard", icon: DonutSmallIcon, label: "Dashboard" },
+        { to: "/inventario", icon: AssignmentIcon, label: "Inventario" },
+        { to: "/pedidos", icon: LocalShippingIcon, label: "Pedidos" },
+        ...(usuario?.rol === "supervisor"
+            ? [{ to: "/empleados", icon: PeopleAltIcon, label: "Empleados" }]
+            : []),
+        { to: "/historial", icon: ManageHistoryIcon, label: "Historial y Reportes" },
+        { to: "/solicitudes", icon: AssignmentIcon, label: "Solicitudes" },
+        { to: "/proveedores", icon: AssignmentIndIcon, label: "Proveedores" },
+    ];
+    
     return (
         <aside style={{ width: "200px",
                         height: "100vh",
@@ -33,7 +41,7 @@ export default function Sidebar() {
             <nav>
                 <ul style={{ listStyle: "none", padding: 0 }}>
                     {links.map(link => {
-                        const isActive = location.pathname === link.to;
+                        const isActive = location.pathname.startsWith(link.to);
                         const Icon = link.icon;
                         return (
                             <li

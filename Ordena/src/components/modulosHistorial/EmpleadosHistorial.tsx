@@ -133,6 +133,7 @@ const Container = styled.div`
     .cerr{
         margin-bottom:40px;
         font-size:20px;
+        cursor:pointer;
     }
 
   .table-container {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BtnHistorial } from "../button/ButtonHist";
 import { InventarioHistorial } from "../modulosHistorial/InventarioHistorial";
 import { PedidoHistorial } from "../modulosHistorial/PedidosHistorial";     
@@ -16,8 +16,41 @@ export function HistorialTemplate() {
     const [pedido, setPedido] = useState(false);
     const [empleado,setEmpleado] = useState(false);
 
+    useEffect(()=>{
+        if(pedido) {
+            document.body.style.overflow="hidden";
+        }else{
+            document.body.style.overflow='';
+        }
+        return ()=>{
+            document.body.style.overflow="";
+        };
+    },[pedido]);
+    useEffect(()=>{
+        if(historial) {
+            document.body.style.overflow="hidden";
+        }else{
+            document.body.style.overflow='';
+        }
+        return ()=>{
+            document.body.style.overflow="";
+        };
+    },[historial]);
+        useEffect(()=>{
+        if(empleado) {
+            document.body.style.overflow="hidden";
+        }else{
+            document.body.style.overflow='';
+        }
+        return ()=>{
+            document.body.style.overflow="";
+        };
+    },[empleado]);
+
     return(
-        <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
+        <div className="flex flex-col items-center justify-center h-screen bg-gray-100"
+        
+        >
 
 
             <ContainerButtons>   
@@ -26,19 +59,19 @@ export function HistorialTemplate() {
                     <ContentPasteIcon sx={{ fontSize: 85, display:"flex",justifyContent:"center",color:"#FFD700"}}/>
                     Inventario
                     </>
-                    } funcion={()=>setHistorial(true)} background="#5a5858"/>
+                    } funcion={()=>setHistorial(true)} background="#1b1a1a"/>
                 <BtnHistorial titulo={
                     <>
                         <LocalShippingIcon sx={{fontSize:85, display:"flex", justifyContent:"center",color:"#FFD700"}}/>
                         Pedidos
                     </>
-                } funcion={()=>setPedido(true)} background="#5a5858"/>
+                } funcion={()=>setPedido(true)} background="#1b1a1a"/>
                 <BtnHistorial titulo={
                     <>
                         <PersonIcon sx={{fontSize:85, display:"flex",justifyContent:"center", color:"#FFD700"}}/>
                         Empleados
                     </>                 
-                } funcion={()=>setEmpleado(true)} background="#5a5858"/>
+                } funcion={()=>setEmpleado(true)} background="#1b1a1a"/>
             </ContainerButtons>
             <section>
                 <div>

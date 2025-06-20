@@ -38,7 +38,7 @@ export function PedidoDetalle({setDetalle}:Props) {
     return(
         <Container>
             <div className="cerr">
-                <span onClick={setDetalle} className="vol"> X Cerrar</span>
+                <span onClick={setDetalle} className="vol"> X</span>
             </div>
             <h2>Productos</h2>
             <div className="table-container">
@@ -56,7 +56,7 @@ export function PedidoDetalle({setDetalle}:Props) {
                                 <TableCell align="right">Cantidad</TableCell>
                             </TableRow>
                         </TableHead>
-                        <TableBody>
+                        <TableBody sx={{background:"#747474"}}>
                             {rows.map((row) => (
                                 <TableRow
                                     key={row.name}
@@ -88,7 +88,7 @@ const Container = styled.div`
   transform: translate(-50%, -50%);
   border-radius: 5px;
   background: #1E1E1E;
-  box-shadow: -30px 15px 30px rgba(10, 9, 9, 0.6);
+  box-shadow: -20px 0px 20px rgba(36, 36, 36, 0.6);
   padding: 13px 26px 20px 26px;
   z-index: 100;
   display:flex;
@@ -102,7 +102,7 @@ const Container = styled.div`
         display:flex;
         justify-content:start;
         width:100%;
-        color: #d62600;
+        color:white;
         font-weight:bold;
     }
 
