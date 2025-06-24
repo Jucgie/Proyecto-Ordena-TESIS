@@ -1,8 +1,10 @@
 import styled from "styled-components";
+
 {/* Se importan los componentes de los graficos*/}
 import { Grafics_b } from "../graficos/Grafics_bar";
 import { Grafics_Pie } from "../graficos/Grafics_pie";
 {/* Fin importaciones de componentes graficos */}
+
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -11,53 +13,66 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Paper from '@mui/material/Paper';
 
-{/* Data statica */}
-function createData(
-    id: string,
-    sucursal: string,
-    producto: string,
-    cantidad: number,
-    fecha: Date,
-    stock: number,
-) {
-    return { id, sucursal, producto, cantidad, fecha, stock };
-}
+//Obtención de datos de la api por medio del archivo store
+import { useHistorialStore } from "../../store/useHistorialStore";
+import { useHistProductStore } from "../../store/useHistorialStore";
+import { useInventariosStore } from "../../store/useProductoStore";
+//import { useAuthStore } from "../../store/useAuthStore";
 
-const rows = [
-    createData('id_1', 'Sucursal 1', 'producto 2', 20, new Date('2025-03-02'), 40),
-    createData('id_1', 'Sucursal 2', 'producto 3', 20, new Date('2025-03-02'), 43),
-    createData('id_1', 'Sucursal 3', 'producto 1', 20, new Date('2025-03-02'), 60),
-    createData('id_1', 'Sucursal 4', 'producto 3', 20, new Date('2025-03-02'), 43),
-    createData('id_1', 'Sucursal 5', 'producto 3', 20, new Date('2025-03-02'), 49),
-    createData('id_1', 'sucursal 2', 'producto 3', 20, new Date('2025-03-02'), 39),
-    createData('id_1', 'sucursal 2', 'producto 3', 20, new Date('2025-03-02'), 39),
 
-];
+import stockImage  from '../../assets/en-stock.png';
+
+//import { useEffect } from "react";
 
 
 
 export function CountElement() {
+
+    //Definición de constante para obtener datos 
+
+    const pedidos = useHistorialStore(state=>state.pedidos);
+    const productos = useHistProductStore(state=>state.productos);
+    const prodct = useInventariosStore(state=>state.inventarios)
+    const prodcts = Object.values(prodct).flat();
+
+
+
+    //Se obtiene los pedidos según el id del estado_pedido
+    const pedidosActivos = pedidos.filter(p => p.estado_pedido_fk === 1).length;
+  
+    //Se obtiene los productos bajos, por medio de un filtro comparando el stock y el stock minimo
+    const productossStockBajo = productos.filter(
+        p=>p.stock <= p.stock_minimo
+    );
+
+    //Se obtiene los ultimos pedidos por fecha y se muestran solo los cinco "ultimos"
+    const ultimosPedidos = [...pedidos]
+    .sort((a,b) => new Date(b.fecha_entrega).getTime()- new Date(a.fecha_entrega).getTime())
+    .slice(0,5);
+
+    //se obtiene el total de productos
+    const totalProducts = prodcts.length;
     return (
         <Contenedor_Dashboard>
-            <h1 className="titulo_bn">Bienvenido, [usuario]</h1>
+            <h1 className="titulo_bn">Bienvenido, </h1>
 
             {/* container para los cuadrados resumen */}
             <Container>
                 <ul className="cuadroEstd">
                     <p className="titulo">Pedidos Activos</p>
-                    <h1 className="numero">2</h1>
+                    <h1 className="numero">{pedidosActivos}</h1>
                 </ul>
                 <ul className="cuadroEstd">
                     <p className="titulo">Total Inventario</p>
-                    <h1 className="numero">2</h1>
+                    <h1 className="numero">{totalProducts}</h1>
                 </ul>
                 <ul className="cuadroEstd">
                     <p className="titulo">Entregas Pendientes</p>
-                    <h1 className="numero">3</h1>
+                    <h1 className="numero">n/a</h1>
                 </ul>
                 <ul className="cuadroEstd">
                     <p className="titulo">Empleados Activos</p>
-                    <h1 className="numero">4</h1>
+                    <h1 className="numero">n/a</h1>
                 </ul>
             </Container>
 
@@ -76,48 +91,60 @@ export function CountElement() {
                 </section>
                 {/* Sección para el cuadrado de productos con menor stock */}
                 <section className="grafico">
-                    <h4 className="titulo_d">Productos con menor stock</h4>
+                    <h4 className="titulo_d">Productos con stock mínimo</h4>
 
-                    {/* Tabla que contiene información de productos con menor stock */}
-                    <TableContainer
-                        component={Paper}
-                        sx={{ 
-                            maxHeight:270,
-                            background: '#5B5B5B', 
-                            '& .MuiTableRow-root': { height: "2vh", 
-                            '& .MuiTableCell-root': { 
-                                padding: '7px 18px', 
-                                color: 'white', 
-                                textAlign: 'center' } } }}
-                    >
-                        {/* Encabezado de tabla */}
-                        <Table sx={{}} aria-label="simple table">
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Id</TableCell>
-                                    <TableCell>Producto</TableCell>
-                                    <TableCell align="right">Stock</TableCell>
-                                </TableRow>
-                            </TableHead>
-
-                        {/*Cuerpo de tabla */}
-                            <TableBody>
-                                {rows.map((row) => (
-                                    <TableRow
-                                        key={row.id}
-                                        sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                                    >
-                                        <TableCell component="th" scope="row">
-                                            {row.id}
-                                        </TableCell>
-                                        <TableCell align="right">{row.producto}</TableCell>
-                                        <TableCell align="right">{row.stock}</TableCell>
-
+                     {productossStockBajo.length === 0 ? (
+                        <Mensaje>
+                            <img src={stockImage} alt="producto con stock" />
+                            <p>¡Todos los productos tienen stock suficiente!</p>
+                        </Mensaje>
+                    ) : (
+                        /* Tabla que contiene información de productos con menor stock */
+                        <TableContainer
+                            component={Paper}
+                            sx={{
+                                maxHeight:270,
+                                background: '#232323',
+                                '& .MuiTableRow-root': { height: "2vh",
+                                '& .MuiTableCell-root': {
+                                    padding: '7px 18px',
+                                    color: 'white',
+                                    textAlign: 'center' } } }}
+                        >
+                            {/* Encabezado de tabla */}
+                            <Table sx={{}} aria-label="simple table" stickyHeader>
+                                <TableHead sx={{
+                            '& .MuiTableCell-root': {
+                                backgroundColor: '#232323',
+                                color: 'white'
+                            }
+                        }}>
+                                    <TableRow>
+                                        <TableCell>Id</TableCell>
+                                        <TableCell>Producto</TableCell>
+                                        <TableCell align="right">Stock</TableCell>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
+                                </TableHead>
+
+                            {/*Cuerpo de tabla */}
+                                <TableBody>
+                                    {productossStockBajo.map((row) => (
+                                        <TableRow
+                                            key={row.id_prodc}
+                                            sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                                        >
+                                            <TableCell component="th" scope="row">
+                                                {row.id_prodc}
+                                            </TableCell>
+                                            <TableCell align="right">{row.nombre_prodc}</TableCell>
+                                            <TableCell align="right">{row.stock}</TableCell>
+
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
                 </section>
             </section>
 
@@ -138,39 +165,43 @@ export function CountElement() {
                     {/* Sección que contiene la tabla */}
                     <TableContainer component={Paper}
                         sx={{
-                            maxHeight:400,width: "auto", background: '#5B5B5B',
+                            maxHeight:400,width: "auto", background: '#232323',
                             '& .MuiTableCell-root': { color: 'white', textAlign: 'center' }
                         }}
                     >
                         <Table sx={{
                             minWidth: 50, height: '100%'
 
-                        }} aria-label="simple table" className="table_pedido">
-                            <TableHead>
+                        }} aria-label="simple table" className="table_pedido" stickyHeader>
+                            <TableHead sx={{
+                            '& .MuiTableCell-root': {
+                                backgroundColor: '#232323',
+                                color: 'white'
+                            }
+                        }} >
                                 <TableRow>
                                     <TableCell>Id</TableCell>
                                     <TableCell>Sucursal</TableCell>
-                                    <TableCell>Producto</TableCell>
-                                    <TableCell>Fecha</TableCell>
-                                    <TableCell>Cantidad</TableCell>
-                                    <TableCell>Stock</TableCell>
+                                    <TableCell>Productos</TableCell>
+                                    <TableCell>Fecha Inicio</TableCell>
+
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {rows.map((row) => (
+                                {/*Reorrido de los datos */}
+                                {ultimosPedidos.map((row) => (
                                     <TableRow
-                                        key={row.id}
+                                        key={row.id_p}
                                         sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                                     >
                                         <TableCell component="th" scope="row">
-                                            {row.id} </TableCell>
+                                            {row.id_p} </TableCell>
                                         <TableCell component="th" scope="row">
-                                            {row.sucursal}
+                                            {row.sucursal_fk?.nombre_sucursal}
                                         </TableCell>
-                                        <TableCell>{row.producto}</TableCell>
-                                        <TableCell>{row.fecha.toLocaleDateString()}</TableCell>
-                                        <TableCell>{row.cantidad}</TableCell>
-                                        <TableCell>{row.stock}</TableCell>
+                                        <TableCell>{row.solicitud_fk?.productos.length}</TableCell>
+                                        <TableCell>{row.solicitud_fk?.fecha_creacion.split('T')[0]}</TableCell>
+
 
 
 
@@ -213,7 +244,7 @@ const Container = styled.div`
     border: 1px solid rgb(36, 34, 34);
     color: yellow;
     box-sizing:border-box;
-    background-color:rgb(14, 13, 13);
+    background-color:rgb(20, 20, 20);
     }
 
     .numero{
@@ -247,7 +278,7 @@ const Container = styled.div`
     .resumen{
         display: grid;
         grid-template-columns: auto auto;
-        aling-items:center;
+        aling-items:start;
         gap:150px;
         justify-content: center;
         max-width:100%;
@@ -258,12 +289,16 @@ const Container = styled.div`
     .grafico{
         padding:20px;
         margin:0;
-        background-color: rgb(14, 13, 13);
+        background-color: rgb(20, 20, 20);
+        border: 1px solid rgb(36, 34, 34);
+
+        
     }
     .grafico_barra{
         padding:20px;
         margin:0;
-        background-color: rgb(14, 13, 13);
+        border: 1px solid rgb(36, 34, 34);
+        background-color: rgb(20, 20, 20);
     }
     .grafico_b{
         border:1px solid #5B5B5B;
@@ -317,7 +352,8 @@ const Container = styled.div`
         justify-content: center;
         align-items: start;
         align-content: center;
-        background-color: rgb(14, 13, 13);
+        border: 1px solid rgb(36, 34, 34);
+        background-color: rgb(20, 20, 20);
         padding: 0px;
     }
     .table_u_p{
@@ -325,7 +361,8 @@ const Container = styled.div`
         display: grid;
         justify-content: center;
         align-items: center;
-        background-color: rgb(14, 13, 13);
+        border: 1px solid rgb(36, 34, 34);
+        background-color: rgb(20, 20, 20);
         padding: 10px;
         }
 
@@ -340,6 +377,25 @@ const Container = styled.div`
 
 
 `;
+
+const Mensaje = styled.div`
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    font-size:1.2em;;
+    height:270px;
+    text-align:center;
+    width:20vw;
+
+    @media (max-width: 768px) {
+        align-items:center;
+        justify-content:center;
+        align-content:center;
+        width:20vw;
+    )
+
+`
 
 const Contenedor_Dashboard = styled.div`
     @media (max-width: 768px) {

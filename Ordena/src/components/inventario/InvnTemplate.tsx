@@ -267,6 +267,15 @@ export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onD
                                         <p className="mc">{product.brand}</p>
                                         <p className="mc">{product.category}</p>
                                     </Typography>
+                                    <Typography
+                                        variant="body2"
+                                        sx={{
+                                            color: "#FFD700",
+                                            fontWeight: 700,
+                                        }}
+                                    >
+                                        Stock: {product.stock}
+                                    </Typography>
                                 </CardContent>
                             </CardActionArea>
                         </Card>

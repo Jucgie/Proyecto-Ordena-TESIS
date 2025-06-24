@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Layout from "../../components/layout/layout";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
@@ -17,7 +17,8 @@ import { useAuthStore } from "../../store/useAuthStore";
 export default function SolicitudesBodega() {
     const {
         solicitudes,
-        setSolicitudes,
+        fetchSolicitudes,
+        updateSolicitud,
         addPedido,
         setTransferencias,
         addSolicitudesTransferidas,
@@ -38,6 +39,18 @@ export default function SolicitudesBodega() {
     [solicitudes]
     );
 
+    // Cargar solicitudes al montar el componente
+    useEffect(() => {
+        console.log('DEBUG - SolicitudesBodega: usuario?.bodega =', usuario?.bodega);
+        if (usuario?.bodega) {
+            console.log('DEBUG - SolicitudesBodega: Cargando solicitudes para bodega_id =', usuario.bodega.toString());
+            fetchSolicitudes({ bodega_id: usuario.bodega.toString() });
+        }
+    }, [usuario?.bodega, fetchSolicitudes]);
+
+    // Debug: verificar las solicitudes cargadas
+    console.log('DEBUG - SolicitudesBodega: solicitudes =', solicitudes);
+    console.log('DEBUG - SolicitudesBodega: solicitudesFiltradas =', solicitudesFiltradas);
 
     // Selección de solicitudes (siempre pueden seleccionarse)
     const handleCheck = (id: number) => {
@@ -48,7 +61,7 @@ export default function SolicitudesBodega() {
 
     const handleCheckAll = (checked: boolean) => {
         if (checked) {
-            setSeleccionadas(solicitudesFiltradas.map(s => s.id));
+            setSeleccionadas(solicitudesFiltradas.map(s => s.id_solc));
         } else {
             setSeleccionadas([]);
         }
@@ -63,43 +76,50 @@ export default function SolicitudesBodega() {
         setCambios(nuevosCambios);
     };
 
-    const handleConfirmar = () => {
-        setSolicitudes(prev =>
-            prev.map(s =>
-                cambios[s.id]
-                    ? { ...s, estado: cambios[s.id] }
-                    : s
-            )
-        );
-
-        let transferidasArr: any[] = [];
-        seleccionadas.forEach(id => {
-            if (cambios[id] === "aprobada") {
-                const solicitud = solicitudes.find(s => s.id === id);
-                if (solicitud) {
-                    addPedido({
-                        id: Date.now(),
-                        fecha: solicitud.fecha,
-                        responsable: usuario?.nombre || "Responsable Bodega",
-                        productos: solicitud.productos,
-                        estado: "En proceso",
-                        sucursalDestino: solicitud.sucursal.id,
-                        cantidad: solicitud.productos.reduce((acc, p) => acc + p.cantidad, 0),
-                        bodega: usuario?.bodega?.nombre || "Bodega Central",
-                        tipo: "salida"
-                    });
-                    transferidasArr.push(solicitud);
+    const handleConfirmar = async () => {
+        try {
+            // Actualizar solicitudes en el backend
+            for (const id of seleccionadas) {
+                if (cambios[id]) {
+                    await updateSolicitud(id, { estado: cambios[id] });
                 }
             }
-        });
 
-        if (transferidasArr.length > 0) {
-            addSolicitudesTransferidas(transferidasArr);
-            setTransferencias(transferidasArr.length);
+            let transferidasArr: any[] = [];
+            seleccionadas.forEach(id => {
+                if (cambios[id] === "aprobada") {
+                    const solicitud = solicitudes.find(s => s.id_solc === id);
+                    if (solicitud) {
+                        // Mapeo compatible con PedidosBodega
+                        const solicitudTransferida = {
+                            id: solicitud.id_solc,
+                            fecha: solicitud.fecha_creacion,
+                            responsable: solicitud.usuario_nombre,
+                            productos: solicitud.productos.map((p: any) => ({
+                                nombre: p.producto_nombre,
+                                cantidad: p.cantidad
+                            })),
+                            estado: "pendiente",
+                            sucursal: solicitud.sucursal_nombre,
+                            observaciones: solicitud.observacion || "",
+                            sucursalDestino: solicitud.sucursal_nombre,
+                            // Puedes agregar más campos si tu tabla de pedidos los necesita
+                        };
+                        transferidasArr.push(solicitudTransferida);
+                    }
+                }
+            });
+
+            if (transferidasArr.length > 0) {
+                addSolicitudesTransferidas(transferidasArr);
+                setTransferencias(transferidasArr.length);
+            }
+
+            setCambios({});
+            setSeleccionadas([]);
+        } catch (error) {
+            console.error('Error al confirmar cambios:', error);
         }
-
-        setCambios({});
-        setSeleccionadas([]);
     };
 
     const handleOpenModal = (solicitud: any) => {
@@ -184,11 +204,11 @@ export default function SolicitudesBodega() {
                                     <Checkbox
                                         checked={
                                             seleccionadas.length > 0 &&
-                                            solicitudesFiltradas.every(s => seleccionadas.includes(s.id))
+                                            solicitudesFiltradas.every(s => seleccionadas.includes(s.id_solc))
                                         }
                                         indeterminate={
                                             seleccionadas.length > 0 &&
-                                            !solicitudesFiltradas.every(s => seleccionadas.includes(s.id))
+                                            !solicitudesFiltradas.every(s => seleccionadas.includes(s.id_solc))
                                         }
                                         onChange={e => handleCheckAll(e.target.checked)}
                                         sx={{ color: "#FFD700" }}
@@ -212,40 +232,40 @@ export default function SolicitudesBodega() {
                                 </TableRow>
                             ) : (
                                 solicitudesFiltradas.map((row: any) => (
-                                    <TableRow key={row.id}>
+                                    <TableRow key={row.id_solc}>
                                         <TableCell padding="checkbox">
                                             <Checkbox
-                                                checked={seleccionadas.includes(row.id)}
-                                                onChange={() => handleCheck(row.id)}
+                                                checked={seleccionadas.includes(row.id_solc)}
+                                                onChange={() => handleCheck(row.id_solc)}
                                                 sx={{ color: "#FFD700" }}
                                             />
                                         </TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.id}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.fecha}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{row.id_solc}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{row.fecha_creacion}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
-                                        {row.sucursal?.nombre || "-"}
+                                        {row.sucursal_nombre || "-"}
                                         </TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.responsable}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{row.usuario_nombre}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
-                                                ? row.productos.reduce((acc, prod) => acc + Number(prod.cantidad), 0)
+                                                ? row.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
                                                 : 0}
                                         </TableCell>
                                         <TableCell style={{
                                             color:
-                                                cambios[row.id] === "aprobada"
+                                                cambios[row.id_solc] === "aprobada"
                                                     ? "#4CAF50"
-                                                    : cambios[row.id] === "denegada"
+                                                    : cambios[row.id_solc] === "denegada"
                                                         ? "#FF4D4F"
-                                                        : row.estado === "aprobada"
+                                                        : (row.estado || "pendiente") === "aprobada"
                                                             ? "#4CAF50"
-                                                            : row.estado === "denegada"
+                                                            : (row.estado || "pendiente") === "denegada"
                                                                 ? "#FF4D4F"
                                                                 : "#FFD700"
                                         }}>
-                                            {cambios[row.id]
-                                                ? cambios[row.id].charAt(0).toUpperCase() + cambios[row.id].slice(1) + " (sin confirmar)"
-                                                : row.estado.charAt(0).toUpperCase() + row.estado.slice(1)}
+                                            {cambios[row.id_solc]
+                                                ? (cambios[row.id_solc] || "").charAt(0).toUpperCase() + (cambios[row.id_solc] || "").slice(1) + " (sin confirmar)"
+                                                : (row.estado || "pendiente").charAt(0).toUpperCase() + (row.estado || "pendiente").slice(1)}
                                         </TableCell>
                                         <TableCell>
                                             <Button
@@ -276,16 +296,16 @@ export default function SolicitudesBodega() {
                     <DialogContent>
                         {solicitudSeleccionada ? (
                             <div>
-                                <div><b>ID:</b> {solicitudSeleccionada.id}</div>
-                                <div><b>Fecha:</b> {solicitudSeleccionada.fecha}</div>
+                                <div><b>ID:</b> {solicitudSeleccionada.id_solc}</div>
+                                <div><b>Fecha:</b> {solicitudSeleccionada.fecha_creacion}</div>
                                 <div>
-                                    <b>Sucursal:</b> {solicitudSeleccionada.sucursal?.nombre || "-"}<br />
+                                    <b>Sucursal:</b> {solicitudSeleccionada.sucursal_nombre || "-"}<br />
                                     <b>Dirección:</b> {solicitudSeleccionada.sucursal?.direccion || "-"}<br />
                                     <b>RUT:</b> {solicitudSeleccionada.sucursal?.rut || "-"}
                                 </div>
-                                <div><b>Responsable:</b> {solicitudSeleccionada.responsable}</div>
+                                <div><b>Responsable:</b> {solicitudSeleccionada.usuario_nombre}</div>
                                 <div><b>Observaciones:</b> {solicitudSeleccionada.observaciones || "Sin observaciones"}</div>
-                                <div><b>Estado:</b> {solicitudSeleccionada.estado.charAt(0).toUpperCase() + solicitudSeleccionada.estado.slice(1)}</div>
+                                <div><b>Estado:</b> {(solicitudSeleccionada.estado || "pendiente").charAt(0).toUpperCase() + (solicitudSeleccionada.estado || "pendiente").slice(1)}</div>
                                 <div style={{ marginTop: "12px" }}>
                                     <b>Productos solicitados:</b>
                                     <ul>

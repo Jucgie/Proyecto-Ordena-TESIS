@@ -24,6 +24,7 @@ import ModalFormularioPedido from "../../components/pedidos/modalform";
 import { useUsuariosStore } from "../../store/useUsuarioStore";
 import { useProveedoresStore } from "../../store/useProveedorStore";
 import { useInventariosStore } from "../../store/useProductoStore";
+import { usuarioService } from "../../services/usuarioService";
 
 // Interfaces
 interface Producto {
@@ -115,11 +116,12 @@ export default function PedidosBodega() {
     const usuario = useAuthStore((state: any) => state.usuario);
     const { addProveedor } = useProveedoresStore.getState() as { addProveedor: (proveedor: Proveedor) => void };
     const [showSnackbar, setShowSnackbar] = useState(transferencias > 0);
-    const { usuarios } = useUsuariosStore() as { usuarios: Usuario[] };
+    const { usuarios, setUsuarios } = useUsuariosStore() as { usuarios: Usuario[], setUsuarios: (usuarios: Usuario[]) => void };
+    const bodegaIdActual = usuario?.bodega?.id;
     const transportistas = usuarios.filter(
         (u: Usuario) =>
             u.rol === "transportista" &&
-            (u.bodega?.id === "bodega-central" || u.sucursal?.id === "bodega-central")
+            (u.bodega?.id === bodegaIdActual || u.sucursal?.id === bodegaIdActual)
     );
 
     const pedidosArray = Array.isArray(pedidos) ? pedidos : [];
@@ -140,6 +142,10 @@ export default function PedidosBodega() {
             setShowSnackbar(true);
         }
     }, [transferencias]);
+
+    useEffect(() => {
+      usuarioService.getUsuarios().then(setUsuarios);
+    }, [setUsuarios]);
 
     const handleSnackbarClick = () => {
         setShowSnackbar(false);
@@ -567,8 +573,8 @@ export default function PedidosBodega() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    solicitudesTransferidas.map((s: any) => (
-                                        <TableRow key={s.id}>
+                                    solicitudesTransferidas.map((s: any, idx: number) => (
+                                        <TableRow key={`${s.id}-${idx}`}>
                                             <TableCell style={{ color: "#fff" }}>{s.id}</TableCell>
                                             <TableCell style={{ color: "#fff" }}>{s.fecha}</TableCell>
                                             <TableCell style={{ color: "#fff" }}>

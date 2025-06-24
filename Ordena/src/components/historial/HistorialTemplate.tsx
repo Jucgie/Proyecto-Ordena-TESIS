@@ -51,8 +51,6 @@ export function HistorialTemplate() {
         <div className="flex flex-col items-center justify-center h-screen bg-gray-100"
         
         >
-
-
             <ContainerButtons>   
                 <BtnHistorial titulo={
                     <>
@@ -95,6 +93,8 @@ const ContainerButtons = styled.div`
     display:flex;
     flex-direction:row;
     justify-content:center;
+    align-content:center;
+    margin-top:2vw;
     gap:40px;
 
 

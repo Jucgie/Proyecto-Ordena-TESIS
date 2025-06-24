@@ -30,6 +30,8 @@ const Container = styled.button<CProps>`
     justify-content:center;
     align-items:center;
     padding:0px;
+    border: 1px solid rgb(36, 34, 34);
+
 
     .btn{
         background: ${(props)=>props.$background};
@@ -42,6 +44,12 @@ const Container = styled.button<CProps>`
 
         a{
             color:#FFD700;
+            font-weight:bold;
+            text-align:end;
+        }
+        
+        &:hover{
+            border: 2px solid white;
         }
 
     }
@@ -79,13 +87,14 @@ const ContainerB = styled.button<CProps>`
         border-radius:5px;
         cursor:pointer;
 
-
         a{
             color:#FFD700;
             padding:5px;
         }
 
     }
+    
+    
 
 
 `
