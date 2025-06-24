@@ -31,5 +31,6 @@ urlpatterns = [
     path('productos/agregar-marca/', MarcaViewSet.as_view({'post': 'agregar_marca'}), name='agregar_marca'),
     path('productos/agregar-categoria/', CategoriaViewSet.as_view({'post': 'agregar_categoria'}), name='agregar_categoria'),
     path('extraer-productos-pdf/', ExtraerProductosPDF.as_view(), name='extraer_productos_pdf'),
+    path('pedidos/', PedidosViewSet.as_view({'get':'pedidos'}),name='pedidos'),
 ]
 

@@ -11,6 +11,7 @@ import { InicioS } from "../pages/IniciarSesion/IniciarSesion";
 import Inventario from "../pages/inventario/inventario";
 import Proveedores from "../pages/proveedores/proveedores";
 import Empleados from "../pages/Empleados/empleados";
+import {Dashboard} from "../pages/dashboard/Dashboard";
 
 export default function AppRoutes() {
     const { vista } = useBodegaStore();
@@ -69,6 +70,11 @@ export default function AppRoutes() {
                 <Route path="/empleados" element={
                     <ProtectedRoute>
                         <Empleados />
+                    </ProtectedRoute>
+                } />
+                <Route path="/dashboard" element={
+                    <ProtectedRoute>
+                        <Dashboard />
                     </ProtectedRoute>
                 } />
 

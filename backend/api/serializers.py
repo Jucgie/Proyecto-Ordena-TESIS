@@ -327,6 +327,11 @@ class RegisterSerializer(serializers.Serializer):
     bodega = serializers.CharField(required=False, allow_null=True)
     sucursal = serializers.CharField(required=False, allow_null=True)
 
+class PersonalEntregaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonalEntrega
+        fields = '__all__'
+
 class ProductoSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='id_prodc', read_only=True)
     marca_nombre = serializers.CharField(source='marca_fk.nombre_mprod', read_only=True)
@@ -334,6 +339,7 @@ class ProductoSerializer(serializers.ModelSerializer):
     bodega_nombre = serializers.CharField(source='bodega_fk.nombre_bdg', read_only=True)
     sucursal_nombre = serializers.CharField(source='sucursal_fk.nombre_sucursal', read_only=True)
     stock = serializers.SerializerMethodField()
+    stock_minimo = serializers.SerializerMethodField()
     stock_write = serializers.IntegerField(write_only=True, required=False, source='stock')
 
     def get_stock(self, obj):
@@ -378,13 +384,14 @@ class ProductoSerializer(serializers.ModelSerializer):
         except Exception as e:
             print(f"Error en get_stock para producto {obj.id_prodc}: {str(e)}")
             return 0
+    
 
     class Meta:
         model = Productos
         fields = [
             'id', 'id_prodc', 'nombre_prodc', 'descripcion_prodc', 'codigo_interno',
             'fecha_creacion', 'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre',
-            'bodega_fk', 'bodega_nombre', 'sucursal_fk', 'sucursal_nombre', 'stock', 'stock_write'
+            'bodega_fk', 'bodega_nombre', 'sucursal_fk', 'sucursal_nombre', 'stock', 'stock_minimo' ,'stock_write'
         ]
         read_only_fields = ['id_prodc', 'fecha_creacion']
 
