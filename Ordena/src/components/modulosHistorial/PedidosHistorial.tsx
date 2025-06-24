@@ -196,6 +196,7 @@ export function PedidoHistorial({ setPedido }: Props) {
                         {/*Recorrido de los datos utilizando la constante de filtro de busqueda */}    
                             {pedidosFiltros.map((pedido) => (
                                 <TableRow
+                                    key={pedido.id_p}
                                     sx={{ 
                                         '&:last-child td, &:last-child th': { border: 0 },
                                         backgroundColor: pedido.id_p === pedidoSeleccionado ? 'rgba(243, 210, 22, 0.7)' : 'transparent',
@@ -208,19 +209,20 @@ export function PedidoHistorial({ setPedido }: Props) {
                                         {pedido.id_p}
                                     </TableCell>
                                     <TableCell component="th" scope="row">
-                                        {pedido.solicitud_fk?.fecha_creacion.split('T')[0]}-
-                                        {pedido.solicitud_fk?.fecha_creacion.split('T')[1].split('.')[0]}
+                                        {pedido.solicitud_fk?.fecha_creacion ? pedido.solicitud_fk.fecha_creacion.split('T')[0] : ''}-
+                                        {pedido.solicitud_fk?.fecha_creacion ? (pedido.solicitud_fk.fecha_creacion.split('T')[1]?.split('.')[0] ?? '') : ''}
                                     </TableCell>
                                     <TableCell align="right">
-                                        {pedido.fecha_entrega.split('T')[0]}-
-                                        {pedido.fecha_entrega.split('T')[1].split('.')[0]}</TableCell>
+                                        {pedido.fecha_entrega ? pedido.fecha_entrega.split('T')[0] : ''}-
+                                        {pedido.fecha_entrega ? (pedido.fecha_entrega.split('T')[1]?.split('.')[0] ?? '') : ''}
+                                    </TableCell>
                                     <TableCell align="right">
                                         {pedido.sucursal_fk?.nombre_sucursal}</TableCell>
                                     <TableCell align="right">
                                         {pedido.solicitud_fk?.usuario_nombre}</TableCell>
                                     <TableCell align="right">
                                         <p>
-                                            {pedido.solicitud_fk?.productos.length}
+                                            {Array.isArray(pedido.solicitud_fk?.productos) ? pedido.solicitud_fk.productos.length : 0}
                                         </p>
 
                                     </TableCell>

@@ -199,8 +199,8 @@ export function CountElement() {
                                         <TableCell component="th" scope="row">
                                             {row.sucursal_fk?.nombre_sucursal}
                                         </TableCell>
-                                        <TableCell>{row.solicitud_fk?.productos.length}</TableCell>
-                                        <TableCell>{row.solicitud_fk?.fecha_creacion.split('T')[0]}</TableCell>
+                                        <TableCell>{Array.isArray(row.solicitud_fk?.productos) ? row.solicitud_fk.productos.length : 0}</TableCell>
+                                        <TableCell>{row.solicitud_fk?.fecha_creacion ? row.solicitud_fk.fecha_creacion.split('T')[0] : ''}</TableCell>
 
 
 

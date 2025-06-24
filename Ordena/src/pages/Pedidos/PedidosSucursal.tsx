@@ -17,7 +17,6 @@ import { generarActaRecepcion } from "../../utils/pdf/generarActaRecepcion";
 import { generarOCI } from "../../utils/pdf/generarOCI";
 import EstadoBadge from "../../components/EstadoBadge";
 import { pedidosService } from "../../services/api";
-import { limpiarLocalStorageBodega, verificarLocalStorage } from "../../utils/limpiarLocalStorage";
 import { useInventariosStore } from "../../store/useProductoStore";
 
 export default function PedidosSucursal() {

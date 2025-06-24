@@ -339,22 +339,17 @@ class ProductoSerializer(serializers.ModelSerializer):
     bodega_nombre = serializers.CharField(source='bodega_fk.nombre_bdg', read_only=True)
     sucursal_nombre = serializers.CharField(source='sucursal_fk.nombre_sucursal', read_only=True)
     stock = serializers.SerializerMethodField()
-    stock_minimo = serializers.SerializerMethodField()
     stock_write = serializers.IntegerField(write_only=True, required=False, source='stock')
+    stock_minimo = serializers.SerializerMethodField()
 
     def get_stock(self, obj):
         """Obtiene el stock real desde la tabla Stock"""
         try:
-            # Obtener el contexto de la consulta
             request = self.context.get('request')
             if not request:
                 return 0
-            
-            # Obtener parámetros de la consulta
             sucursal_id = request.query_params.get('sucursal_id')
             bodega_id = request.query_params.get('bodega_id')
-            
-            # Buscar stock basándose en el contexto de la consulta
             if sucursal_id:
                 stock_obj = Stock.objects.filter(
                     productos_fk=obj,
@@ -366,7 +361,6 @@ class ProductoSerializer(serializers.ModelSerializer):
                     bodega_fk=bodega_id
                 ).first()
             else:
-                # Fallback: usar los campos del producto
                 if obj.bodega_fk:
                     stock_obj = Stock.objects.filter(
                         productos_fk=obj,
@@ -379,19 +373,53 @@ class ProductoSerializer(serializers.ModelSerializer):
                     ).first()
                 else:
                     return 0
-            
             return float(stock_obj.stock) if stock_obj else 0
         except Exception as e:
             print(f"Error en get_stock para producto {obj.id_prodc}: {str(e)}")
             return 0
-    
+
+    def get_stock_minimo(self, obj):
+        """Obtiene el stock mínimo desde la tabla Stock"""
+        try:
+            request = self.context.get('request')
+            if not request:
+                return 0
+            sucursal_id = request.query_params.get('sucursal_id')
+            bodega_id = request.query_params.get('bodega_id')
+            if sucursal_id:
+                stock_obj = Stock.objects.filter(
+                    productos_fk=obj,
+                    sucursal_fk=sucursal_id
+                ).first()
+            elif bodega_id:
+                stock_obj = Stock.objects.filter(
+                    productos_fk=obj,
+                    bodega_fk=bodega_id
+                ).first()
+            else:
+                if obj.bodega_fk:
+                    stock_obj = Stock.objects.filter(
+                        productos_fk=obj,
+                        bodega_fk=obj.bodega_fk.id_bdg
+                    ).first()
+                elif obj.sucursal_fk:
+                    stock_obj = Stock.objects.filter(
+                        productos_fk=obj,
+                        sucursal_fk=obj.sucursal_fk.id
+                    ).first()
+                else:
+                    return 0
+            return float(stock_obj.stock_minimo) if stock_obj and stock_obj.stock_minimo is not None else 0
+        except Exception as e:
+            print(f"Error en get_stock_minimo para producto {obj.id_prodc}: {str(e)}")
+            return 0
 
     class Meta:
         model = Productos
         fields = [
             'id', 'id_prodc', 'nombre_prodc', 'descripcion_prodc', 'codigo_interno',
             'fecha_creacion', 'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre',
-            'bodega_fk', 'bodega_nombre', 'sucursal_fk', 'sucursal_nombre', 'stock', 'stock_minimo' ,'stock_write'
+            'bodega_fk', 'bodega_nombre', 'sucursal_fk', 'sucursal_nombre', 'stock', 'stock_minimo', 'stock_write'
         ]
         read_only_fields = ['id_prodc', 'fecha_creacion']
 
