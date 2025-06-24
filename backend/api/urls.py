@@ -1,7 +1,10 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from .views import ( login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, SolicitudesViewSet
+from .views import ( 
+    login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, 
+    SolicitudesViewSet, UsuarioViewSet, InformeViewSet, PedidosViewSet, 
+    PersonalEntregaViewSet, ExtraerProductosPDF
 )
 
 router = DefaultRouter()
@@ -10,6 +13,10 @@ router.register(r'productos', ProductoViewSet, basename='producto')
 router.register(r'marcas', MarcaViewSet, basename='marca')
 router.register(r'categorias', CategoriaViewSet, basename='categoria')
 router.register(r'solicitudes', SolicitudesViewSet, basename='solicitud')
+router.register(r'usuarios', UsuarioViewSet, basename='usuario')
+router.register(r'informes', InformeViewSet, basename='informe')
+router.register(r'pedidos', PedidosViewSet, basename='pedido')
+router.register(r'personal-entrega', PersonalEntregaViewSet, basename='personal-entrega')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -23,5 +30,6 @@ urlpatterns = [
     path('productos/categorias/', CategoriaViewSet.as_view({'get': 'categorias'}), name='categorias'),
     path('productos/agregar-marca/', MarcaViewSet.as_view({'post': 'agregar_marca'}), name='agregar_marca'),
     path('productos/agregar-categoria/', CategoriaViewSet.as_view({'post': 'agregar_categoria'}), name='agregar_categoria'),
+    path('extraer-productos-pdf/', ExtraerProductosPDF.as_view(), name='extraer_productos_pdf'),
 ]
 

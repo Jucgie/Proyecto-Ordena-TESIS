@@ -88,10 +88,20 @@ export function RegUsuario({ setState }: Props) {
             sucursal: perfil === "sucursal" ? parseInt(sucursalId) : undefined // Convertir a número
         };
 
-        console.log('Enviando datos de registro:', usuarioNuevo);
-
         const response = await authService.register(usuarioNuevo);
-        setUsuario(response.usuario, response.token);
+        
+        // Determinar el tipo de usuario basado en el perfil
+        const tipo = perfil === "bodega-central" ? "bodega" : "sucursal";
+        
+        const usuarioTransformado = {
+            ...response.usuario,
+            bodega: response.usuario.bodega?.toString(),
+            sucursal: response.usuario.sucursal?.toString(),
+            sucursalId: response.usuario.sucursal?.toString(),
+            tipo: tipo
+        };
+        
+        setUsuario(usuarioTransformado, response.token);
         
         // Establecer la vista según el perfil
         setVista(perfil === "bodega-central" ? "bodega" : "sucursal");

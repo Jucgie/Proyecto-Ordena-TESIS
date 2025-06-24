@@ -5,7 +5,6 @@ import { solicitudesService } from "../services/api";
 interface Solicitud {
     id_solc: number;
     fecha_creacion: string;
-    observacion: string;
     estado: 'pendiente' | 'aprobada' | 'denegada';
     fecha_aprobacion?: string;
     fk_sucursal: number;
@@ -53,6 +52,7 @@ interface BodegaState {
     addSolicitudesTransferidas: (solis: any[]) => void;
     clearSolicitudesTransferidas: () => void;
     removeSolicitudTransferida: (id: number) => void;
+    clearTransferidasInvalidas: () => void;
 }
 
 export const useBodegaStore = create<BodegaState>()(
@@ -93,27 +93,13 @@ export const useBodegaStore = create<BodegaState>()(
       
       updateSolicitud: async (id: number, cambios: any) => {
         try {
-          // Filtrar solo los campos que existen en el backend
-          const { estado, ...camposBackend } = cambios;
-          
-          // Si hay campos para el backend, actualizarlos
-          if (Object.keys(camposBackend).length > 0) {
-            const solicitudActualizada = await solicitudesService.updateSolicitud(id.toString(), camposBackend);
-            set(state => ({
-              solicitudes: state.solicitudes.map(s =>
-                s.id_solc === id ? solicitudActualizada : s
-              )
-            }));
-          }
-          
-          // Si hay cambios de estado, manejarlos solo en el frontend
-          if (estado) {
-            set(state => ({
-              solicitudes: state.solicitudes.map(s =>
-                s.id_solc === id ? { ...s, estado } : s
-              )
-            }));
-          }
+          // Enviar todos los cambios, incluyendo 'estado', al backend
+          const solicitudActualizada = await solicitudesService.updateSolicitud(id.toString(), cambios);
+          set(state => ({
+            solicitudes: state.solicitudes.map(s =>
+              s.id_solc === id ? solicitudActualizada : s
+            )
+          }));
         } catch (error) {
           console.error('Error updating solicitud:', error);
           throw error;
@@ -154,18 +140,37 @@ export const useBodegaStore = create<BodegaState>()(
       // Funciones de transferencias
       setTransferencias: (cantidad: number) => set({ transferencias: cantidad }),
       
-      addSolicitudesTransferidas: (solis: any[]) => set(state => ({
-        solicitudesTransferidas: [...state.solicitudesTransferidas, ...solis]
-      })),
+      addSolicitudesTransferidas: (solis: any[]) => set({
+        solicitudesTransferidas: solis
+      }),
       
       clearSolicitudesTransferidas: () => set({ solicitudesTransferidas: [] }),
       
       removeSolicitudTransferida: (id: number) => set(state => ({
         solicitudesTransferidas: state.solicitudesTransferidas.filter(s => s.id !== id)
       })),
+      
+      clearTransferidasInvalidas: () => set(state => {
+        const seen = new Set();
+        return {
+          solicitudesTransferidas: state.solicitudesTransferidas.filter(s => {
+            // ID válido y no repetido
+            if (!s.id || Number(s.id) <= 0 || seen.has(s.id)) return false;
+            seen.add(s.id);
+            // Productos válidos
+            return Array.isArray(s.productos) && s.productos.length > 0;
+          })
+        };
+      }),
     }),
     {
       name: "bodega-storage",
+      // SOLO persistir la vista y las solicitudes transferidas
+      // NO persistir pedidos, solicitudes ni transferencias
+      partialize: (state) => ({ 
+        vista: state.vista,
+        solicitudesTransferidas: state.solicitudesTransferidas
+      }),
     }
   )
 );

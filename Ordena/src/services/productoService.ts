@@ -4,22 +4,25 @@ import type{ ProductInt } from '../store/useProductoStore';
 export const productoService = {
     // Productos
     getProductos: async (ubicacionId?: string) => {
+        console.log("🔍 DEBUG - Service - getProductos llamado con ubicacionId:", ubicacionId);
         const params = new URLSearchParams();
         
         // Si el ubicacionId es "bodega_central", filtrar por bodega
         if (ubicacionId === "bodega_central") {
             params.append('bodega_id', '2'); // ID de la bodega central (según el cambio que hiciste)
+            console.log("🔍 DEBUG - Service - Filtrando por bodega_id: 2");
         } else if (ubicacionId) {
             params.append('sucursal_id', ubicacionId);
+            console.log("🔍 DEBUG - Service - Filtrando por sucursal_id:", ubicacionId);
         }
         
+        console.log("🔍 DEBUG - Service - Parámetros finales:", params.toString());
         const response = await api.get('/productos/', { params });
+        console.log("🔍 DEBUG - Service - Respuesta del backend:", response.data);
         return response.data;
     },
 
     createProducto: async (producto: ProductInt, ubicacionId?: string) => {
-        console.log('DEBUG - ubicacionId recibido:', ubicacionId);
-        console.log('DEBUG - stock del producto:', producto.stock);
         
         // Buscar los IDs de marca y categoría por nombre
         const marcas = await api.get('/marcas/');
@@ -39,7 +42,7 @@ export const productoService = {
             descripcion_prodc: producto.description,
             marca_fk: marcaObj.id_mprod,
             categoria_fk: categoriaObj.id,
-            stock_inicial: producto.stock || 0, // Incluir el stock
+            stock_write: producto.stock || 0,
         };
 
         // Si el ubicacionId es "bodega_central", usar bodega_fk, sino sucursal_fk
@@ -50,8 +53,6 @@ export const productoService = {
             data.bodega_fk = null;
             data.sucursal_fk = parseInt(ubicacionId);
         }
-
-        console.log('DEBUG - datos a enviar al backend:', data);
 
         const response = await api.post('/productos/', data);
         return response.data;
@@ -74,6 +75,7 @@ export const productoService = {
             codigo_interno: producto.code,
             marca_fk: marcaObj.id_mprod,
             categoria_fk: categoriaObj.id,
+            stock_write: producto.stock,
         };
     
         // Si el ubicacionId es "bodega_central", usar bodega_fk, sino sucursal_fk
@@ -85,6 +87,7 @@ export const productoService = {
             data.sucursal_fk = ubicacionId ? parseInt(ubicacionId) : null;
         }
     
+
         const response = await api.put(`/productos/${id}/`, data);
         return response.data;
     },

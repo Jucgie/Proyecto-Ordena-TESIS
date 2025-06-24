@@ -13,6 +13,23 @@ export interface ProductInt {
     im: File | string | null;
 }
 
+// Helper para mapear la respuesta del backend al estado del frontend
+const mapBackendToFrontend = (p: any): ProductInt => {
+    console.log("🔍 DEBUG - mapBackendToFrontend - Producto original:", p);
+    const mapeado = {
+        id_prodc: p.id_prodc,
+        name: p.nombre_prodc,
+        code: p.codigo_interno,
+        brand: p.marca_nombre || p.marca_fk,
+        category: p.categoria_nombre || p.categoria_fk,
+        description: p.descripcion_prodc,
+        stock: p.stock ?? 0,
+        im: null, // La imagen se maneja localmente
+    };
+    console.log("🔍 DEBUG - mapBackendToFrontend - Producto mapeado:", mapeado);
+    return mapeado;
+};
+
 interface InventariosState {
     inventarios: { [ubicacionId: string]: ProductInt[] };
     marcas: { [ubicacionId: string]: { id: number; nombre: string }[] };
@@ -37,28 +54,20 @@ export const useInventariosStore = create<InventariosState>()(
             categorias: {},
 
             fetchProductos: async (ubicacionId: string) => {
+                console.log("🔍 DEBUG - Store - fetchProductos llamado con ubicacionId:", ubicacionId);
                 try {
-                    console.log('DEBUG - fetchProductos llamado con ubicacionId:', ubicacionId);
                     const productos = await productoService.getProductos(ubicacionId);
-                    console.log('DEBUG - Productos recibidos del servicio:', productos);
-                    const productosMapeados = productos.map((p: any) => ({
-                        id_prodc: p.id_prodc,
-                        name: p.nombre_prodc,
-                        code: p.codigo_interno,
-                        brand: p.marca_nombre || p.marca_fk,
-                        category: p.categoria_nombre || p.categoria_fk,
-                        description: p.descripcion_prodc,
-                        stock: p.stock ?? 0,
-                        im: null
-                    }));
-                    console.log('DEBUG - Productos mapeados:', productosMapeados);
+                    console.log("🔍 DEBUG - Store - Respuesta del backend:", productos);
+                    // Usamos el helper para mapear
+                    const productosMapeados = productos.map(mapBackendToFrontend);
+                    console.log("🔍 DEBUG - Store - Productos mapeados:", productosMapeados);
                     set(state => ({
                         inventarios: {
                             ...state.inventarios,
                             [ubicacionId]: productosMapeados
                         }
                     }));
-                    console.log('DEBUG - Estado actualizado para ubicacionId:', ubicacionId);
+                    console.log("🔍 DEBUG - Store - Estado actualizado para ubicacionId:", ubicacionId);
                 } catch (error) {
                     console.error('Error fetching productos:', error);
                 }
@@ -66,43 +75,34 @@ export const useInventariosStore = create<InventariosState>()(
 
             fetchMarcas: async (ubicacionId: string) => {
                 try {
-                    console.log('DEBUG - fetchMarcas llamado con ubicacionId:', ubicacionId);
                     const marcas = await productoService.getMarcas();
-                    console.log('DEBUG - Marcas recibidas del servicio:', marcas);
                     const marcasMapeadas = marcas.map((m: any) => ({
                         id: m.id_mprod,
                         nombre: m.nombre_mprod
                     }));
-                    console.log('DEBUG - Marcas mapeadas:', marcasMapeadas);
                     set(state => ({
                         marcas: {
                             ...state.marcas,
                             [ubicacionId]: marcasMapeadas
                         }
                     }));
-                    console.log('DEBUG - Estado de marcas actualizado para ubicacionId:', ubicacionId);
                 } catch (error) {
-                    console.error('Error fetching marcas:', error);
                 }
             },
 
             fetchCategorias: async (ubicacionId: string) => {
                 try {
-                    console.log('DEBUG - fetchCategorias llamado con ubicacionId:', ubicacionId);
                     const categorias = await productoService.getCategorias();
-                    console.log('DEBUG - Categorías recibidas del servicio:', categorias);
                     const categoriasMapeadas = categorias.map((c: any) => ({
                         id: c.id,
                         nombre: c.nombre
                     }));
-                    console.log('DEBUG - Categorías mapeadas:', categoriasMapeadas);
                     set(state => ({
                         categorias: {
                             ...state.categorias,
                             [ubicacionId]: categoriasMapeadas
                         }
                     }));
-                    console.log('DEBUG - Estado de categorías actualizado para ubicacionId:', ubicacionId);
                 } catch (error) {
                     console.error('Error fetching categorias:', error);
                 }
@@ -110,16 +110,13 @@ export const useInventariosStore = create<InventariosState>()(
 
             addProducto: async (ubicacionId: string, producto: ProductInt) => {
                 try {
-                    const productoConStock = { ...producto, stock: producto.stock ?? 0 };
-                    await productoService.createProducto(productoConStock, ubicacionId);
+                    const nuevoProductoBackend = await productoService.createProducto(producto, ubicacionId);
+                    const nuevoProductoFrontend = mapBackendToFrontend(nuevoProductoBackend);
                     set(state => ({
                         inventarios: {
                             ...state.inventarios,
-                            [ubicacionId]: [
-                                ...(state.inventarios[ubicacionId] || []),
-                                productoConStock
-                            ]
-                        }
+                            [ubicacionId]: [...(state.inventarios[ubicacionId] || []), nuevoProductoFrontend],
+                        },
                     }));
                 } catch (error) {
                     console.error('Error adding producto:', error);
@@ -129,14 +126,15 @@ export const useInventariosStore = create<InventariosState>()(
             updateProducto: async (ubicacionId: string, producto: ProductInt) => {
                 try {
                     if (producto.id_prodc) {
-                        await productoService.updateProducto(producto.id_prodc.toString(), producto, ubicacionId);
+                        const productoActualizadoBackend = await productoService.updateProducto(producto.id_prodc.toString(), producto, ubicacionId);
+                        const productoActualizadoFrontend = mapBackendToFrontend(productoActualizadoBackend);
                         set(state => ({
                             inventarios: {
                                 ...state.inventarios,
                                 [ubicacionId]: (state.inventarios[ubicacionId] || []).map(p =>
-                                    p.id_prodc === producto.id_prodc ? { ...p, ...producto } : p
-                                )
-                            }
+                                    p.id_prodc === productoActualizadoFrontend.id_prodc ? productoActualizadoFrontend : p
+                                ),
+                            },
                         }));
                     }
                 } catch (error) {
@@ -146,17 +144,22 @@ export const useInventariosStore = create<InventariosState>()(
 
             deleteProductos: async (ubicacionId: string, ids: string[]) => {
                 try {
-                    await Promise.all(ids.map(id => productoService.deleteProducto(id)));
+                    if (ids.length > 0) {
+                        await Promise.all(ids.map(id => productoService.deleteProducto(id)));
+                    }
+                    // Una vez eliminados en el backend, los quitamos del estado local.
                     set(state => ({
                         inventarios: {
                             ...state.inventarios,
                             [ubicacionId]: (state.inventarios[ubicacionId] || []).filter(p =>
                                 !ids.includes(p.id_prodc?.toString() || '')
-                            )
-                        }
+                            ),
+                        },
                     }));
                 } catch (error) {
                     console.error('Error deleting productos:', error);
+                    // Si hay un error, refrescamos desde el servidor para garantizar consistencia.
+                    await get().fetchProductos(ubicacionId);
                 }
             },
 

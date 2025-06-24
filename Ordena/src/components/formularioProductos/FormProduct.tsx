@@ -1,29 +1,34 @@
 import styled from "styled-components";
 import InfoIcon from '@mui/icons-material/Info';
 import { useState } from "react";
-import type { ProductInt } from "../../pages/inventario/inventario";   
-
-
-
-
+import type { ProductInt } from "../../pages/inventario/inventario";
+import {
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    TextField,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
+    Box,
+    Typography,
+    IconButton
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
 
 interface Props {
-    setState: () => void;
+    open: boolean;
+    onClose: () => void;
     onAddProduct: (product: ProductInt) => void;
-      name: string;
-  code: string;
-  brand: string;
-  category: string;
-  description: string;
-  im: File | null;
-
+    marcas?: string[];
+    categorias?: string[];
 }
 
-
-export function AddProduct({ setState, onAddProduct }: Props) {
-      console.log("onAddProduct es:", onAddProduct);
-
-      const [errors, setErrors] = useState<{ [key: string]: string }>({});
+export function AddProduct({ open, onClose, onAddProduct, marcas = [], categorias = [] }: Props) {
+    const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
     const [form, setForm] = useState<ProductInt>({
         name: "",
@@ -51,22 +56,19 @@ export function AddProduct({ setState, onAddProduct }: Props) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // Aquí puedes enviar el producto a tu backend o actualizar el estado global
         // Validación de campos vacíos
-    const newErrors: { [key: string]: string } = {};
-    if (!form.name.trim()) newErrors.name = "Campo obligatorio";
-    if (!form.code.trim()) newErrors.code = "Campo obligatorio";
-    if (!form.brand.trim()) newErrors.brand = "Campo obligatorio";
-    if (!form.category.trim()) newErrors.category = "Campo obligatorio";
-    if (!form.description.trim()) newErrors.description = "Campo obligatorio";
-    if (form.stock < 0) newErrors.stock = "El stock no puede ser negativo";
+        const newErrors: { [key: string]: string } = {};
+        if (!form.name.trim()) newErrors.name = "Campo obligatorio";
+        if (!form.code.trim()) newErrors.code = "Campo obligatorio";
+        if (!form.brand.trim()) newErrors.brand = "Campo obligatorio";
+        if (!form.category.trim()) newErrors.category = "Campo obligatorio";
+        if (!form.description.trim()) newErrors.description = "Campo obligatorio";
+        if (form.stock < 0) newErrors.stock = "El stock no puede ser negativo";
 
-    setErrors(newErrors);
+        setErrors(newErrors);
 
-    if (Object.keys(newErrors).length > 0) return;
-    
-        console.log("Producto agregado:", form);
-        console.log("Stock del producto:", form.stock, "tipo:", typeof form.stock);
+        if (Object.keys(newErrors).length > 0) return;
+        
         // Limpia el formulario si quieres
         onAddProduct(form);
         setForm({
@@ -78,270 +80,310 @@ export function AddProduct({ setState, onAddProduct }: Props) {
             stock: 0,
             im: null,
         });
-        // Puedes cerrar el modal o mostrar un mensaje
-        setState();
+        // Cerrar el modal
+        onClose();
+    };
+
+    const handleClose = () => {
+        setForm({
+            name: "",
+            code: "",
+            brand: "",
+            category: "",
+            description: "",
+            stock: 0,
+            im: null,
+        });
+        setErrors({});
+        onClose();
     };
 
     return (
-        <Container>
-
-
-            <div className="cerr">
-                <span onClick={setState} className="vol"> 🠔 Volver</span>
-            </div>
-            <h1 className="titulo">Añadir Producto</h1>
-            <section className="subcontainer">
-                <form
-                    className="formulario"
-                    id="registro-form"
-                    onSubmit={handleSubmit}
+        <Dialog 
+            open={open} 
+            onClose={handleClose} 
+            maxWidth="md" 
+            fullWidth
+            PaperProps={{
+                sx: {
+                    backgroundColor: "#1a1a1a",
+                    borderRadius: 2,
+                }
+            }}
+        >
+            <DialogTitle sx={{ 
+                background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                color: "#FFD700",
+                borderBottom: "2px solid #FFD700",
+                fontWeight: 600,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+            }}>
+                <Typography variant="h6" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    ➕ Añadir Producto
+                </Typography>
+                <IconButton
+                    onClick={handleClose}
+                    sx={{ color: "#FFD700" }}
                 >
-                    <section>
-                        <article>
-                            <input
-                                className="form_field"
-                                type="text"
-                                name="name"
-                                placeholder="Nombre Producto"
-                                value={form.name}
-                                onChange={handleChange}
+                    <CloseIcon />
+                </IconButton>
+            </DialogTitle>
+            
+            <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff", pt: '28px' }}>
+                <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    {/* Primera fila */}
+                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                        <TextField
+                            label="Nombre del Producto"
+                            name="name"
+                            value={form.name}
+                            onChange={handleChange}
+                            error={!!errors.name}
+                            helperText={errors.name}
+                            required
+                            fullWidth
+                            InputLabelProps={{ style: { color: "#E0E0E0" } }}
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    color: "#FFFFFF",
+                                    '& fieldset': { borderColor: "#666666" },
+                                    '&:hover fieldset': { borderColor: "#888888" },
+                                    '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                                },
+                                '& .MuiFormHelperText-root': { color: "#ff6b6b" }
+                            }}
+                        />
+                        <TextField
+                            label="Código Interno"
+                            name="code"
+                            value={form.code}
+                            onChange={handleChange}
+                            error={!!errors.code}
+                            helperText={errors.code}
+                            required
+                            fullWidth
+                            InputLabelProps={{ style: { color: "#E0E0E0" } }}
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    color: "#FFFFFF",
+                                    '& fieldset': { borderColor: "#666666" },
+                                    '&:hover fieldset': { borderColor: "#888888" },
+                                    '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                                },
+                                '& .MuiFormHelperText-root': { color: "#ff6b6b" }
+                            }}
+                        />
+                    </Box>
 
-                            />
-                            {errors.name && <span style={{ color: "red", marginLeft: 8 }}>{errors.name}</span>}
-                        </article>
-                        <article>
-                            <input
-                                className="form_field"
-                                type="text"
-                                name="code"
-                                placeholder="Codigo Interno"
-                                value={form.code}
-                                onChange={handleChange}
-                            />
-                            {errors.name && <span style={{ color: "red", marginLeft: 8 }}>{errors.name}</span>}
-                        </article>
-                        <article>
-                            <input
-                                className="form_field"
-                                type="number"
-                                name="stock"
-                                placeholder="Stock inicial"
-                                value={form.stock}
-                                onChange={handleChange}
-                                min="0"
-                            />
-                            {errors.stock && <span style={{ color: "red", marginLeft: 8 }}>{errors.stock}</span>}
-                        </article>
-                        <article>
-                            <select
-                                className="form_field"
+                    {/* Segunda fila */}
+                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                        <FormControl fullWidth error={!!errors.brand}>
+                            <InputLabel sx={{ color: "#E0E0E0" }}>Marca</InputLabel>
+                            <Select
                                 name="brand"
                                 value={form.brand}
                                 onChange={handleChange}
+                                required
+                                sx={{
+                                    color: "#FFFFFF",
+                                    '& .MuiOutlinedInput-notchedOutline': { borderColor: "#666666" },
+                                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: "#888888" },
+                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: "#4CAF50" },
+                                    '& .MuiSelect-icon': { color: "#E0E0E0" }
+                                }}
+                                MenuProps={{
+                                    PaperProps: {
+                                        sx: {
+                                            backgroundColor: '#2E2E2E',
+                                            color: '#FFFFFF',
+                                            '& .MuiMenuItem-root:hover': {
+                                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                            },
+                                            '& .Mui-selected': {
+                                                backgroundColor: 'rgba(76, 175, 80, 0.2) !important',
+                                            },
+                                            '& .Mui-selected:hover': {
+                                                backgroundColor: 'rgba(76, 175, 80, 0.3) !important',
+                                            }
+                                        },
+                                    },
+                                }}
                             >
-                                <option 
-                                 
-                                selected
-                                >
-                                    Selecciona una marca
-                                </option>
-                                <option value="marca_1">marca_1</option>
-                                <option value="marca_2">marca_2</option>
-                                <option value="marca_3">marca_3</option>
+                                <MenuItem value="" disabled sx={{ color: "#888888" }}>Selecciona una marca</MenuItem>
+                                {marcas.map((marca) => (
+                                    <MenuItem key={marca} value={marca} sx={{ color: "#FFFFFF" }}>
+                                        {marca}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                            {errors.brand && (
+                                <Typography variant="caption" sx={{ color: "#ff6b6b", mt: 0.5 }}>
+                                    {errors.brand}
+                                </Typography>
+                            )}
+                        </FormControl>
 
-                            </select>
-
-                            {errors.name && <span style={{ color: "red", marginLeft: 8 }}>{errors.name}</span>}
-                        </article>
-                        <article>
-                            <select
-                                className="form_field"
+                        <FormControl fullWidth error={!!errors.category}>
+                            <InputLabel sx={{ color: "#E0E0E0" }}>Categoría</InputLabel>
+                            <Select
                                 name="category"
                                 value={form.category}
                                 onChange={handleChange}
                                 required
+                                sx={{
+                                    color: "#FFFFFF",
+                                    '& .MuiOutlinedInput-notchedOutline': { borderColor: "#666666" },
+                                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: "#888888" },
+                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: "#4CAF50" },
+                                    '& .MuiSelect-icon': { color: "#E0E0E0" }
+                                }}
+                                MenuProps={{
+                                    PaperProps: {
+                                        sx: {
+                                            backgroundColor: '#2E2E2E',
+                                            color: '#FFFFFF',
+                                            '& .MuiMenuItem-root:hover': {
+                                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                            },
+                                            '& .Mui-selected': {
+                                                backgroundColor: 'rgba(76, 175, 80, 0.2) !important',
+                                            },
+                                            '& .Mui-selected:hover': {
+                                                backgroundColor: 'rgba(76, 175, 80, 0.3) !important',
+                                            }
+                                        },
+                                    },
+                                }}
                             >
-                                <option 
-                                 
-                                selected
-                                >
-                                    Selecciona una categoría
-                                </option>
-                                <option value="categoria_1">categoria_1</option>
-                                <option value="categoria_2">categoria_2</option>
-                                <option value="categoria_3">categoria_3</option>
-                            </select>
-                            {errors.category && <span style={{ color: "red", marginLeft: 8 }}>{errors.category}</span>}
-                        </article>
-                        <hr />
-                        <article>
-                            <p>Imagen del Producto 
-                                (<InfoIcon sx={{
-                                    fontSize:"18px"
-                                    }}/> Formato requerido : 160 x 160)</p>
-                            <input
-                                className="form_field"
-                                type="file"
-                                name="im"
-                                placeholder="imagen"
-                                onChange={handleChange}
-                            />
-                        </article>
-                        <hr />
-                        <article>
-                            <textarea
-                                className="form_field_desc"
-                                name="description"
-                                placeholder="Descripción"
-                                value={form.description}
-                                onChange={handleChange}
-                            />
-                            {errors.name && <span style={{ color: "red", marginLeft: 8 }}>{errors.name}</span>}
-                        </article>
+                                <MenuItem value="" disabled sx={{ color: "#888888" }}>Selecciona una categoría</MenuItem>
+                                {categorias.map((categoria) => (
+                                    <MenuItem key={categoria} value={categoria} sx={{ color: "#FFFFFF" }}>
+                                        {categoria}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                            {errors.category && (
+                                <Typography variant="caption" sx={{ color: "#ff6b6b", mt: 0.5 }}>
+                                    {errors.category}
+                                </Typography>
+                            )}
+                        </FormControl>
+                    </Box>
 
+                    {/* Tercera fila */}
+                    <TextField
+                        label="Stock Inicial"
+                        name="stock"
+                        type="number"
+                        value={form.stock}
+                        onChange={handleChange}
+                        error={!!errors.stock}
+                        helperText={errors.stock}
+                        required
+                        fullWidth
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
+                        inputProps={{ min: 0 }}
+                        onFocus={(e) => e.target.select()}
+                        sx={{
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            },
+                            '& .MuiFormHelperText-root': { color: "#ff6b6b" }
+                        }}
+                    />
 
-                    </section>
-                <div className="btn_reg">
-                    <button 
-                        type="submit" 
-                        className="btn" 
-                        style={{background:"#FFD700"}}
-                        >Agregar</button>
-                </div>
-                </form>
-            </section>
-        </Container>
+                    {/* Sección de imagen */}
+                    <Box sx={{ 
+                        p: 2, 
+                        bgcolor: "#232323", 
+                        borderRadius: 2, 
+                        border: "1px solid #333" 
+                    }}>
+                        <Typography variant="subtitle2" sx={{ color: "#E0E0E0", mb: 1, display: "flex", alignItems: "center", gap: 1 }}>
+                            <InfoIcon sx={{ fontSize: 18 }} />
+                            Imagen del Producto (Formato recomendado: 160 x 160)
+                        </Typography>
+                        <input
+                            type="file"
+                            name="im"
+                            onChange={handleChange}
+                            accept="image/*"
+                            style={{
+                                width: "100%",
+                                padding: "8px",
+                                border: "1px solid #666666",
+                                borderRadius: "4px",
+                                backgroundColor: "transparent",
+                                color: "#fff"
+                            }}
+                        />
+                    </Box>
+
+                    {/* Descripción */}
+                    <TextField
+                        label="Descripción"
+                        name="description"
+                        value={form.description}
+                        onChange={handleChange}
+                        error={!!errors.description}
+                        helperText={errors.description}
+                        required
+                        fullWidth
+                        multiline
+                        rows={4}
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
+                        sx={{
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            },
+                            '& .MuiFormHelperText-root': { color: "#ff6b6b" }
+                        }}
+                    />
+                </Box>
+            </DialogContent>
+
+            <DialogActions sx={{ 
+                bgcolor: "#1a1a1a", 
+                borderTop: "1px solid #333",
+                p: 2
+            }}>
+                <Button 
+                    onClick={handleClose}
+                    sx={{ 
+                        color: "#FFD700",
+                        borderColor: "#FFD700",
+                        borderWidth: 1.5,
+                        fontWeight: 600,
+                        '&:hover': { 
+                            background: "#FFD70022", 
+                            borderColor: "#FFD700" 
+                        }
+                    }}
+                    variant="outlined"
+                >
+                    Cancelar
+                </Button>
+                <Button
+                    onClick={handleSubmit}
+                    variant="contained"
+                    sx={{
+                        background: "#FFD700",
+                        color: "#181818",
+                        fontWeight: 700,
+                        '&:hover': { background: "#FFD700cc" }
+                    }}
+                >
+                    Agregar Producto
+                </Button>
+            </DialogActions>
+        </Dialog>
     );
 }
-
-
-const Container = styled.div`
-  position:fixed;
-  height: 100vh;
-  width: auto;
-  left: 56%;
-  top:50%;
-  transform: translate(-50%, -50%);
-  border-radius: 20px;
-  background: #1E1E1E;
-  box-shadow: -10px 15px 30px rgba(10, 9, 9, 0.4);
-  padding: 13px 26px 20px 26px;
-  z-index: 200;
-  align-items:center;
-  flex-direction:column;
-  justify-content:center;
-
-
-  .cerr{
-  position:absolute;
-  top:0;
-  left:0;
-  font-size:18px;
-  font-weight:bold;
-  margin:30px;
-  cursor: pointer;
-  color:#FFD700;  
-  }
-
-  .vol{
-    display: inline-block;
-    transition: 0.5s ease-in;
-    &:hover{
-    transform: translateX(-20px);
-  }
-  }
-
-      @keyframes mover {
-      0% {
-        transform: translateX(0);
-      }
-      50% {
-        transform: translateX(200px);
-      }
-      100% {
-        transform: translateX(0);
-      }
-    }
-
-  
-  .titulo{
-    font-size:28px;
-    margin-top:60px;
-    margin-bottom:10px;
-  }
-
-
-  .subContainer{
-        display:flex;
-        width:50%;
-        max-height: 440px;
-        justify-content:center;
-
-
-    
-  }
-  .formulario{
-        margin-bottom:40px;
-        max-height:400px;
-        overflow-y:scroll;
-        scroll-behavior: smooth;
-        padding:30px;
-        border:1px solid #191616;
-        border-radius:20px;
-        width:auto;
-        box-shadow:1px 1px 1px 1px rgba(0,0,0,0.25);
-      section {
-      gap: 20px;
-      display: flex;
-      flex-direction: column;
-
-  }
-
-
-
-  .form_field{
-      border: 1px solid white;
-      background:transparent;
-      border-radius:4px;
-      margin:5px;
-      padding:10px;
-
-      selected{
-      border-radius: 8px;}
-
-      option{
-        background: #2E2E2E;
-        border-raidius: 40px;
-      }
-    }
-  .form_field_desc{
-      border: 1px solid white;
-      background:transparent;
-      border-radius:4px;
-      margin:5px;
-      padding:20px;
-    }
-  .btn_reg{
-    display:flex;
-    justify-content:center;
-    align-content:center;
-    margin-top:50px;
-
-    }
-
-    p{
-      font-size:14px;
-    }
-
-    li{
-      list-style:none;
-      width:100px;
-      height:140px;
-      cursor:pointer;
-      border-radius:10px;
-
-    }
-  }
-
-
-`

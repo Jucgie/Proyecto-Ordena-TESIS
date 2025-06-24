@@ -28,7 +28,6 @@ interface ProductProps {
 }
 
 export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onDeleteProduct }: ProductProps) {
-    console.log("onAddProduct es:", onAddProduct);
 
     const [state, setState] = useState(false);
     const [prod, setProd] = useState<ProductInt | null>(null);
@@ -48,9 +47,6 @@ export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onD
         const matchMarca = !filtros.marca || product.brand === filtros.marca;
         return matchProductName && matchCategoria && matchMarca;
 });
-
-
-    console.log("PRODUCTOS EN TEMPLATE:", products);
 
     return (
         <Container >
@@ -109,7 +105,13 @@ export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onD
                     {state && (
                         <>
                             <div className="overlay" onClick={() => setState(false)}></div>
-                            <AddProduct setState={() => setState(false)} onAddProduct={onAddProduct} name={""} code={""} brand={""} category={""} description={""} im={null} />
+                            <AddProduct 
+                                open={state} 
+                                onClose={() => setState(false)} 
+                                onAddProduct={onAddProduct}
+                                marcas={[]}
+                                categorias={[]}
+                            />
                         </>
                     )}
                     {

@@ -3,10 +3,12 @@ import Layout from "../../components/layout/layout";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
     Dialog, DialogTitle, DialogContent, DialogActions, TextField, Box, Card, CardActionArea,
-    CardMedia, CardContent, Typography, MenuItem
+    CardMedia, CardContent, Typography, MenuItem, IconButton, Alert, Chip
 } from "@mui/material";
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import { useBodegaStore } from "../../store/useBodegaStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { generarOCI } from "../../utils/pdf/generarOCI";
@@ -14,6 +16,8 @@ import { SUCURSALES } from "../../constants/ubicaciones";
 import { useInventariosStore } from "../../store/useProductoStore";
 import { BODEGA_CENTRAL } from "../../constants/ubicaciones";
 import sin_imagen from "../../assets/sin_imagen.png";
+import { solicitudesService } from "../../services/api";
+import EstadoBadge from "../../components/EstadoBadge";
 
 interface Usuario {
     id: number;
@@ -54,6 +58,15 @@ interface Producto {
     id_prodc?: string;
 }
 
+interface ProductoSolicitud {
+    codigo: string;
+    nombre: string;
+    descripcion: string;
+    cantidad: number;
+    id_prodc?: string;
+    stock_disponible: number;
+}
+
 interface Solicitud {
     id: number;
     sucursal: {
@@ -66,22 +79,14 @@ interface Solicitud {
     fecha: string;
     responsable: string;
     cargo: string;
-    observaciones: string;
-    productos: Array<{
-        codigo: string;
-        nombre: string;
-        descripcion: string;
-        cantidad: number;
-    }>;
+    observacion: string;
+    productos: ProductoSolicitud[];
     estado: string;
     aprobador: string;
 }
 
 export default function SolicitudesSucursal() {
     // Hooks de estado global - Modificamos cómo accedemos al estado
-    const solicitudes = useBodegaStore((state: any) => state.solicitudes as Solicitud[]);
-    const addSolicitud = useBodegaStore((state: any) => state.addSolicitud as (solicitud: Solicitud) => void);
-    const clearSolicitudes = useBodegaStore((state: any) => state.clearSolicitudes as () => void);
     const usuario = useAuthStore((state: any) => state.usuario as AuthState['usuario']);
     
     // Separamos los selectores del inventario
@@ -96,7 +101,6 @@ export default function SolicitudesSucursal() {
 
     // Cargar productos de la bodega central al montar el componente
     useEffect(() => {
-        console.log('DEBUG - Cargando productos de bodega central...');
         // Cargar productos de la bodega central (ID: 2)
         fetchProductos("bodega_central");
         fetchMarcas("bodega_central");
@@ -106,7 +110,6 @@ export default function SolicitudesSucursal() {
     // Memoizamos los datos del inventario
     const inventarioBodegaCentral = useMemo(() => {
         const productos = inventarios["bodega_central"] || [];
-        console.log('DEBUG - Inventario bodega central (memo):', productos);
         return productos;
     }, [inventarios]);
 
@@ -120,30 +123,28 @@ export default function SolicitudesSucursal() {
         [categorias]
     );
 
-    // Debug: verificar que los productos se cargan
-    console.log('DEBUG - Productos bodega central:', inventarioBodegaCentral);
-    console.log('DEBUG - Marcas bodega central:', marcasBodegaCentral);
-    console.log('DEBUG - Categorías bodega central:', categoriasBodegaCentral);
-    console.log('DEBUG - BODEGA_CENTRAL.id:', BODEGA_CENTRAL.id);
-    console.log('DEBUG - Inventarios completo:', inventarios);
-
     // Estados locales
     const [modalOpen, setModalOpen] = useState(false);
     const [modalResumenOpen, setModalResumenOpen] = useState(false);
-    const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<Solicitud | null>(null);
+    const [modalSeleccionarProductos, setModalSeleccionarProductos] = useState(false);
+    const [modalConfirmarEliminacion, setModalConfirmarEliminacion] = useState(false);
+    const [solicitudAEliminar, setSolicitudAEliminar] = useState<any>(null);
+    const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<any>(null);
     const [search, setSearch] = useState("");
     const [filtroMarca, setFiltroMarca] = useState("");
     const [filtroCategoria, setFiltroCategoria] = useState("");
-    const [modalSeleccionarProductos, setModalSeleccionarProductos] = useState(false);
     const [productoSeleccionado, setProductoSeleccionado] = useState<Producto | null>(null);
     const [cantidadProducto, setCantidadProducto] = useState<number>(1);
+    const [modalSeleccionado, setModalSeleccionado] = useState<any>(null);
+    const [solicitudes, setSolicitudes] = useState<any[]>([]); // Estado para las solicitudes
+    const [errorStock, setErrorStock] = useState<string>("");
+    const [editandoProducto, setEditandoProducto] = useState<number | null>(null);
+    const [cantidadEditando, setCantidadEditando] = useState<number>(1);
 
     // Memoizamos la sucursal del usuario
     const sucursalData = useMemo(() => {
         const sucursalId = usuario?.sucursalId?.toString(); // Convertimos a string si es número
-        console.log('Sucursal ID:', sucursalId); // Para debugging
         const sucursal = SUCURSALES.find(s => s.id === sucursalId);
-        console.log('Sucursal encontrada:', sucursal); // Para debugging
         return sucursal || {
             id: "",
             nombre: "",
@@ -153,65 +154,118 @@ export default function SolicitudesSucursal() {
         };
     }, [usuario?.sucursalId]);
 
-    // Cargar solicitudes existentes al montar el componente (después de que sucursalData esté disponible)
-    useEffect(() => {
-        console.log('DEBUG - Cargando solicitudes existentes...');
-        // Cargar solicitudes de la sucursal del usuario
-        if (usuario?.sucursalId && sucursalData.id) {
-            // Limpiar solicitudes existentes antes de cargar nuevas
-            clearSolicitudes();
-            
-            import('../../services/api').then(({ solicitudesService }) => {
-                solicitudesService.getSolicitudes({ sucursal_id: usuario.sucursalId.toString() })
-                    .then((solicitudesBackend: any[]) => {
-                        console.log('DEBUG - Solicitudes cargadas del backend:', solicitudesBackend);
-                        // Convertir la estructura del backend al formato del frontend
-                        const solicitudesFrontend = solicitudesBackend.map((solicitud: any) => ({
-                            id: solicitud.id_solc,
-                            fecha: solicitud.fecha_creacion,
-                            responsable: solicitud.usuario_nombre,
-                            estado: "Pendiente", // Estado por defecto en el frontend
-                            sucursal: {
-                                id: solicitud.fk_sucursal.toString(),
-                                nombre: solicitud.sucursal_nombre,
-                                direccion: sucursalData.direccion,
-                                rut: sucursalData.rut
-                            },
-                            bodega: solicitud.bodega_nombre,
-                            cargo: usuario?.rol || "",
-                            observaciones: solicitud.observacion || "",
-                            productos: solicitud.productos?.map((prod: any) => ({
-                                codigo: prod.producto_fk.toString(),
-                                nombre: prod.producto_nombre,
-                                descripcion: "",
-                                cantidad: prod.cantidad
-                            })) || [],
-                            aprobador: ""
-                        }));
-                        console.log('DEBUG - Solicitudes convertidas:', solicitudesFrontend);
-                        // Agregar todas las solicitudes al store
-                        solicitudesFrontend.forEach(solicitud => addSolicitud(solicitud));
-                    })
-                    .catch((error: any) => {
-                        console.error('Error al cargar solicitudes:', error);
-                    });
-            });
+    // Función para obtener las solicitudes de la sucursal
+    const fetchSolicitudes = async () => {
+        try {
+            if (sucursalData?.id) {
+                const response = await solicitudesService.getSolicitudes({ 
+                    sucursal_id: sucursalData.id.toString() 
+                });
+                setSolicitudes(response);
+            } else {
+
+            }
+        } catch (error) {
         }
-    }, [usuario?.sucursalId, addSolicitud, clearSolicitudes, sucursalData, usuario?.rol]);
+    };
+
+    // Cargar solicitudes al montar el componente
+    useEffect(() => {
+        fetchSolicitudes();
+    }, [sucursalData?.id]);
+
+    // Funciones para manejar el modal
+    const handleOpenCrear = () => {
+        setModalOpen(true);
+    };
+
+    const handleCloseCrear = () => {
+        setModalOpen(false);
+        // Limpiar el estado de la nueva solicitud
+        setNuevaSolicitud({
+            id: Math.floor(Math.random() * 9000) + 1000,
+            fecha: new Date().toLocaleDateString(),
+            sucursal: sucursalData,
+            bodega: "Bodega Central",
+            responsable: usuario?.nombre || "",
+                            cargo: usuario?.rol || "",
+            observacion: "",
+            productos: [],
+            estado: "Pendiente",
+                            aprobador: ""
+        });
+    };
+
+    const handleOpenResumen = (solicitud: any) => {
+        setSolicitudSeleccionada(solicitud);
+        setModalResumenOpen(true);
+    };
+
+    const handleCloseResumen = () => {
+        setModalResumenOpen(false);
+        setSolicitudSeleccionada(null);
+    };
+
+    const handleEliminarSolicitud = (solicitud: any) => {
+        setSolicitudAEliminar(solicitud);
+        setModalConfirmarEliminacion(true);
+    };
+
+    const handleConfirmarEliminacion = async () => {
+        if (!solicitudAEliminar) return;
+
+        try {
+            await solicitudesService.deleteSolicitud(solicitudAEliminar.id_solc.toString());
+            
+            // Refrescar la lista de solicitudes
+            await fetchSolicitudes();
+            
+            // Cerrar modal y limpiar
+            setModalConfirmarEliminacion(false);
+            setSolicitudAEliminar(null);
+            
+            alert("Solicitud eliminada exitosamente junto con todos sus derivados.");
+        } catch (error) {
+            console.error("Error al eliminar la solicitud:", error);
+            alert("Hubo un error al eliminar la solicitud. Por favor, intente de nuevo.");
+        }
+    };
+
+    const handleCancelarEliminacion = () => {
+        setModalConfirmarEliminacion(false);
+        setSolicitudAEliminar(null);
+    };
+
+    const generarOCIFunction = async (solicitud: any) => {
+        // Función para generar el PDF de OCI
+        
+        // Usar directamente los datos del backend que ya incluyen todos los campos necesarios
+        try {
+            await generarOCI(solicitud);
+        } catch (error) {
+            alert("Error al generar el documento OCI");
+        }
+    };
 
     // Memoizamos los productos filtrados
     const productosFiltrados = useMemo(() => 
-        inventarioBodegaCentral.filter(prod =>
-            prod.name.toLowerCase().includes(search.toLowerCase()) &&
-            (!filtroMarca || prod.brand === filtroMarca) &&
-            (!filtroCategoria || prod.category === filtroCategoria)
-        ),
+        inventarioBodegaCentral.filter(prod => {
+            const matchesSearch = prod.name.toLowerCase().includes(search.toLowerCase());
+            
+            const marcaValue = typeof filtroMarca === 'string' ? filtroMarca : filtroMarca?.nombre || filtroMarca;
+            const matchesMarca = !filtroMarca || prod.brand === marcaValue;
+            
+            const categoriaValue = typeof filtroCategoria === 'string' ? filtroCategoria : filtroCategoria?.nombre || filtroCategoria;
+            const matchesCategoria = !filtroCategoria || prod.category === categoriaValue;
+            
+            return matchesSearch && matchesMarca && matchesCategoria;
+        }),
         [inventarioBodegaCentral, search, filtroMarca, filtroCategoria]
     );
 
     // Memoizamos el estado inicial de nuevaSolicitud
     const estadoInicialSolicitud = useMemo(() => ({
-        id: solicitudes.length + 1,
+        id: Math.floor(Math.random() * 9000) + 1000,
         sucursal: {
             id: sucursalData.id,
             nombre: sucursalData.nombre,
@@ -222,109 +276,145 @@ export default function SolicitudesSucursal() {
         fecha: new Date().toISOString().slice(0, 10),
         responsable: usuario?.nombre || "",
         cargo: usuario?.rol || "",
-        observaciones: "",
+        observacion: "",
         productos: [],
         estado: "Pendiente",
         aprobador: ""
-    }), [solicitudes.length, sucursalData, usuario]);
+    }), [sucursalData, usuario]);
 
     const [nuevaSolicitud, setNuevaSolicitud] = useState<Solicitud>(estadoInicialSolicitud);
-
-    // Funciones memoizadas
-    const handleOpenCrear = useCallback(() => {
-        setNuevaSolicitud(estadoInicialSolicitud);
-        setModalOpen(true);
-    }, [estadoInicialSolicitud]);
-
-    const handleCloseCrear = useCallback(() => {
-        setModalOpen(false);
-    }, []);
-
-    const handleOpenResumen = useCallback((solicitud: Solicitud) => {
-        setSolicitudSeleccionada(solicitud);
-        setModalResumenOpen(true);
-    }, []);
-
-    const handleCloseResumen = useCallback(() => {
-        setModalResumenOpen(false);
-        setSolicitudSeleccionada(null);
-    }, []);
 
     const handleSeleccionarProducto = useCallback((prod: Producto) => {
         setProductoSeleccionado(prod);
         setCantidadProducto(1);
+        setErrorStock("");
     }, []);
 
     const handleAgregarProductoSeleccionado = useCallback(() => {
-        if (!productoSeleccionado || cantidadProducto < 1 || cantidadProducto > productoSeleccionado.stock) return;
+        if (!productoSeleccionado) return;
         
-        setNuevaSolicitud(prev => ({
-            ...prev,
-            productos: [
-                ...prev.productos,
-                {
+        // Validar stock
+        if (cantidadProducto > productoSeleccionado.stock) {
+            setErrorStock(`No hay suficiente stock. Disponible: ${productoSeleccionado.stock}`);
+            return;
+        }
+        
+        if (cantidadProducto <= 0) {
+            setErrorStock("La cantidad debe ser mayor a 0");
+            return;
+        }
+        
+        const productoConCantidad: ProductoSolicitud = {
                     codigo: productoSeleccionado.id_prodc?.toString() || productoSeleccionado.code,
                     nombre: productoSeleccionado.name,
                     descripcion: productoSeleccionado.description,
-                    cantidad: cantidadProducto
+                    cantidad: cantidadProducto,
+            id_prodc: productoSeleccionado.id_prodc,
+            stock_disponible: productoSeleccionado.stock
+        };
+        
+        setNuevaSolicitud(prev => {
+            const existente = prev.productos.find(p => p.id_prodc === productoConCantidad.id_prodc);
+            if (existente) {
+                return {
+                    ...prev,
+                    productos: prev.productos.map(p => 
+                        p.id_prodc === existente.id_prodc 
+                            ? { ...p, cantidad: cantidadProducto }
+                            : p
+                    )
+                };
                 }
-            ]
-        }));
+            return { ...prev, productos: [...prev.productos, productoConCantidad] };
+        });
+        
         setProductoSeleccionado(null);
         setCantidadProducto(1);
+        setErrorStock("");
     }, [productoSeleccionado, cantidadProducto]);
 
-    const handleCrearSolicitud = useCallback(async () => {
-        try {
-            // Preparar datos para el backend
-            const solicitudData = {
-                observacion: nuevaSolicitud.observaciones,
-                fk_sucursal: parseInt(nuevaSolicitud.sucursal.id),
-                fk_bodega: 2, // ID de la bodega central
-                usuarios_fk: usuario?.id || 1, // ID del usuario actual (corregido)
-                productos: nuevaSolicitud.productos.map(prod => ({
-                    producto_id: parseInt(prod.codigo), // Ahora el código es el ID real del producto
-                    cantidad: prod.cantidad
-                }))
-            };
+    const handleEditarProducto = (index: number) => {
+        const producto = nuevaSolicitud.productos[index];
+        setEditandoProducto(index);
+        setCantidadEditando(producto.cantidad);
+        setErrorStock("");
+    };
 
-            // Crear solicitud en el backend usando el servicio directamente
-            const { solicitudesService } = await import('../../services/api');
-            const nuevaSolicitudBackend = await solicitudesService.createSolicitud(solicitudData);
-            
-            // Usar los datos del formulario pero con el ID del backend
-            const solicitudFrontend = {
-                ...nuevaSolicitud,
-                id: nuevaSolicitudBackend.id_solc, // Solo usar el ID del backend
-                fecha: nuevaSolicitud.fecha // Mantener la fecha del formulario
-            };
-            
-            // Agregar al store local
-            addSolicitud(solicitudFrontend);
-            
-            // Generar OCI PDF
-            generarOCI({
-                numeroOCI: nuevaSolicitud.id,
-                fecha: nuevaSolicitud.fecha,
-                sucursal: {
-                    nombre: nuevaSolicitud.sucursal.nombre,
-                    direccion: nuevaSolicitud.sucursal.direccion,
-                    rut: nuevaSolicitud.sucursal.rut,
-                },
-                responsable: nuevaSolicitud.responsable,
-                cargo: nuevaSolicitud.cargo,
-                productos: nuevaSolicitud.productos,
-                observaciones: nuevaSolicitud.observaciones,
-                estado: nuevaSolicitud.estado,
-                aprobador: nuevaSolicitud.aprobador
-            });
-            
-            setModalOpen(false);
-        } catch (error) {
-            console.error('Error al crear solicitud:', error);
-            // Aquí podrías mostrar un mensaje de error al usuario
+    const handleGuardarEdicion = () => {
+        if (editandoProducto === null) return;
+        
+        const producto = nuevaSolicitud.productos[editandoProducto];
+        
+        // Validar stock
+        if (cantidadEditando > producto.stock_disponible) {
+            setErrorStock(`No hay suficiente stock. Disponible: ${producto.stock_disponible}`);
+            return;
         }
-    }, [nuevaSolicitud, addSolicitud, usuario, sucursalData]);
+        
+        if (cantidadEditando <= 0) {
+            setErrorStock("La cantidad debe ser mayor a 0");
+            return;
+        }
+        
+        setNuevaSolicitud(prev => ({
+            ...prev,
+            productos: prev.productos.map((p, i) => 
+                i === editandoProducto ? { ...p, cantidad: cantidadEditando } : p
+            )
+        }));
+        
+        setEditandoProducto(null);
+        setCantidadEditando(1);
+        setErrorStock("");
+    };
+
+    const handleCancelarEdicion = () => {
+        setEditandoProducto(null);
+        setCantidadEditando(1);
+        setErrorStock("");
+    };
+
+    const handleEliminarProducto = (index: number) => {
+        setNuevaSolicitud(prev => ({
+            ...prev,
+            productos: prev.productos.filter((_, i) => i !== index)
+        }));
+    };
+
+    const handleCrearSolicitud = async () => {
+        if (nuevaSolicitud.productos.length === 0) {
+            alert("Debe agregar al menos un producto a la solicitud.");
+            return;
+        }
+
+        // 1. Construir el payload correcto para el backend
+            const solicitudData = {
+            observacion: nuevaSolicitud.observacion,
+            fk_sucursal: parseInt(sucursalData.id),
+            fk_bodega: parseInt(BODEGA_CENTRAL.id),
+            usuarios_fk: usuario?.id,
+            productos: nuevaSolicitud.productos.map(p => ({
+                producto_id: parseInt(p.id_prodc || p.codigo),
+                cantidad: p.cantidad,
+            })),
+        };
+
+        try {
+            // 2. Enviar la solicitud al backend
+            const response = await solicitudesService.createSolicitud(solicitudData);
+            
+            // 3. Refrescar la lista de solicitudes desde el servidor
+            await fetchSolicitudes(); 
+            
+            // 4. Cerrar modal y limpiar
+            handleCloseCrear();
+            alert("Solicitud creada exitosamente.");
+
+        } catch (error) {
+            console.error("Error al crear la solicitud:", error);
+            alert("Hubo un error al crear la solicitud. Por favor, intente de nuevo.");
+        }
+    };
 
     // Constantes memoizadas
     const puedeSolicitar = useMemo(() => 
@@ -389,30 +479,28 @@ export default function SolicitudesSucursal() {
                                 </TableRow>
                             ) : (
                                 solicitudes.map((row: any, index: number) => (
-                                    <TableRow key={`${row.id}-${index}`}>
-                                        <TableCell style={{ color: "#fff" }}>{row.id}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.fecha || 'N/A'}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.responsable || 'N/A'}</TableCell>
+                                    <TableRow key={`${row.id_solc}-${index}`}>
+                                        <TableCell style={{ color: "#fff" }}>{row.id_solc}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>
+                                            {row.fecha_creacion ? new Date(row.fecha_creacion).toLocaleDateString() : 'N/A'}
+                                        </TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{row.usuario_nombre || 'N/A'}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
                                                 ? row.productos.reduce((acc: number, prod: { cantidad: number }) => acc + Number(prod.cantidad), 0)
                                                 : 0}
                                         </TableCell>
-                                        <TableCell style={{
-                                            color:
-                                                row.estado === "aprobada"
-                                                    ? "#4CAF50"
-                                                    : row.estado === "denegada"
-                                                        ? "#FF4D4F"
-                                                        : "#FFD700"
-                                        }}>
-                                            {(row.estado || "Pendiente").charAt(0).toUpperCase() + (row.estado || "Pendiente").slice(1)}
+                                        <TableCell>
+                                            <EstadoBadge 
+                                                estado={row.estado || "pendiente"} 
+                                                tipo="solicitud"
+                                            />
                                         </TableCell>
                                         <TableCell>
                                             <Button
                                                 variant="outlined"
                                                 startIcon={<VisibilityIcon />}
-                                                style={{ borderColor: "#FFD700", color: "#FFD700" }}
+                                                style={{ borderColor: "#FFD700", color: "#FFD700", marginRight: "8px" }}
                                                 onClick={() => handleOpenResumen(row)}
                                             >
                                                 Resumen
@@ -420,10 +508,16 @@ export default function SolicitudesSucursal() {
                                             <Button
                                                 variant="outlined"
                                                 style={{ borderColor: "#4CAF50", color: "#4CAF50" }}
-                                                onClick={() => generarOCI(row)}
+                                                onClick={() => generarOCIFunction(row)}
                                             >
                                                 Ver OCI PDF
                                             </Button>
+                                            <IconButton
+                                                color="error"
+                                                onClick={() => handleEliminarSolicitud(row)}
+                                            >
+                                                <DeleteIcon />
+                                            </IconButton>
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -431,8 +525,220 @@ export default function SolicitudesSucursal() {
                         </TableBody>
                     </Table>
                 </TableContainer>
-                {/* Modal de resumen */}
-                    <Dialog open={modalOpen} onClose={handleCloseCrear} maxWidth="sm" fullWidth>
+                {/* Modal de resumen de solicitud existente */}
+                <Dialog open={modalResumenOpen} onClose={handleCloseResumen} maxWidth="md" fullWidth>
+                    <DialogTitle sx={{ 
+                        background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                        color: "#FFD700",
+                        borderBottom: "2px solid #FFD700",
+                        fontWeight: 600
+                    }}>
+                        📋 Detalles de Solicitud #{solicitudSeleccionada?.id_solc}
+                    </DialogTitle>
+                    <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
+                        {solicitudSeleccionada && (
+                            <>
+                                {/* Información principal */}
+                                <Box sx={{ 
+                                    display: "grid", 
+                                    gridTemplateColumns: "1fr 1fr", 
+                                    gap: 2, 
+                                    mb: 3,
+                                    p: 2,
+                                    bgcolor: "#232323",
+                                    borderRadius: 2,
+                                    border: "1px solid #333"
+                                }}>
+                                <TextField
+                                    label="N° OCI"
+                                    value={solicitudSeleccionada.id_solc}
+                                        InputProps={{ 
+                                            readOnly: true,
+                                            sx: { color: "#FFD700", fontWeight: 600 }
+                                        }}
+                                    size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
+                                />
+                                <TextField
+                                    label="Fecha de emisión"
+                                        value={solicitudSeleccionada.fecha_creacion ? new Date(solicitudSeleccionada.fecha_creacion).toLocaleDateString('es-ES', {
+                                            year: 'numeric',
+                                            month: 'long',
+                                            day: 'numeric'
+                                        }) : 'N/A'}
+                                        InputProps={{ 
+                                            readOnly: true,
+                                            sx: { color: "#fff" }
+                                        }}
+                                    size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
+                                />
+                                <TextField
+                                    label="Sucursal solicitante"
+                                    value={solicitudSeleccionada.sucursal_nombre || 'N/A'}
+                                        InputProps={{ 
+                                            readOnly: true,
+                                            sx: { color: "#fff" }
+                                        }}
+                                    size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
+                                />
+                                <TextField
+                                    label="Persona solicitante"
+                                    value={solicitudSeleccionada.usuario_nombre || 'N/A'}
+                                        InputProps={{ 
+                                            readOnly: true,
+                                            sx: { color: "#fff" }
+                                        }}
+                                    size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
+                                    />
+                                </Box>
+
+                                {/* Estado con badge */}
+                                <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 1 }}>
+                                        Estado de la solicitud
+                                    </Typography>
+                                    <Chip
+                                        label={(solicitudSeleccionada.estado || "Pendiente").charAt(0).toUpperCase() + (solicitudSeleccionada.estado || "Pendiente").slice(1)}
+                                        sx={{
+                                            bgcolor: solicitudSeleccionada.estado === "Aprobada" ? "#4CAF50" : 
+                                                    solicitudSeleccionada.estado === "Denegada" ? "#f44336" : 
+                                                    solicitudSeleccionada.estado === "En camino" ? "#2196F3" : "#FF9800",
+                                            color: "#fff",
+                                            fontWeight: 600,
+                                            fontSize: "0.9rem"
+                                        }}
+                                    />
+                                </Box>
+
+                                {/* Observación */}
+                                {solicitudSeleccionada.observacion && (
+                                    <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                        <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 1 }}>
+                                            Observaciones
+                                        </Typography>
+                                        <Typography sx={{ color: "#fff", fontStyle: "italic" }}>
+                                            {solicitudSeleccionada.observacion}
+                                        </Typography>
+                                    </Box>
+                        )}
+
+                                {/* Productos */}
+                                <Box sx={{ p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                                        📦 Productos solicitados ({solicitudSeleccionada?.productos?.length || 0})
+                                    </Typography>
+                                    
+                                {solicitudSeleccionada?.productos?.length === 0 ? (
+                                        <Box sx={{ 
+                                            textAlign: "center", 
+                                            py: 3, 
+                                            color: "#8A8A8A",
+                                            fontStyle: "italic"
+                                        }}>
+                                            No hay productos en esta solicitud
+                                        </Box>
+                                ) : (
+                                        <TableContainer>
+                                            <Table size="small">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Código</TableCell>
+                                                        <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Producto</TableCell>
+                                                        <TableCell sx={{ color: "#FFD700", fontWeight: 600 }} align="right">Cantidad</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {solicitudSeleccionada?.productos?.map((prod: any, idx: number) => (
+                                                        <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
+                                                            <TableCell sx={{ color: "#fff", fontFamily: "monospace" }}>
+                                                                {prod.producto_codigo || 'N/A'}
+                                                            </TableCell>
+                                                            <TableCell sx={{ color: "#fff" }}>
+                                                                {prod.producto_nombre || 'N/A'}
+                                                            </TableCell>
+                                                            <TableCell align="right" sx={{ color: "#FFD700", fontWeight: 600 }}>
+                                                                {prod.cantidad}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    )}
+                                </Box>
+                            </>
+                        )}
+                    </DialogContent>
+                    <DialogActions sx={{ 
+                        bgcolor: "#1a1a1a", 
+                        borderTop: "1px solid #333",
+                        p: 2
+                    }}>
+                        <Button 
+                            onClick={handleCloseResumen} 
+                            sx={{ 
+                                color: "#FFD700",
+                                borderColor: "#FFD700",
+                                "&:hover": {
+                                    borderColor: "#FFD700",
+                                    bgcolor: "rgba(255, 215, 0, 0.1)"
+                                }
+                            }}
+                            variant="outlined"
+                        >
+                            Cerrar
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                if (solicitudSeleccionada) {
+                                    generarOCIFunction(solicitudSeleccionada);
+                                }
+                            }}
+                            sx={{ 
+                                color: "#fff", 
+                                background: "#4CAF50", 
+                                fontWeight: 600,
+                                "&:hover": {
+                                    background: "#45a049"
+                                }
+                            }}
+                            variant="contained"
+                            startIcon={<span>📄</span>}
+                        >
+                            Generar OCI PDF
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Modal de crear nueva solicitud */}
+                <Dialog open={modalOpen} onClose={handleCloseCrear} maxWidth="md" fullWidth>
                         <DialogTitle>Crear nueva solicitud</DialogTitle>
                         <DialogContent>
                             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "12px" }}>
@@ -482,11 +788,11 @@ export default function SolicitudesSucursal() {
                                     size="small"
                                 />
                                 <TextField
-                                    label="Observaciones adicionales"
-                                    value={nuevaSolicitud.observaciones}
+                                label="Observación"
+                                value={nuevaSolicitud.observacion}
                                     onChange={e => setNuevaSolicitud((prev: any) => ({
                                         ...prev,
-                                        observaciones: e.target.value
+                                    observacion: e.target.value
                                     }))}
                                     size="small"
                                     multiline
@@ -511,26 +817,125 @@ export default function SolicitudesSucursal() {
                                     size="small"
                                 />
                             </div>
-                            <div>
-                                <b>Productos solicitados:</b>
-                                <ul>
-                                    {nuevaSolicitud.productos.length === 0 ? (
-                                        <li style={{ color: "#8A8A8A" }}>No hay productos agregados.</li>
-                                    ) : (
-                                        nuevaSolicitud.productos.map((prod: any, idx: number) => (
-                                            <li key={idx}>
-                                                <b>Código:</b> {prod.codigo} — <b>Descripción:</b> {prod.descripcion} — <b>Cantidad:</b> {prod.cantidad}
-                                            </li>
-                                        ))
-                                    )}
-                                </ul>
+                        
+                        {/* Sección de productos seleccionados */}
+                        <div style={{ marginBottom: "16px" }}>
+                            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+                                <Typography variant="h6">Productos seleccionados ({nuevaSolicitud.productos.length})</Typography>
                                 <Button
                                 variant="contained"
-                                style={{ background: "#FFD700", color: "#232323", fontWeight: 600, marginBottom: 12 }}
+                                    startIcon={<AddIcon />}
+                                    style={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
                                 onClick={() => setModalSeleccionarProductos(true)}
                                 >
-                                Seleccionar productos
+                                    Agregar productos
                                 </Button>
+                            </Box>
+                            
+                            {nuevaSolicitud.productos.length === 0 ? (
+                                <Alert severity="info">
+                                    No hay productos agregados. Haz clic en "Agregar productos" para comenzar.
+                                </Alert>
+                            ) : (
+                                <TableContainer component={Paper} style={{ background: "#f5f5f5" }}>
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell><strong>Código</strong></TableCell>
+                                                <TableCell><strong>Producto</strong></TableCell>
+                                                <TableCell><strong>Cantidad</strong></TableCell>
+                                                <TableCell><strong>Stock Disponible</strong></TableCell>
+                                                <TableCell><strong>Acciones</strong></TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {nuevaSolicitud.productos.map((producto, index) => (
+                                                <TableRow key={index}>
+                                                    <TableCell>{producto.codigo}</TableCell>
+                                                    <TableCell>{producto.nombre}</TableCell>
+                                                    <TableCell>
+                                                        {editandoProducto === index ? (
+                                                            <TextField
+                                                                type="number"
+                                                                value={cantidadEditando}
+                                                                onChange={(e) => setCantidadEditando(Number(e.target.value))}
+                                                                size="small"
+                                                                inputProps={{
+                                                                    min: 1,
+                                                                    max: producto.stock_disponible
+                                                                }}
+                                                                error={cantidadEditando > producto.stock_disponible || cantidadEditando <= 0}
+                                                                helperText={
+                                                                    cantidadEditando > producto.stock_disponible 
+                                                                        ? `Máximo: ${producto.stock_disponible}`
+                                                                        : cantidadEditando <= 0 
+                                                                        ? "Mínimo: 1"
+                                                                        : ""
+                                                                }
+                                                            />
+                                                        ) : (
+                                                            <Chip 
+                                                                label={producto.cantidad}
+                                                                color={producto.cantidad > producto.stock_disponible ? "error" : "default"}
+                                                            />
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Chip 
+                                                            label={producto.stock_disponible}
+                                                            color={producto.cantidad > producto.stock_disponible ? "error" : "success"}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {editandoProducto === index ? (
+                                                            <Box sx={{ display: "flex", gap: 1 }}>
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    color="success"
+                                                                    onClick={handleGuardarEdicion}
+                                                                    disabled={cantidadEditando > producto.stock_disponible || cantidadEditando <= 0}
+                                                                >
+                                                                    ✓
+                                                                </IconButton>
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    color="error"
+                                                                    onClick={handleCancelarEdicion}
+                                                                >
+                                                                    ✕
+                                                                </IconButton>
+                                                            </Box>
+                                                        ) : (
+                                                            <Box sx={{ display: "flex", gap: 1 }}>
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    color="primary"
+                                                                    onClick={() => handleEditarProducto(index)}
+                                                                >
+                                                                    <EditIcon fontSize="small" />
+                                                                </IconButton>
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    color="error"
+                                                                    onClick={() => handleEliminarProducto(index)}
+                                                                >
+                                                                    <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </Box>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                            )}
+                            
+                            {errorStock && (
+                                <Alert severity="error" sx={{ mt: 2 }}>
+                                    {errorStock}
+                                </Alert>
+                            )}
                             </div>
                         </DialogContent>
                         <DialogActions>
@@ -545,7 +950,7 @@ export default function SolicitudesSucursal() {
                         </DialogActions>
                     </Dialog>
 
-                    <Dialog open={modalSeleccionarProductos} onClose={() => setModalSeleccionarProductos(false)} maxWidth="md" fullWidth>
+                <Dialog open={modalSeleccionarProductos} onClose={() => setModalSeleccionarProductos(false)} maxWidth="lg" fullWidth>
                         <DialogTitle>Seleccionar productos de la bodega central</DialogTitle>
                         <DialogContent>
                             {/* Filtros y buscador */}
@@ -565,7 +970,11 @@ export default function SolicitudesSucursal() {
                                     sx={{ minWidth: 120 }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
-                                    {marcasBodegaCentral.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
+                                {marcasBodegaCentral.map((m, index) => (
+                                    <MenuItem key={`marca-${index}`} value={typeof m === 'string' ? m : m.nombre || m}>
+                                        {typeof m === 'string' ? m : m.nombre || m}
+                                    </MenuItem>
+                                ))}
                                 </TextField>
                                 <TextField
                                     select
@@ -576,7 +985,11 @@ export default function SolicitudesSucursal() {
                                     sx={{ minWidth: 120 }}
                                 >
                                     <MenuItem value="">Todas</MenuItem>
-                                    {categoriasBodegaCentral.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                                {categoriasBodegaCentral.map((c, index) => (
+                                    <MenuItem key={`categoria-${index}`} value={typeof c === 'string' ? c : c.nombre || c}>
+                                        {typeof c === 'string' ? c : c.nombre || c}
+                                    </MenuItem>
+                                ))}
                                 </TextField>
                             </Box>
                             {/* Vista tipo inventario */}
@@ -623,24 +1036,64 @@ export default function SolicitudesSucursal() {
                                 }}
                                 size="small"
                                 sx={{ mt: 2 }}
-                            />
+                            error={cantidadProducto > (productoSeleccionado?.stock || 0) || cantidadProducto <= 0}
+                            helperText={
+                                cantidadProducto > (productoSeleccionado?.stock || 0)
+                                    ? `Máximo disponible: ${productoSeleccionado?.stock}`
+                                    : cantidadProducto <= 0
+                                    ? "La cantidad debe ser mayor a 0"
+                                    : ""
+                            }
+                        />
+                        {errorStock && (
+                            <Alert severity="error" sx={{ mt: 2 }}>
+                                {errorStock}
+                            </Alert>
+                        )}
                         </DialogContent>
                         <DialogActions>
                             <Button onClick={() => setProductoSeleccionado(null)}>Cancelar</Button>
                             <Button
-                                onClick={handleAgregarProductoSeleccionado}
-                                disabled={
-                                    !cantidadProducto ||
-                                    cantidadProducto < 1 ||
-                                    cantidadProducto > (productoSeleccionado?.stock || 1)
-                                }
-                                variant="contained"
-                                style={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
+                            variant="contained"
+                            onClick={handleAgregarProductoSeleccionado}
+                            disabled={!productoSeleccionado || cantidadProducto > (productoSeleccionado?.stock || 0) || cantidadProducto <= 0}
                             >
                                 Agregar
                             </Button>
                         </DialogActions>
                     </Dialog>
+
+                {/* Modal de confirmación de eliminación */}
+                <Dialog open={modalConfirmarEliminacion} onClose={handleCancelarEliminacion}>
+                    <DialogTitle>Confirmar eliminación</DialogTitle>
+                    <DialogContent>
+                        <p>¿Está seguro de que desea eliminar la solicitud #{solicitudAEliminar?.id_solc}?</p>
+                        <p style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
+                            Esta acción eliminará permanentemente:
+                        </p>
+                        <ul>
+                            <li>La solicitud y todos sus productos asociados</li>
+                            <li>Los pedidos relacionados con esta solicitud</li>
+                            <li>Los detalles de pedidos asociados</li>
+                            <li>Las notificaciones relacionadas</li>
+                            <li>El historial asociado</li>
+                        </ul>
+                        <p style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
+                            Esta acción no se puede deshacer.
+                        </p>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCancelarEliminacion} style={{ color: "#FFD700" }}>
+                            Cancelar
+                        </Button>
+                        <Button 
+                            onClick={handleConfirmarEliminacion} 
+                            style={{ color: "#ffffff", background: "#ff6b6b", fontWeight: 600 }}
+                        >
+                            Eliminar definitivamente
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             </div>
         </Layout>
     );

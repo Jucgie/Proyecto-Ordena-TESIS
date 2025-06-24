@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import Layout from "../../components/layout/layout";
 import {
     Select, MenuItem, FormControl, InputLabel, TextField,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
-    Dialog, DialogTitle, DialogContent, DialogActions, Snackbar
+    Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Box, Typography, Alert, Chip
 } from "@mui/material";
 import MuiAlert from "@mui/material/Alert";
 import ArrowDropUpIcon from '@mui/icons-material/ArrowDropUp';
@@ -25,6 +25,8 @@ import { useUsuariosStore } from "../../store/useUsuarioStore";
 import { useProveedoresStore } from "../../store/useProveedorStore";
 import { useInventariosStore } from "../../store/useProductoStore";
 import { usuarioService } from "../../services/usuarioService";
+import { solicitudesService, pedidosService, personalEntregaService } from "../../services/api";
+import EstadoBadge from "../../components/EstadoBadge";
 
 // Interfaces
 interface Producto {
@@ -45,8 +47,10 @@ interface Pedido {
     tipo: "ingreso" | "salida";
     fecha: string;
     numRem: string;
-    numFactura: string;
-    numOrden: string;
+    numGuiaDespacho: string;
+    archivoGuia?: File | null;
+    nombreArchivo?: string;
+    observacionesRecepcion?: string;
     proveedor: Proveedor;
     productos: Producto[];
     cantidad: number;
@@ -55,6 +59,7 @@ interface Pedido {
     sucursalDestino?: string;
     asignado?: string;
     observaciones?: string;
+    observacion?: string;
     ociAsociada?: string;
     sucursal?: string;
     bodegaOrigen?: string;
@@ -65,6 +70,7 @@ interface Pedido {
 
 interface Usuario {
     id: string;
+    id_us?: string;
     nombre: string;
     rol: string;
     bodega?: {
@@ -102,27 +108,25 @@ function BotonAccion({ children, startIcon, ...props }: { children: React.ReactN
 }
 
 export default function PedidosBodega() {
-    const { pedidos, setPedidos, clearPedidos, transferencias, setTransferencias, solicitudesTransferidas, addPedido, removeSolicitudTransferida } = useBodegaStore() as {
-        pedidos: Pedido[];
-        setPedidos: (pedidos: Pedido[]) => void;
-        clearPedidos: () => void;
-        transferencias: number;
-        setTransferencias: (cantidad: number) => void;
-        solicitudesTransferidas: any[];
-        addPedido: (pedido: Pedido) => void;
-        removeSolicitudTransferida: (id: number) => void;
-    };
+    const { 
+        pedidos, 
+        addPedido, 
+        clearPedidos, 
+        transferencias, 
+        setTransferencias, 
+        solicitudesTransferidas, 
+        removeSolicitudTransferida, 
+        clearSolicitudesTransferidas, 
+        addSolicitudesTransferidas, 
+        clearTransferidasInvalidas 
+    } = useBodegaStore();
 
     const usuario = useAuthStore((state: any) => state.usuario);
     const { addProveedor } = useProveedoresStore.getState() as { addProveedor: (proveedor: Proveedor) => void };
     const [showSnackbar, setShowSnackbar] = useState(transferencias > 0);
     const { usuarios, setUsuarios } = useUsuariosStore() as { usuarios: Usuario[], setUsuarios: (usuarios: Usuario[]) => void };
     const bodegaIdActual = usuario?.bodega?.id;
-    const transportistas = usuarios.filter(
-        (u: Usuario) =>
-            u.rol === "transportista" &&
-            (u.bodega?.id === bodegaIdActual || u.sucursal?.id === bodegaIdActual)
-    );
+    const [transportistas, setTransportistas] = useState<Usuario[]>([]);
 
     const pedidosArray = Array.isArray(pedidos) ? pedidos : [];
 
@@ -130,12 +134,58 @@ export default function PedidosBodega() {
     const [solicitudADespachar, setSolicitudADespachar] = useState<any>(null);
     const [transportistaSeleccionado, setTransportistaSeleccionado] = useState<string>("");
     const marcas = useMemo(() => {
-        return useInventariosStore.getState().marcas["bodega-central"] || [];
+        const marcasData = useInventariosStore.getState().marcas["bodega-central"] || [];
+        return marcasData.map((marca: any) => marca.nombre || marca);
     }, []);
     
     const categorias = useMemo(() => {
-        return useInventariosStore.getState().categorias["bodega-central"] || [];
+        const categoriasData = useInventariosStore.getState().categorias["bodega-central"] || [];
+        return categoriasData.map((categoria: any) => categoria.nombre || categoria);
     }, []);
+
+    const fetchSolicitudesTransferidas = useCallback(async () => {
+        if (!usuario?.bodega?.id_bdg) return;
+        try {
+            const solicitudes = await solicitudesService.getSolicitudes({ 
+                bodega_id: usuario.bodega.id_bdg.toString(),
+            });
+
+            // Filtrar solo solicitudes aprobadas que NO estén despachadas
+            const transferidas = solicitudes.filter(
+                (s: any) => s.estado === "aprobada" && !s.despachada
+            );
+            
+            console.log('Solicitudes totales:', solicitudes.length);
+            console.log('Solicitudes aprobadas no despachadas:', transferidas.length);
+            
+            const uniqueTransferidasMap = new Map();
+            transferidas.forEach((solicitud: any) => {
+                if (!uniqueTransferidasMap.has(solicitud.id_solc)) {
+                    uniqueTransferidasMap.set(solicitud.id_solc, solicitud);
+                }
+            });
+            const uniqueTransferidas = Array.from(uniqueTransferidasMap.values());
+
+            const transferidasMap = uniqueTransferidas.map((solicitud: any) => ({
+                id: solicitud.id_solc,
+                fecha: solicitud.fecha_creacion,
+                responsable: solicitud.usuario_nombre,
+                productos: solicitud.productos.map((p: any) => ({
+                    nombre: p.producto_nombre,
+                    cantidad: p.cantidad
+                })),
+                estado: "pendiente",
+                sucursal: solicitud.sucursal_nombre,
+                observacion: solicitud.observacion || "",
+                sucursalDestino: solicitud.sucursal_nombre,
+            }));
+
+            clearSolicitudesTransferidas();
+            addSolicitudesTransferidas(transferidasMap);
+        } catch (error) {
+            console.error("Error reconstruyendo solicitudes transferidas:", error);
+        }
+    }, [usuario?.bodega?.id_bdg, clearSolicitudesTransferidas, addSolicitudesTransferidas]);
 
     useEffect(() => {
         if (transferencias > 0) {
@@ -146,6 +196,29 @@ export default function PedidosBodega() {
     useEffect(() => {
       usuarioService.getUsuarios().then(setUsuarios);
     }, [setUsuarios]);
+
+    useEffect(() => {
+        // Solo cargar solicitudes transferidas si no hay ninguna guardada
+        if (solicitudesTransferidas.length === 0) {
+            fetchSolicitudesTransferidas();
+        }
+    }, [fetchSolicitudesTransferidas, solicitudesTransferidas.length]);
+
+    useEffect(() => {
+        async function fetchTransportistas() {
+            const bodegaId = usuario?.bodega;
+            if (bodegaId) {
+                try {
+                    const data = await usuarioService.getTransportistasPorBodega(bodegaId.toString());
+                    setTransportistas(data);
+                } catch (error) {
+                    console.error("Error fetching transportistas:", error);
+                    setTransportistas([]);
+                }
+            }
+        }
+        fetchTransportistas();
+    }, [usuario?.bodega]);
 
     const handleSnackbarClick = () => {
         setShowSnackbar(false);
@@ -161,68 +234,114 @@ export default function PedidosBodega() {
         setTransferencias(0);
     };
 
-    const despacharSolicitud = (solicitud: any) => {
-        let sucursalId = "";
-        if (solicitud.sucursal?.id) {
-            sucursalId = solicitud.sucursal.id;
-        } else if (typeof solicitud.sucursal === "string") {
-            const sucursalObj = SUCURSALES.find(s => s.nombre === solicitud.sucursal);
-            sucursalId = sucursalObj?.id || solicitud.sucursal;
-        } else if (solicitud.sucursalDestino) {
-            const sucursalObj = SUCURSALES.find(s => s.nombre === solicitud.sucursalDestino);
-            sucursalId = sucursalObj?.id || solicitud.sucursalDestino;
-        } else if (solicitud.sucursal?.nombre) {
-            const sucursalObj = SUCURSALES.find(s => s.nombre === solicitud.sucursal.nombre);
-            sucursalId = sucursalObj?.id || "";
+    const despacharSolicitud = async (solicitud: any) => {
+        if (!solicitud || !solicitud.id) {
+            console.error("Intento de despachar una solicitud inválida", solicitud);
+            return;
         }
 
-        console.log('Creando pedido de salida con sucursalId:', sucursalId);
+        console.log(`Intentando despachar solicitud ID: ${solicitud.id}`);
 
-        const nuevoPedido: Pedido = {
-            id: Date.now(),
-            fecha: new Date().toISOString().slice(0, 10),
-            responsable: usuario?.nombre || "Responsable Bodega",
-            productos: solicitud.productos,
-            sucursalDestino: sucursalId,
-            cantidad: solicitud.productos.reduce((acc: number, p: any) => acc + p.cantidad, 0),
-            tipo: "salida" as const,
-            asignado: solicitud.asignado || usuario?.nombre || solicitud.responsable,
-            ociAsociada: solicitud.id,
-            observaciones: solicitud.observaciones,
-            bodegaOrigen: usuario?.bodega?.nombre || "Bodega Central",
-            direccionBodega: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción",
-            direccionSucursal: solicitud.direccion || "-",
-            patenteVehiculo: solicitud.patenteVehiculo || "-",
-            estado: "En camino",
-            numRem: "",
-            numFactura: "",
-            numOrden: "",
-            proveedor: {
-                nombre: "",
-                rut: "",
-                contacto: ""
+        // 1. Marcar como despachada en el backend
+        try {
+            await solicitudesService.updateSolicitud(solicitud.id.toString(), { despachada: true });
+            console.log(`Solicitud ${solicitud.id} marcada como despachada exitosamente`);
+        } catch (error: any) {
+            console.error("Error al marcar la solicitud como despachada:", error.response?.data || error.message);
+            
+            // Si la solicitud no existe, limpiar el estado local
+            if (error.response?.status === 404) {
+                alert(`La solicitud #${solicitud.id} ya no existe en el sistema. Refrescando la lista...`);
+                removeSolicitudTransferida(solicitud.id);
+                fetchSolicitudesTransferidas();
+                return;
             }
-        };
+            
+            alert(`Error: No se pudo actualizar la solicitud #${solicitud.id}. Es posible que ya haya sido procesada. Refrescando la lista...`);
+            // Forzar recarga para limpiar datos fantasma
+            fetchSolicitudesTransferidas();
+            return; 
+        }
 
-        console.log('Nuevo pedido de salida a agregar:', nuevoPedido);
-        
-        addPedido(nuevoPedido);
+        // Declarar nuevoPedido fuera del try para que esté disponible en todo el scope
+        let nuevoPedido: Pedido | null = null;
+
+        // 2. Crear el pedido en la base de datos
+        try {
+            // Buscar el personal de entrega (transportista) en la base de datos
+            const transportista = transportistas.find(t => t.nombre === solicitud.asignado);
+            if (!transportista) {
+                throw new Error(`Transportista ${solicitud.asignado} no encontrado en la base de datos`);
+            }
+
+            // Buscar el personal de entrega correspondiente al transportista
+            const personalEntrega = await personalEntregaService.getPersonalEntrega({ 
+                bodega_id: usuario?.bodega?.id_bdg?.toString() 
+            });
+            
+            let personalEncontrado = personalEntrega.find((p: any) => p.usuario_fk === transportista.id_us || p.usuario_fk === transportista.id);
+            
+            if (!personalEncontrado) {
+                // Si no existe, crear el personal de entrega
+                console.log('Creando personal de entrega para transportista:', transportista.nombre);
+                const nuevoPersonal = await personalEntregaService.crearDesdeUsuario({
+                    usuario_id: parseInt(transportista.id_us || transportista.id),
+                    patente: 'N/A', // Se puede mejorar para pedir la patente
+                    descripcion: 'Transportista asignado'
+                });
+                personalEncontrado = nuevoPersonal.personal_entrega;
+            }
+            
+            // Crear el pedido usando el endpoint específico
+            const pedidoCreado = await pedidosService.crearDesdeSolicitud({
+                solicitud_id: solicitud.id,
+                personal_entrega_id: personalEncontrado.id_psn,
+                descripcion: `Pedido generado desde solicitud ${solicitud.id}`
+            });
+
+            console.log('Pedido creado en base de datos:', pedidoCreado);
+
+            // Usar el pedido real creado en la BD para la UI
+            const sucursalId = SUCURSALES.find(s => s.nombre === solicitud.sucursalDestino)?.id || "";
+            nuevoPedido = {
+                id: pedidoCreado.pedido.id_p, // Usar ID real de la BD
+                fecha: new Date().toISOString().slice(0, 10),
+                responsable: usuario?.nombre || "Responsable Bodega",
+                productos: solicitud.productos,
+                sucursalDestino: sucursalId,
+                cantidad: solicitud.productos.reduce((acc: number, p: any) => acc + p.cantidad, 0),
+                tipo: "salida" as const,
+                asignado: solicitud.asignado,
+                ociAsociada: solicitud.id,
+                observacion: solicitud.observacion || "",
+                bodegaOrigen: usuario?.bodega?.nombre || "Bodega Central",
+                direccionBodega: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción",
+                direccionSucursal: SUCURSALES.find(s => s.id === sucursalId)?.direccion || "-",
+                patenteVehiculo: "N/A",
+                estado: "En camino",
+                numRem: "",
+                numGuiaDespacho: "",
+                archivoGuia: null,
+                nombreArchivo: "",
+                observacionesRecepcion: "",
+                proveedor: { nombre: "", rut: "", contacto: "" }
+            };
+            addPedido(nuevoPedido);
+
+        } catch (error: any) {
+            console.error("Error al crear pedido en base de datos:", error.response?.data || error.message);
+            alert(`Error: No se pudo crear el pedido en la base de datos. ${error.response?.data?.error || error.message}`);
+            return;
+        }
+
+        // 3. Eliminar de la lista local y forzar recarga
         removeSolicitudTransferida(solicitud.id);
-        
-        // Generar la guía de despacho
-        generarGuiaDespacho({
-            id: nuevoPedido.id,
-            fecha: nuevoPedido.fecha,
-            responsable: nuevoPedido.responsable,
-            productos: nuevoPedido.productos,
-            sucursalDestino: nuevoPedido.sucursalDestino,
-            ociAsociada: nuevoPedido.ociAsociada,
-            observaciones: nuevoPedido.observaciones,
-            bodegaOrigen: nuevoPedido.bodegaOrigen,
-            direccionBodega: nuevoPedido.direccionBodega,
-            direccionSucursal: nuevoPedido.direccionSucursal,
-            patenteVehiculo: nuevoPedido.patenteVehiculo
-        });
+        fetchSolicitudesTransferidas();
+
+        // 4. Generar guía de despacho solo si se creó el pedido exitosamente
+        if (nuevoPedido) {
+            generarGuiaDespacho(nuevoPedido);
+        }
     };
 
     const tablaTransferidasRef = useRef<HTMLDivElement>(null);
@@ -306,6 +425,27 @@ export default function PedidosBodega() {
         setPedidoSeleccionado(null);
     };
 
+    const handleLimpiarRegistros = async () => {
+        const idsParaArchivar = solicitudesTransferidas.map((s: any) => s.id);
+        if (idsParaArchivar.length > 0) {
+            try {
+                console.log('Archivando solicitudes:', idsParaArchivar);
+                await solicitudesService.archivarSolicitudes(idsParaArchivar);
+                console.log('Solicitudes archivadas exitosamente');
+                
+                // Limpiar el estado local inmediatamente
+                clearSolicitudesTransferidas();
+                
+                // Forzar la recarga de solicitudes transferidas para que se actualice la vista
+                fetchSolicitudesTransferidas();
+            } catch (error) {
+                console.error("Error al archivar las solicitudes:", error);
+                alert("No se pudieron archivar los registros. Inténtelo de nuevo.");
+            }
+        }
+        // No limpiar los pedidos ya que son registros importantes que deben mantenerse
+    };
+
     return (
         <Layout>
             <Snackbar
@@ -362,8 +502,10 @@ export default function PedidosBodega() {
                                 tipo: "ingreso" as const,
                                 fecha: data.fecha,
                                 numRem: data.numRem,
-                                numFactura: data.numFactura,
-                                numOrden: data.numOrden,
+                                numGuiaDespacho: data.numGuiaDespacho,
+                                archivoGuia: data.archivoGuia,
+                                nombreArchivo: data.nombreArchivo,
+                                observacionesRecepcion: data.observacionesRecepcion,
                                 proveedor: data.proveedor,
                                 productos: data.productos,
                                 cantidad: Array.isArray(data.productos)
@@ -394,7 +536,7 @@ export default function PedidosBodega() {
                                     descripcion: `${prod.nombre} - ${prod.marca} - ${prod.categoria}`,
                                     cantidad: prod.cantidad
                                 })),
-                                observaciones: `Guía de Despacho Proveedor: ${data.numRem || "No especificada"}\nN° Orden de Compra: ${data.numOrden || "No especificada"}`,
+                                observaciones: `Guía de Despacho Proveedor: ${data.numGuiaDespacho || "No especificada"}\n${data.observacionesRecepcion ? `Observaciones: ${data.observacionesRecepcion}` : ""}`,
                                 conformidad: "Recibido conforme",
                                 responsable: nuevoPedido.responsable,
                                 proveedor: {
@@ -486,8 +628,8 @@ export default function PedidosBodega() {
                         {/* ... */}
                     </div>
                 </div>
-                <Button onClick={clearPedidos} color="error" variant="contained">
-                Limpiar todos los pedidos
+                <Button onClick={handleLimpiarRegistros} color="error" variant="contained" >
+                Limpiar registros pendientes
                 </Button>
                 <TableContainer component={Paper} style={{ background: "#181818" }}>
                     <Table>
@@ -501,6 +643,9 @@ export default function PedidosBodega() {
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>
                                     {opcion === "ingresos" ? "Proveedor" : "Sucursal destino"}
                                 </TableCell>
+                                {opcion === "salidas" && (
+                                    <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Estado</TableCell>
+                                )}
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>N° de productos</TableCell>
                                 <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Acción</TableCell>
                             </TableRow>
@@ -528,6 +673,11 @@ export default function PedidosBodega() {
                                                 )
                                             }
                                         </TableCell>
+                                        {opcion === "salidas" && (
+                                            <TableCell style={{ color: "#fff" }}>
+                                                <EstadoBadge estado={row.estado} />
+                                            </TableCell>
+                                        )}
                                         <TableCell style={{ color: "#fff" }}>
                                             {Array.isArray(row.productos)
                                                 ? row.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
@@ -561,175 +711,589 @@ export default function PedidosBodega() {
                                     <TableCell style={{ color: "#FFD700" }}>Responsable</TableCell>
                                     <TableCell style={{ color: "#FFD700" }}>Estado</TableCell>
                                     <TableCell style={{ color: "#FFD700" }}>Observaciones</TableCell>
-                                    <TableCell style={{ color: "#FFD700" }}>Productos</TableCell>
+                                    <TableCell style={{ color: "#FFD700" }}>Cantidad Total</TableCell>
                                     <TableCell style={{ color: "#FFD700" }}>Acción</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {solicitudesTransferidas.length === 0 ? (
+                                {solicitudesTransferidas.filter(s => Number(s.id) > 0 && Array.isArray(s.productos) && s.productos.length > 0).length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} align="center" style={{ color: "#8A8A8A" }}>
+                                        <TableCell colSpan={8} align="center" style={{ color: "#8A8A8A" }}>
                                             No hay solicitudes transferidas.
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    solicitudesTransferidas.map((s: any, idx: number) => (
-                                        <TableRow key={`${s.id}-${idx}`}>
-                                            <TableCell style={{ color: "#fff" }}>{s.id}</TableCell>
-                                            <TableCell style={{ color: "#fff" }}>{s.fecha}</TableCell>
-                                            <TableCell style={{ color: "#fff" }}>
-                                            {typeof s.sucursal === "object"
-                                                ? s.sucursal?.nombre
-                                                : s.sucursal}
-                                            </TableCell>
-                                            <TableCell style={{ color: "#fff" }}>{s.responsable}</TableCell>
-                                            <TableCell style={{ color: "#fff" }}>{s.estado}</TableCell>
-                                            <TableCell style={{ color: "#fff" }}>{s.observaciones || "-"}</TableCell>
-                                            <TableCell style={{ color: "#fff" }}>
-                                                <ul>
-                                                    {s.productos.map((p: any, idx: number) => (
-                                                        <li key={idx}>{p.nombre} — {p.cantidad}</li>
-                                                    ))}
-                                                </ul>
-                                            </TableCell>
-                                            <TableCell>
-                                                {s.estado === "pendiente" && (
-                                                    <Button
-                                                        variant="contained"
-                                                        color="primary"
-                                                        style={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
-                                                        onClick={() => {
-                                                            setSolicitudADespachar(s);
-                                                            setModalDespachoOpen(true);
-                                                        }}
-                                                    >
-                                                        Despachar
-                                                    </Button>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
+                                    solicitudesTransferidas
+                                        .filter(s => Number(s.id) > 0 && Array.isArray(s.productos) && s.productos.length > 0)
+                                        .map((s: any, idx: number) => {
+                                            // Formatear fecha
+                                            const fechaFormateada = s.fecha ? new Date(s.fecha).toLocaleDateString('es-CL', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            }) : '-';
+                                            
+                                            // Calcular cantidad total
+                                            console.log('Debug - Productos de solicitud:', s.productos);
+                                            
+                                            return (
+                                                <TableRow key={`${s.id}-${idx}`}>
+                                                    <TableCell style={{ color: "#fff" }}>{s.id}</TableCell>
+                                                    <TableCell style={{ color: "#fff" }}>{fechaFormateada}</TableCell>
+                                                    <TableCell style={{ color: "#fff" }}>
+                                                        {typeof s.sucursal === "object"
+                                                            ? s.sucursal?.nombre
+                                                            : s.sucursal}
+                                                    </TableCell>
+                                                    <TableCell style={{ color: "#fff" }}>{s.responsable}</TableCell>
+                                                    <TableCell>
+                                                        <EstadoBadge 
+                                                            estado={s.estado || "pendiente"} 
+                                                            tipo="solicitud"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell style={{ color: "#fff" }}>{s.observacion || "Ninguna"}</TableCell>
+                                                    <TableCell style={{ color: "#fff" }}>
+                                                        {(() => {
+                                                            if (!s.productos || !Array.isArray(s.productos)) return 0;
+                                                            const total = s.productos.reduce((sum: number, p: any) => {
+                                                                const cantidad = Number(p.cantidad || p.cantidad_solicitada || 0);
+                                                                return sum + (isNaN(cantidad) ? 0 : cantidad);
+                                                            }, 0);
+                                                            return isNaN(total) ? 0 : Math.round(total);
+                                                        })()}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {s.estado === "pendiente" && (
+                                                            <Button
+                                                                variant="contained"
+                                                                color="primary"
+                                                                style={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
+                                                                onClick={() => {
+                                                                    setSolicitudADespachar(s);
+                                                                    setModalDespachoOpen(true);
+                                                                }}
+                                                            >
+                                                                Despachar
+                                                            </Button>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })
                                 )}
                             </TableBody>
                         </Table>
                     </TableContainer>
                 </div>
 
-                {/* Modal de detalles */}
-                <Dialog open={openDetailModal} onClose={handleCloseDetailModal} maxWidth="sm" fullWidth>
-                    <DialogTitle style={{ color: "#B0B0B0", background: "#232323" }}>
-                        Detalles del pedido
+                {/* Modal para seleccionar transportista */}
+                <Dialog open={modalDespachoOpen} onClose={() => setModalDespachoOpen(false)} maxWidth="md" fullWidth>
+                    <DialogTitle sx={{ 
+                        background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                        color: "#FFD700",
+                        borderBottom: "2px solid #FFD700",
+                        fontWeight: 600
+                    }}>
+                        🚚 Asignar Transportista para Despacho
                     </DialogTitle>
-                    <DialogContent style={{ background: "#181818" }}>
+                    <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
+                        {solicitudADespachar && (
+                            <>
+                                {/* Información de la solicitud */}
+                                <Box sx={{ 
+                                    mb: 3,
+                                    p: 2,
+                                    bgcolor: "#232323",
+                                    borderRadius: 2,
+                                    border: "1px solid #333"
+                                }}>
+                                    <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                                        📋 Solicitud #{solicitudADespachar.id}
+                                    </Typography>
+                                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                                        <TextField
+                                            label="Sucursal destino"
+                                            value={solicitudADespachar.sucursal || 'N/A'}
+                                            InputProps={{ 
+                                                readOnly: true,
+                                                sx: { color: "#fff" }
+                                            }}
+                                            size="small"
+                                            sx={{
+                                                "& .MuiInputLabel-root": { color: "#ccc" },
+                                                "& .MuiOutlinedInput-root": {
+                                                    "& fieldset": { borderColor: "#444" },
+                                                    "&:hover fieldset": { borderColor: "#FFD700" }
+                                                }
+                                            }}
+                                        />
+                                        <TextField
+                                            label="Responsable"
+                                            value={solicitudADespachar.responsable || 'N/A'}
+                                            InputProps={{ 
+                                                readOnly: true,
+                                                sx: { color: "#fff" }
+                                            }}
+                                            size="small"
+                                            sx={{
+                                                "& .MuiInputLabel-root": { color: "#ccc" },
+                                                "& .MuiOutlinedInput-root": {
+                                                    "& fieldset": { borderColor: "#444" },
+                                                    "&:hover fieldset": { borderColor: "#FFD700" }
+                                                }
+                                            }}
+                                        />
+                                    </Box>
+                                </Box>
+
+                                {/* Selección de transportista */}
+                                <Box sx={{ p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 2 }}>
+                                        👤 Seleccione un transportista disponible
+                                    </Typography>
+                                    <FormControl fullWidth>
+                                        <InputLabel 
+                                            id="transportista-select-label"
+                                            sx={{ color: "#ccc" }}
+                                        >
+                                            Transportista
+                                        </InputLabel>
+                            <Select
+                                labelId="transportista-select-label"
+                                value={transportistaSeleccionado}
+                                label="Transportista"
+                                onChange={(e) => setTransportistaSeleccionado(e.target.value)}
+                                            sx={{
+                                                color: "#fff",
+                                                "& .MuiOutlinedInput-notchedOutline": {
+                                                    borderColor: "#444"
+                                                },
+                                                "&:hover .MuiOutlinedInput-notchedOutline": {
+                                                    borderColor: "#FFD700"
+                                                },
+                                                "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                                                    borderColor: "#FFD700"
+                                                },
+                                                "& .MuiSvgIcon-root": {
+                                                    color: "#FFD700"
+                                                }
+                                            }}
+                                            MenuProps={{
+                                                PaperProps: {
+                                                    sx: {
+                                                        bgcolor: "#232323",
+                                                        border: "1px solid #444",
+                                                        "& .MuiMenuItem-root": {
+                                                            color: "#fff",
+                                                            "&:hover": {
+                                                                bgcolor: "#2a2a2a"
+                                                            },
+                                                            "&.Mui-selected": {
+                                                                bgcolor: "#FFD700",
+                                                                color: "#232323",
+                                                                "&:hover": {
+                                                                    bgcolor: "#FFD700"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            {transportistas.length === 0 ? (
+                                                <MenuItem disabled>
+                                                    <Typography sx={{ color: "#8A8A8A", fontStyle: "italic" }}>
+                                                        No hay transportistas disponibles
+                                                    </Typography>
+                                                </MenuItem>
+                                            ) : (
+                                                transportistas.map((t: any) => (
+                                                    <MenuItem 
+                                                        key={t.id_us || t.id} 
+                                                        value={t.nombre}
+                                                    >
+                                        {t.nombre}
+                                    </MenuItem>
+                                                ))
+                                            )}
+                            </Select>
+                        </FormControl>
+                                    
+                                    {transportistas.length === 0 && (
+                                        <Alert severity="warning" sx={{ mt: 2, bgcolor: "#2a2a2a", color: "#FF9800" }}>
+                                            No hay transportistas registrados en la bodega. Contacte al administrador para agregar transportistas.
+                                        </Alert>
+                                    )}
+                                </Box>
+
+                                {/* Resumen de productos */}
+                                <Box sx={{ p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 2 }}>
+                                        📦 Productos a despachar
+                                    </Typography>
+                                    
+                                    {!solicitudADespachar.productos || solicitudADespachar.productos.length === 0 ? (
+                                        <Box sx={{ 
+                                            textAlign: "center", 
+                                            py: 3, 
+                                            color: "#8A8A8A",
+                                            fontStyle: "italic"
+                                        }}>
+                                            No hay productos en esta solicitud
+                                        </Box>
+                                    ) : (
+                                        <>
+                                            <TableContainer>
+                                                <Table size="small">
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Producto</TableCell>
+                                                            <TableCell sx={{ color: "#FFD700", fontWeight: 600 }} align="right">Cantidad</TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {solicitudADespachar.productos.map((prod: any, idx: number) => {
+                                                            const cantidad = Number(prod.cantidad || prod.cantidad_solicitada || 0);
+                                                            return (
+                                                                <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
+                                                                    <TableCell sx={{ color: "#fff" }}>
+                                                                        {prod.nombre || prod.producto_nombre || 'N/A'}
+                                                                    </TableCell>
+                                                                    <TableCell align="right" sx={{ color: "#FFD700", fontWeight: 600 }}>
+                                                                        {isNaN(cantidad) ? 0 : cantidad}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        })}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                            
+                                            {/* Total */}
+                                            <Box sx={{ 
+                                                mt: 2, 
+                                                pt: 2, 
+                                                borderTop: "1px solid #444",
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center"
+                                            }}>
+                                                <Typography sx={{ color: "#FFD700", fontWeight: 600, fontSize: "1.1rem" }}>
+                                                    Total de productos
+                                                </Typography>
+                                                <Typography sx={{ color: "#FFD700", fontWeight: 600, fontSize: "1.1rem" }}>
+                                                    {solicitudADespachar.productos.length} productos • {
+                                                        (() => {
+                                                            if (!solicitudADespachar.productos || !Array.isArray(solicitudADespachar.productos)) return 0;
+                                                            const total = solicitudADespachar.productos.reduce((sum: number, p: any) => {
+                                                                const cantidad = Number(p.cantidad || p.cantidad_solicitada || 0);
+                                                                return sum + (isNaN(cantidad) ? 0 : cantidad);
+                                                            }, 0);
+                                                            return isNaN(total) ? 0 : Math.round(total);
+                                                        })()
+                                                    } unidades
+                                                </Typography>
+                                            </Box>
+                                        </>
+                                    )}
+                                </Box>
+                            </>
+                        )}
+                    </DialogContent>
+                    <DialogActions sx={{ 
+                        bgcolor: "#1a1a1a", 
+                        borderTop: "1px solid #333",
+                        p: 2
+                    }}>
+                        <Button 
+                            onClick={() => setModalDespachoOpen(false)} 
+                            sx={{ 
+                                color: "#FFD700",
+                                borderColor: "#FFD700",
+                                "&:hover": {
+                                    borderColor: "#FFD700",
+                                    bgcolor: "rgba(255, 215, 0, 0.1)"
+                                }
+                            }}
+                            variant="outlined"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button 
+                            onClick={() => {
+                                if (solicitudADespachar && transportistaSeleccionado) {
+                                    despacharSolicitud({ ...solicitudADespachar, asignado: transportistaSeleccionado });
+                                    setModalDespachoOpen(false);
+                                    setTransportistaSeleccionado("");
+                                }
+                            }}
+                            disabled={!transportistaSeleccionado || transportistas.length === 0}
+                            sx={{ 
+                                color: "#fff", 
+                                background: "#4CAF50", 
+                                fontWeight: 600,
+                                "&:hover": {
+                                    background: "#45a049"
+                                },
+                                "&:disabled": {
+                                    background: "#666",
+                                    color: "#999"
+                                }
+                            }}
+                            variant="contained"
+                            startIcon={<span>🚚</span>}
+                        >
+                            Confirmar Despacho
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Modal de detalles */}
+                <Dialog open={openDetailModal} onClose={handleCloseDetailModal} maxWidth="md" fullWidth>
+                    <DialogTitle sx={{ 
+                        background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                        color: "#FFD700",
+                        borderBottom: "2px solid #FFD700",
+                        fontWeight: 600
+                    }}>
+                        📋 Detalles del Pedido #{pedidoSeleccionado?.id}
+                    </DialogTitle>
+                    <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
                         {pedidoSeleccionado && (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "8px" }}>
+                            <>
+                                {/* Información principal */}
+                                <Box sx={{ 
+                                    display: "grid", 
+                                    gridTemplateColumns: "1fr 1fr", 
+                                    gap: 2, 
+                                    mb: 3,
+                                    p: 2,
+                                    bgcolor: "#232323",
+                                    borderRadius: 2,
+                                    border: "1px solid #333"
+                                }}>
                                 <TextField
-                                    label="ID"
+                                        label="ID del Pedido"
                                     value={pedidoSeleccionado.id}
-                                    variant="filled"
-                                    disabled
-                                    size="small"
                                     InputProps={{
-                                        disableUnderline: true,
-                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
-                                    }}
-                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
+                                            readOnly: true,
+                                            sx: { color: "#FFD700", fontWeight: 600 }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
                                 />
                                 <TextField
                                     label="Fecha"
                                     value={pedidoSeleccionado.fecha}
-                                    variant="filled"
-                                    disabled
-                                    size="small"
                                     InputProps={{
-                                        disableUnderline: true,
-                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
-                                    }}
-                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
+                                            readOnly: true,
+                                            sx: { color: "#fff" }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
                                 />
                                 <TextField
                                     label="Responsable"
                                     value={pedidoSeleccionado.responsable}
-                                    variant="filled"
-                                    disabled
-                                    size="small"
                                     InputProps={{
-                                        disableUnderline: true,
-                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
-                                    }}
-                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
+                                            readOnly: true,
+                                            sx: { color: "#fff" }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
                                 />
                                 <TextField
                                     label={opcion === "ingresos" ? "Proveedor" : "Sucursal destino"}
                                     value={
                                         opcion === "ingresos"
-                                            ? (pedidoSeleccionado.proveedor || SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || "-")
+                                                ? (pedidoSeleccionado.proveedor?.nombre || SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || "-")
                                             : (SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || "-")
                                     }
-                                    variant="filled"
-                                    disabled
-                                    size="small"
                                     InputProps={{
-                                        disableUnderline: true,
-                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
-                                    }}
-                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
+                                            readOnly: true,
+                                            sx: { color: "#fff" }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
+                                    />
+                                </Box>
+
+                                {/* Estado con badge */}
+                                <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 1 }}>
+                                        Estado del pedido
+                                    </Typography>
+                                    <Chip
+                                        label={pedidoSeleccionado.estado || "Pendiente"}
+                                        sx={{
+                                            bgcolor: pedidoSeleccionado.estado === "Completado" ? "#4CAF50" : 
+                                                    pedidoSeleccionado.estado === "En camino" ? "#2196F3" : 
+                                                    pedidoSeleccionado.estado === "Cancelado" ? "#f44336" : "#FF9800",
+                                            color: "#fff",
+                                            fontWeight: 600,
+                                            fontSize: "0.9rem"
+                                        }}
+                                    />
+                                </Box>
+
+                                {/* Información adicional para salidas */}
+                                {opcion === "salidas" && pedidoSeleccionado.asignado && (
+                                    <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                        <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 1 }}>
+                                            🚚 Información de entrega
+                                        </Typography>
+                                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                                <TextField
+                                                label="Transportista asignado"
+                                                value={pedidoSeleccionado.asignado}
+                                    InputProps={{
+                                                    readOnly: true,
+                                                    sx: { color: "#fff" }
+                                                }}
+                                                size="small"
+                                                sx={{
+                                                    "& .MuiInputLabel-root": { color: "#ccc" },
+                                                    "& .MuiOutlinedInput-root": {
+                                                        "& fieldset": { borderColor: "#444" },
+                                                        "&:hover fieldset": { borderColor: "#FFD700" }
+                                                    }
+                                                }}
                                 />
                                 <TextField
-                                    label="N° de productos"
-                                    value={pedidoSeleccionado.cantidad}
-                                    variant="filled"
-                                    disabled
-                                    size="small"
+                                                label="Patente del vehículo"
+                                                value={pedidoSeleccionado.patenteVehiculo || "N/A"}
                                     InputProps={{
-                                        disableUnderline: true,
-                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
-                                    }}
-                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
-                                />
-                                <TextField
-                                    label="Estado"
-                                    value={pedidoSeleccionado.estado}
-                                    variant="filled"
-                                    disabled
-                                    size="small"
-                                    InputProps={{
-                                        disableUnderline: true,
-                                        style: { color: "#B0B0B0", fontWeight: 600, background: "#232323" }
-                                    }}
-                                    InputLabelProps={{ style: { color: "#B0B0B0" } }}
-                                />
-                                <div style={{ marginTop: "12px" }}>
-                                    <b style={{ color: "#B0B0B0" }}>Productos del pedido:</b>
-                                    <ul style={{ color: "#B0B0B0", marginTop: 8 }}>
-                                        {pedidoSeleccionado.productos && pedidoSeleccionado.productos.length > 0 ? (
-                                            pedidoSeleccionado.productos.map((prod: any, idx: number) => (
-                                                <li key={idx}>{prod.nombre} — {prod.cantidad}</li>
-                                            ))
-                                        ) : (
-                                            <li>No hay productos en este pedido.</li>
-                                        )}
-                                    </ul>
-                                </div>
-                            </div>
-                        )}
-                        {pedidoSeleccionado && (
-                            <div
-                                style={{
-                                    background: "#232323",
-                                    borderRadius: "8px",
-                                    padding: "16px",
-                                    marginBottom: "8px",
-                                    boxShadow: "0 2px 8px rgba(0,0,0,0.15)"
-                                }}
-                            >
-                                <b style={{ color: "#FFD700", fontSize: 16 }}>Documentos del pedido</b>
-                                <div style={{ display: "flex", gap: "16px", marginTop: "12px" }}>
+                                                    readOnly: true,
+                                                    sx: { color: "#fff" }
+                                                }}
+                                                size="small"
+                                                sx={{
+                                                    "& .MuiInputLabel-root": { color: "#ccc" },
+                                                    "& .MuiOutlinedInput-root": {
+                                                        "& fieldset": { borderColor: "#444" },
+                                                        "&:hover fieldset": { borderColor: "#FFD700" }
+                                                    }
+                                                }}
+                                            />
+                                        </Box>
+                                    </Box>
+                                )}
+
+                                {/* Productos */}
+                                <Box sx={{ p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                                        📦 Productos del pedido ({pedidoSeleccionado.productos?.length || 0})
+                                    </Typography>
+                                    
+                                    {!pedidoSeleccionado.productos || pedidoSeleccionado.productos.length === 0 ? (
+                                        <Box sx={{ 
+                                            textAlign: "center", 
+                                            py: 3, 
+                                            color: "#8A8A8A",
+                                            fontStyle: "italic"
+                                        }}>
+                                            No hay productos en este pedido
+                                        </Box>
+                                    ) : (
+                                        <>
+                                            <TableContainer>
+                                                <Table size="small">
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Producto</TableCell>
+                                                            <TableCell sx={{ color: "#FFD700", fontWeight: 600 }} align="right">Cantidad</TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {pedidoSeleccionado.productos.map((prod: any, idx: number) => (
+                                                            <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
+                                                                <TableCell sx={{ color: "#fff" }}>
+                                                                    {prod.nombre || 'N/A'}
+                                                                </TableCell>
+                                                                <TableCell align="right" sx={{ color: "#FFD700", fontWeight: 600 }}>
+                                                                    {prod.cantidad || 0}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                            
+                                            {/* Total */}
+                                            <Box sx={{ 
+                                                mt: 2, 
+                                                pt: 2, 
+                                                borderTop: "1px solid #444",
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center"
+                                            }}>
+                                                <Typography sx={{ color: "#FFD700", fontWeight: 600, fontSize: "1.1rem" }}>
+                                                    Total de productos
+                                                </Typography>
+                                                <Typography sx={{ color: "#FFD700", fontWeight: 600, fontSize: "1.1rem" }}>
+                                                    {pedidoSeleccionado.productos.length} productos • {
+                                                        (() => {
+                                                            if (!pedidoSeleccionado.productos || !Array.isArray(pedidoSeleccionado.productos)) return 0;
+                                                            const total = pedidoSeleccionado.productos.reduce((sum: number, p: any) => {
+                                                                const cantidad = Number(p.cantidad || 0);
+                                                                return sum + (isNaN(cantidad) ? 0 : cantidad);
+                                                            }, 0);
+                                                            return isNaN(total) ? 0 : Math.round(total);
+                                                        })()
+                                                    } unidades
+                                                </Typography>
+                                            </Box>
+                                        </>
+                                    )}
+                                </Box>
+
+                                {/* Documentos del pedido */}
+                                <Box sx={{ p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                                        📄 Documentos disponibles
+                                    </Typography>
+                                    <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
                                     {pedidoSeleccionado.tipo === "ingreso" ? (
                                         <Button
                                             variant="outlined"
                                             startIcon={<AssignmentTurnedInIcon />}
-                                            style={{ borderColor: "#4CAF50", color: "#4CAF50", fontWeight: 600 }}
+                                                sx={{ 
+                                                    borderColor: "#4CAF50", 
+                                                    color: "#4CAF50", 
+                                                    fontWeight: 600,
+                                                    "&:hover": {
+                                                        borderColor: "#4CAF50",
+                                                        bgcolor: "rgba(76, 175, 80, 0.1)"
+                                                    }
+                                                }}
                                             onClick={() => generarActaRecepcion({
                                                 numeroActa: String(pedidoSeleccionado.id),
                                                 fechaRecepcion: pedidoSeleccionado.fecha,
@@ -746,13 +1310,13 @@ export default function PedidosBodega() {
                                                     descripcion: `${prod.nombre} - ${prod.marca} - ${prod.categoria}`,
                                                     cantidad: prod.cantidad
                                                 })),
-                                                observaciones: `Guía de Despacho Proveedor: ${pedidoSeleccionado.numRem || "No especificada"}\nN° Orden de Compra: ${pedidoSeleccionado.numOrden || "No especificada"}`,
+                                                observaciones: `Guía de Despacho Proveedor: ${pedidoSeleccionado.numRem || "No especificada"}\nN° Orden de Compra: ${pedidoSeleccionado.numGuiaDespacho || "No especificada"}`,
                                                 conformidad: "Recibido conforme",
                                                 responsable: pedidoSeleccionado.responsable,
                                                 proveedor: {
-                                                    nombre: pedidoSeleccionado.proveedor.nombre,
-                                                    rut: pedidoSeleccionado.proveedor.rut,
-                                                    contacto: pedidoSeleccionado.proveedor.contacto
+                                                        nombre: pedidoSeleccionado.proveedor?.nombre || "",
+                                                        rut: pedidoSeleccionado.proveedor?.rut || "",
+                                                        contacto: pedidoSeleccionado.proveedor?.contacto || ""
                                                 }
                                             })}
                                         >
@@ -763,7 +1327,15 @@ export default function PedidosBodega() {
                                             <Button
                                                 variant="outlined"
                                                 startIcon={<DescriptionIcon />}
-                                                style={{ borderColor: "#FFD700", color: "#FFD700", fontWeight: 600 }}
+                                                    sx={{ 
+                                                        borderColor: "#FFD700", 
+                                                        color: "#FFD700", 
+                                                        fontWeight: 600,
+                                                        "&:hover": {
+                                                            borderColor: "#FFD700",
+                                                            bgcolor: "rgba(255, 215, 0, 0.1)"
+                                                        }
+                                                    }}
                                                 onClick={() => generarGuiaDespacho(pedidoSeleccionado)}
                                             >
                                                 Guía de Despacho
@@ -771,7 +1343,15 @@ export default function PedidosBodega() {
                                             <Button
                                                 variant="outlined"
                                                 startIcon={<AssignmentTurnedInIcon />}
-                                                style={{ borderColor: "#4CAF50", color: "#4CAF50", fontWeight: 600 }}
+                                                    sx={{ 
+                                                        borderColor: "#4CAF50", 
+                                                        color: "#4CAF50", 
+                                                        fontWeight: 600,
+                                                        "&:hover": {
+                                                            borderColor: "#4CAF50",
+                                                            bgcolor: "rgba(76, 175, 80, 0.1)"
+                                                        }
+                                                    }}
                                                 onClick={() => generarActaRecepcion({
                                                     numeroActa: String(pedidoSeleccionado.id),
                                                     fechaRecepcion: pedidoSeleccionado.fecha,
@@ -784,11 +1364,11 @@ export default function PedidosBodega() {
                                                         cargo: "Responsable de Sucursal",
                                                     },
                                                     productos: pedidoSeleccionado.productos.map((prod: any) => ({
-                                                        codigo: prod.codigo || `P${Math.random().toString(36).substr(2, 9)}`,
+                                                        codigo: prod.codigo || `${prod.nombre}-${Date.now()}`,
                                                         descripcion: prod.nombre,
                                                         cantidad: prod.cantidad
                                                     })),
-                                                    observaciones: pedidoSeleccionado.observaciones || "",
+                                                    observaciones: pedidoSeleccionado.observacion || "",
                                                     conformidad: "Recibido conforme",
                                                     responsable: pedidoSeleccionado.asignado || "-",
                                                 })}
@@ -798,7 +1378,15 @@ export default function PedidosBodega() {
                                             <Button
                                                 variant="outlined"
                                                 startIcon={<LocalShippingIcon />}
-                                                style={{ borderColor: "#2196F3", color: "#2196F3", fontWeight: 600 }}
+                                                    sx={{ 
+                                                        borderColor: "#2196F3", 
+                                                        color: "#2196F3", 
+                                                        fontWeight: 600,
+                                                        "&:hover": {
+                                                            borderColor: "#2196F3",
+                                                            bgcolor: "rgba(33, 150, 243, 0.1)"
+                                                        }
+                                                    }}
                                                 onClick={() => generarOCI({
                                                     numeroOCI: String(pedidoSeleccionado.ociAsociada || pedidoSeleccionado.id),
                                                     fecha: pedidoSeleccionado.fecha,
@@ -808,63 +1396,40 @@ export default function PedidosBodega() {
                                                     },
                                                     responsable: pedidoSeleccionado.responsable || "-",
                                                     productos: pedidoSeleccionado.productos.map((prod: any) => ({
-                                                        codigo: prod.codigo || `P${Math.random().toString(36).substr(2, 9)}`,
+                                                        codigo: prod.codigo || `${prod.nombre}-${Date.now()}`,
                                                         descripcion: prod.nombre,
                                                         cantidad: prod.cantidad
                                                     })),
-                                                    observaciones: pedidoSeleccionado.observaciones || "",
+                                                    observaciones: pedidoSeleccionado.observacion || "",
                                                 })}
                                             >
                                                 Orden de Compra Interna (OCI)
                                             </Button>
                                         </>
                                     )}
-                                </div>
-                            </div>
+                                    </Box>
+                                </Box>
+                            </>
                         )}
                     </DialogContent>
-                    <DialogActions style={{ background: "#232323" }}>
-                        <Button onClick={handleCloseDetailModal} style={{ color: "#B0B0B0" }}>Cerrar</Button>
-                    </DialogActions>
-                </Dialog>
-                <Dialog open={modalDespachoOpen} onClose={() => setModalDespachoOpen(false)} maxWidth="xs" fullWidth>
-                    <DialogTitle>Asignar transportista</DialogTitle>
-                    <DialogContent>
-                        <FormControl fullWidth>
-                            <InputLabel>Transportista</InputLabel>
-                            <Select
-                                value={transportistaSeleccionado}
-                                label="Transportista"
-                                onChange={e => setTransportistaSeleccionado(e.target.value)}
-                            >
-                                {transportistas.map((t: any) => (
-                                    <MenuItem key={t.id} value={t.nombre}>{t.nombre}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setModalDespachoOpen(false)}>Cancelar</Button>
-                        <Button
-                            onClick={() => {
-                                if (!transportistaSeleccionado) return;
-                                // Llama a despacharSolicitud pasando el transportista
-                                despacharSolicitud({ ...solicitudADespachar, asignado: transportistaSeleccionado });
-
-                                // Genera la Guía de Despacho con el transportista asignado
-                                generarGuiaDespacho({
-                                    ...solicitudADespachar,
-                                    asignado: transportistaSeleccionado,
-                                    responsable: transportistaSeleccionado // O puedes usar otro campo si corresponde
-                                });
-                                setModalDespachoOpen(false);
-                                setTransportistaSeleccionado("");
+                    <DialogActions sx={{ 
+                        bgcolor: "#1a1a1a", 
+                        borderTop: "1px solid #333",
+                        p: 2
+                    }}>
+                        <Button 
+                            onClick={handleCloseDetailModal} 
+                            sx={{ 
+                                color: "#FFD700",
+                                borderColor: "#FFD700",
+                                "&:hover": {
+                                    borderColor: "#FFD700",
+                                    bgcolor: "rgba(255, 215, 0, 0.1)"
+                                }
                             }}
-                            disabled={!transportistaSeleccionado}
-                            variant="contained"
-                            style={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
+                            variant="outlined"
                         >
-                            Confirmar despacho
+                            Cerrar
                         </Button>
                     </DialogActions>
                 </Dialog>

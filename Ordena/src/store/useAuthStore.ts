@@ -6,9 +6,10 @@ interface Usuario {
     nombre: string;
     correo: string;
     rol: string;
+    bodega?: string | number;
+    sucursal?: string | number;
     sucursalId?: string;
-    sucursal?: number;
-    bodega?: string;
+    tipo?: "bodega" | "sucursal";
 }
 
 interface AuthState {

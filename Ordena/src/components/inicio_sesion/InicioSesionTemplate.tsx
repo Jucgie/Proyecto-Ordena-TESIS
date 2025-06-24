@@ -30,15 +30,16 @@ export function InicioFormulario() {
     
             const response = await authService.login(correo, password);
             
-            console.log('Respuesta del login:', response); // Para depuración
+            // Determinar el tipo de usuario basado en si tiene bodega o sucursal
+            const tipo = response.usuario.bodega ? "bodega" : (response.usuario.sucursal ? "sucursal" : "desconocido");
             
             const usuarioTransformado = {
                 ...response.usuario,
                 bodega: response.usuario.bodega?.toString(),
-                sucursalId: response.usuario.sucursal?.toString() || response.usuario.sucursalId?.toString()
+                sucursal: response.usuario.sucursal?.toString(),
+                sucursalId: response.usuario.sucursal?.toString(),
+                tipo: tipo
             };
-            
-            console.log('Usuario transformado:', usuarioTransformado); // Para depuración
             
             if (!response.token) {
                 throw new Error('No se recibió token del servidor');
@@ -47,11 +48,8 @@ export function InicioFormulario() {
             setUsuario(usuarioTransformado, response.token);
             
             // Establecer la vista según el tipo de usuario
-            if (response.usuario.bodega) {
-                setVista("bodega");
-            } else if (response.usuario.sucursal) {
-                setVista("sucursal");
-            }
+            const vistaCorrecta = tipo === "bodega" ? "bodega" : "sucursal";
+            setVista(vistaCorrecta);
             
             Swal.fire("Bienvenido", "Inicio de sesión exitoso.", "success").then(() => {
                 navigate("/pedidos");

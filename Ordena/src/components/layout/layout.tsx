@@ -1,8 +1,12 @@
 import React from "react";
 import Sidebar from "./sidebar";
 import Topbar from "./topbar";
+import { useVistaSync } from "../../hooks/useVistaSync";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
+    // Sincronizar la vista con el tipo de usuario
+    useVistaSync();
+    
     return (
         <div>
             <Sidebar />

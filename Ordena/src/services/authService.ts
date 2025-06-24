@@ -19,7 +19,6 @@ export const authService = {
         sucursal?: number; // Cambiado a number
     }) {
         try {
-            console.log('Enviando datos de registro:', userData);
             const response = await api.post('/auth/register/', userData);
             return response.data;
         } catch (error: any) {

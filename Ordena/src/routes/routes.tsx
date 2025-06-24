@@ -3,6 +3,7 @@ import { ProtectedRoute } from "../components/ProtectedRoute";
 import PedidosBodega from "../pages/Pedidos/PedidosBodega";
 import PedidosSucursal from "../pages/Pedidos/PedidosSucursal";
 import Historial from "../pages/Historial";
+import Informes from "../pages/Historial/informes";
 import SolicitudesSucursal from "../pages/Solicitudes/SolicitudesSucursal";
 import SolicitudesBodega from "../pages/Solicitudes/SolicitudesBodega";
 import { useBodegaStore } from "../store/useBodegaStore";
@@ -13,6 +14,8 @@ import Empleados from "../pages/Empleados/empleados";
 
 export default function AppRoutes() {
     const { vista } = useBodegaStore();
+    
+    console.log('AppRoutes - Vista actual:', vista);
     
     return (
         <BrowserRouter>
@@ -51,6 +54,12 @@ export default function AppRoutes() {
                     </ProtectedRoute>
                 } />
 
+                <Route path="/informes" element={
+                    <ProtectedRoute>
+                        <Informes />
+                    </ProtectedRoute>
+                } />
+
                 <Route path="/proveedores" element={
                     <ProtectedRoute>
                         <Proveedores />
@@ -63,12 +72,8 @@ export default function AppRoutes() {
                     </ProtectedRoute>
                 } />
 
-                {/* Ruta para no encontrados - redirige a pedidos */}
-                <Route path="*" element={
-                    <ProtectedRoute>
-                        <Navigate to="/pedidos" replace />
-                    </ProtectedRoute>
-                } />
+                {/* Ruta de fallback */}
+                <Route path="*" element={<Navigate to="/pedidos" replace />} />
             </Routes>
         </BrowserRouter>
     );

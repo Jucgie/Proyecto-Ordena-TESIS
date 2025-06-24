@@ -5,6 +5,7 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ManageHistoryIcon from '@mui/icons-material/ManageHistory';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import DescriptionIcon from '@mui/icons-material/Description';
 import OrdenaLogo from "../../assets/ordena.svg";
 import { useAuthStore } from "../../store/useAuthStore";
 
@@ -22,6 +23,7 @@ export default function Sidebar() {
             : []),
         { to: "/historial", icon: ManageHistoryIcon, label: "Historial y Reportes" },
         { to: "/solicitudes", icon: AssignmentIcon, label: "Solicitudes" },
+        { to: "/informes", icon: DescriptionIcon, label: "Informes" },
         { to: "/proveedores", icon: AssignmentIndIcon, label: "Proveedores" },
     ];
     

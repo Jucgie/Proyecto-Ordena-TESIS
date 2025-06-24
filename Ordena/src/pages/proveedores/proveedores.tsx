@@ -17,39 +17,43 @@ export default function Proveedores() {
         {proveedores.length === 0 ? (
           <div style={{ color: "#8A8A8A" }}>No hay proveedores registrados.</div>
         ) : (
-          proveedores.map((p: any, idx: number) => (
-            <Accordion key={idx} sx={{ background: "#232323", color: "#fff", mb: 2 }}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: "#FFD700" }} />}>
-                <b>{p.nombre}</b> — RUT: {p.rut} — Contacto: {p.contacto || "-"}
+          proveedores.map((proveedor: any) => (
+            <Accordion key={proveedor.rut} sx={{ bgcolor: "#232323", color: "#fff" }}>
+              <AccordionSummary>
+                <TableRow>
+                  <TableCell style={{ color: "#fff" }}>{proveedor.nombre}</TableCell>
+                  <TableCell style={{ color: "#fff" }}>{proveedor.rut}</TableCell>
+                  <TableCell style={{ color: "#fff" }}>{proveedor.contacto}</TableCell>
+                  <TableCell style={{ color: "#fff" }}>{proveedor.ingresos?.[0]?.documentos?.numGuiaDespacho || "-"}</TableCell>
+                  <TableCell style={{ color: "#fff" }}>{proveedor.ingresos?.[0]?.documentos?.numRem || "-"}</TableCell>
+                  <TableCell style={{ color: "#fff" }}>{proveedor.ingresos?.[0]?.fecha || "-"}</TableCell>
+                  <TableCell style={{ color: "#fff" }}>{proveedor.ingresos?.[0]?.productos?.length || 0} productos</TableCell>
+                </TableRow>
               </AccordionSummary>
               <AccordionDetails>
-                <TableContainer component={Paper} style={{ background: "#181818" }}>
-                  <Table size="small">
+                <TableContainer>
+                  <Table>
                     <TableHead>
                       <TableRow>
                         <TableCell style={{ color: "#FFD700" }}>Fecha</TableCell>
-                        <TableCell style={{ color: "#FFD700" }}>Productos entregados</TableCell>
-                        <TableCell style={{ color: "#FFD700" }}>N° Remisión</TableCell>
-                        <TableCell style={{ color: "#FFD700" }}>N° Factura</TableCell>
-                        <TableCell style={{ color: "#FFD700" }}>N° Orden</TableCell>
+                        <TableCell style={{ color: "#FFD700" }}>N° Guía Despacho</TableCell>
+                        <TableCell style={{ color: "#FFD700" }}>N° REM</TableCell>
+                        <TableCell style={{ color: "#FFD700" }}>Archivo</TableCell>
+                        <TableCell style={{ color: "#FFD700" }}>Observaciones</TableCell>
+                        <TableCell style={{ color: "#FFD700" }}>Productos</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                    {(Array.isArray(p.ingresos) ? p.ingresos : []).map((ing: any, i: number) => (
-                        <TableRow key={i}>
-                        <TableCell style={{ color: "#fff" }}>{ing.fecha}</TableCell>
-                        <TableCell style={{ color: "#fff" }}>
-                            <ul style={{ margin: 0, paddingLeft: 16 }}>
-                            {ing.productos.map((prod: any, j: number) => (
-                                <li key={j}>{prod.nombre} — {prod.cantidad}</li>
-                            ))}
-                            </ul>
-                        </TableCell>
-                        <TableCell style={{ color: "#fff" }}>{ing.documentos.numRem}</TableCell>
-                        <TableCell style={{ color: "#fff" }}>{ing.documentos.numFactura}</TableCell>
-                        <TableCell style={{ color: "#fff" }}>{ing.documentos.numOrden}</TableCell>
+                      {proveedor.ingresos?.map((ing: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell style={{ color: "#fff" }}>{ing.fecha}</TableCell>
+                          <TableCell style={{ color: "#fff" }}>{ing.documentos?.numGuiaDespacho || "-"}</TableCell>
+                          <TableCell style={{ color: "#fff" }}>{ing.documentos?.numRem || "-"}</TableCell>
+                          <TableCell style={{ color: "#fff" }}>{ing.documentos?.archivoGuia || "-"}</TableCell>
+                          <TableCell style={{ color: "#fff" }}>{ing.observaciones || "-"}</TableCell>
+                          <TableCell style={{ color: "#fff" }}>{ing.productos?.length || 0} productos</TableCell>
                         </TableRow>
-                    ))}
+                      ))}
                     </TableBody>
                   </Table>
                 </TableContainer>

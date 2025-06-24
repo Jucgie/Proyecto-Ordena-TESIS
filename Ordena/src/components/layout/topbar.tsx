@@ -11,19 +11,23 @@ export default function Topbar() {
     const logout = useAuthStore(state => state.logout);
     const [menuOpen, setMenuOpen] = useState(false);
 
+
     const handleLogout = () => {
         logout();
         window.location.href = "/login";
     };
 
-        // Obtener nombre de la ubicación
+    // Obtener nombre de la ubicación
     let ubicacionNombre = "";
-    if (usuario?.tipo === "bodega") {
+    if (usuario?.tipo === "bodega" || usuario?.bodega) {
         ubicacionNombre = BODEGA_CENTRAL.nombre;
-    } else if (usuario?.tipo === "sucursal" && usuario.sucursalId) {
-        const sucursal = SUCURSALES.find(s => s.id === usuario.sucursalId);
+    } else if (usuario?.tipo === "sucursal" || usuario?.sucursal || usuario?.sucursalId) {
+        const sucursalId = (usuario.sucursal || usuario.sucursalId)?.toString();
+        const sucursal = SUCURSALES.find(s => s.id === sucursalId);
         ubicacionNombre = sucursal ? sucursal.nombre : "Sucursal desconocida";
     }
+
+
     return (
         <header
             style={{

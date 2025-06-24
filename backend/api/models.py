@@ -94,6 +94,7 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     nombre = models.CharField(max_length=255)
     correo = models.EmailField(unique=True)
     contrasena = models.CharField(max_length=255)
+    contrasena_old = models.CharField(max_length=255, null=True)
     bodeg_fk = models.ForeignKey(BodegaCentral, on_delete=models.SET_NULL, null=True, db_column='bodeg_fk')
     sucursal_fk = models.ForeignKey(Sucursal, on_delete=models.SET_NULL, null=True, db_column='sucursal_fk')
     rol_fk = models.ForeignKey(Rol, on_delete=models.CASCADE, db_column='rol_fk')
@@ -187,25 +188,31 @@ class EstadoPedido(models.Model):
 
 class PersonalEntrega(models.Model):
     id_psn = models.BigAutoField(primary_key=True)
+    usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='usuario_fk')
     nombre_psn = models.CharField(max_length=255)
     descripcion = models.CharField(max_length=255)
     patente = models.CharField(max_length=255)
 
     class Meta:
         db_table = 'personal_entrega'
-        managed = False
+        managed = True
 
     @property
     def id(self):
         return self.id_psn
 
+    def __str__(self):
+        return f"{self.usuario_fk.nombre} - {self.patente}"
+
 class Solicitudes(models.Model):
     id_solc = models.BigAutoField(primary_key=True)
     fecha_creacion = models.DateTimeField()
-    observacion = models.CharField(max_length=500, null=True, blank=True)
     fk_sucursal = models.ForeignKey(Sucursal, on_delete=models.CASCADE, db_column='fk_sucursal')
     fk_bodega = models.ForeignKey(BodegaCentral, on_delete=models.CASCADE, db_column='fk_bodega')
     usuarios_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='usuarios_fk')
+    estado = models.CharField(max_length=20, null=True)
+    despachada = models.BooleanField(null=True)
+    observacion = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'solicitudes'
@@ -237,7 +244,7 @@ class Pedidos(models.Model):
     sucursal_fk = models.ForeignKey(Sucursal, on_delete=models.SET_NULL, null=True)
     personal_entrega_fk = models.ForeignKey(PersonalEntrega, on_delete=models.CASCADE)
     usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    solicitud_fk = models.ForeignKey(Solicitudes, on_delete=models.CASCADE)
+    solicitud_fk = models.ForeignKey(Solicitudes, on_delete=models.CASCADE, db_column='solicitud_fk')
     bodega_fk = models.ForeignKey(BodegaCentral, on_delete=models.CASCADE)
     proveedor_fk = models.ForeignKey(Proveedor, on_delete=models.SET_NULL, null=True)
 
@@ -254,7 +261,7 @@ class DetallePedido(models.Model):
     cantidad = models.DecimalField(max_digits=10, decimal_places=2)
     descripcion = models.CharField(max_length=255, null=True)
     productos_pedido_fk = models.ForeignKey(Productos, on_delete=models.CASCADE)
-    pedidos_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE)
+    pedidos_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE, related_name='detalles_pedido')
 
     class Meta:
         db_table = 'detalle_pedido'
@@ -282,7 +289,7 @@ class MovInventario(models.Model):
     cantidad = models.IntegerField()
     fecha = models.DateTimeField()
     productos_fk = models.ForeignKey(Productos, on_delete=models.CASCADE)
-    usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE)
+    usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='usuario_fk')
 
     class Meta:
         db_table = 'mov_inventario'
@@ -297,7 +304,7 @@ class Notificacion(models.Model):
     nombre_ntf = models.CharField(max_length=255)
     descripcion = models.CharField(max_length=255)
     usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    pedido_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE)
+    pedido_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE, db_column='pedido_fk')
     fecha_hora_ntd = models.DateTimeField()
 
     class Meta:
@@ -312,7 +319,7 @@ class Historial(models.Model):
     id_hst = models.BigAutoField(primary_key=True)
     fecha = models.DateTimeField()
     usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    pedidos_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE)
+    pedidos_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE, db_column='pedidos_fk')
     producto_fk = models.ForeignKey(Productos, on_delete=models.CASCADE)
 
     class Meta:
@@ -350,9 +357,9 @@ class Informe(models.Model):
     contenido = models.CharField(max_length=255, null=True)
     archivo_url = models.CharField(max_length=255, null=True)
     fecha_generado = models.DateTimeField(null=True)
-    usuario_fk = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True)
-    pedidos_fk = models.ForeignKey(Pedidos, on_delete=models.SET_NULL, null=True)
-    productos_fk = models.ForeignKey(Productos, on_delete=models.SET_NULL, null=True)
+    usuario_fk = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, db_column='usuario_fk')
+    pedidos_fk = models.ForeignKey(Pedidos, on_delete=models.SET_NULL, null=True, db_column='pedidos_fk')
+    productos_fk = models.ForeignKey(Productos, on_delete=models.SET_NULL, null=True, db_column='productos_fk_id')
 
     class Meta:
         db_table = 'informe'

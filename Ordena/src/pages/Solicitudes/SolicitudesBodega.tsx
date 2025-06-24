@@ -2,17 +2,21 @@ import React, { useState, useMemo, useEffect } from "react";
 import Layout from "../../components/layout/layout";
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
-    Dialog, DialogTitle, DialogContent, DialogActions, Checkbox
+    Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, IconButton, Box, Typography, Chip, TextField
 } from "@mui/material";
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 import { useBodegaStore } from "../../store/useBodegaStore";
-
 import { generarOCI } from "../../utils/pdf/generarOCI";
 import { useAuthStore } from "../../store/useAuthStore";
+import { SUCURSALES } from "../../constants/ubicaciones";
+import { solicitudesService } from "../../services/api";
+import { useInventariosStore } from "../../store/useProductoStore";
+import EstadoBadge from "../../components/EstadoBadge";
 
 export default function SolicitudesBodega() {
     const {
@@ -25,9 +29,9 @@ export default function SolicitudesBodega() {
     } = useBodegaStore();
     const usuario = useAuthStore(state => state.usuario);
     const [modalOpen, setModalOpen] = useState(false);
+    const [modalConfirmarEliminacion, setModalConfirmarEliminacion] = useState(false);
+    const [solicitudAEliminar, setSolicitudAEliminar] = useState<any>(null);
     const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<any>(null);
-
-    
 
     // Estado para checks
     const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
@@ -38,6 +42,8 @@ export default function SolicitudesBodega() {
     () => Array.isArray(solicitudes) ? solicitudes : [],
     [solicitudes]
     );
+
+    const fetchProductos = useInventariosStore(state => state.fetchProductos);
 
     // Cargar solicitudes al montar el componente
     useEffect(() => {
@@ -51,6 +57,29 @@ export default function SolicitudesBodega() {
     // Debug: verificar las solicitudes cargadas
     console.log('DEBUG - SolicitudesBodega: solicitudes =', solicitudes);
     console.log('DEBUG - SolicitudesBodega: solicitudesFiltradas =', solicitudesFiltradas);
+
+    // Función para generar OCI con formato correcto
+    const generarOCIFunction = async (solicitud: any) => {
+        console.log("Generando OCI para solicitud:", solicitud);
+        console.log("Datos de la solicitud recibidos del backend:");
+        console.log("- ID:", solicitud.id_solc);
+        console.log("- Fecha:", solicitud.fecha_creacion);
+        console.log("- Sucursal nombre:", solicitud.sucursal_nombre);
+        console.log("- Sucursal dirección:", solicitud.sucursal_direccion);
+        console.log("- Sucursal RUT:", solicitud.sucursal_rut);
+        console.log("- Usuario nombre:", solicitud.usuario_nombre);
+        console.log("- Usuario rol:", solicitud.usuario_rol);
+        console.log("- Observación:", solicitud.observacion);
+        console.log("- Productos:", solicitud.productos);
+        
+        // Usar directamente los datos del backend que ya incluyen todos los campos necesarios
+        try {
+            await generarOCI(solicitud);
+        } catch (error) {
+            console.error('Error al generar OCI:', error);
+            alert("Error al generar el documento OCI");
+        }
+    };
 
     // Selección de solicitudes (siempre pueden seleccionarse)
     const handleCheck = (id: number) => {
@@ -85,6 +114,9 @@ export default function SolicitudesBodega() {
                 }
             }
 
+            // Refrescar inventario de la bodega después de aprobar
+            await fetchProductos("bodega_central");
+
             let transferidasArr: any[] = [];
             seleccionadas.forEach(id => {
                 if (cambios[id] === "aprobada") {
@@ -101,9 +133,8 @@ export default function SolicitudesBodega() {
                             })),
                             estado: "pendiente",
                             sucursal: solicitud.sucursal_nombre,
-                            observaciones: solicitud.observacion || "",
+                            observacion: solicitud.observacion || "",
                             sucursalDestino: solicitud.sucursal_nombre,
-                            // Puedes agregar más campos si tu tabla de pedidos los necesita
                         };
                         transferidasArr.push(solicitudTransferida);
                     }
@@ -130,6 +161,39 @@ export default function SolicitudesBodega() {
     const handleCloseModal = () => {
         setModalOpen(false);
         setSolicitudSeleccionada(null);
+    };
+
+    const handleEliminarSolicitud = (solicitud: any) => {
+        setSolicitudAEliminar(solicitud);
+        setModalConfirmarEliminacion(true);
+    };
+
+    const handleConfirmarEliminacion = async () => {
+        if (!solicitudAEliminar) return;
+
+        try {
+            console.log('DEBUG - Eliminando solicitud:', solicitudAEliminar.id_solc);
+            await solicitudesService.deleteSolicitud(solicitudAEliminar.id_solc.toString());
+            
+            // Refrescar la lista de solicitudes
+            if (usuario?.bodega) {
+                fetchSolicitudes({ bodega_id: usuario.bodega.toString() });
+            }
+            
+            // Cerrar modal y limpiar
+            setModalConfirmarEliminacion(false);
+            setSolicitudAEliminar(null);
+            
+            alert("Solicitud eliminada exitosamente junto con todos sus derivados.");
+        } catch (error) {
+            console.error("Error al eliminar la solicitud:", error);
+            alert("Hubo un error al eliminar la solicitud. Por favor, intente de nuevo.");
+        }
+    };
+
+    const handleCancelarEliminacion = () => {
+        setModalConfirmarEliminacion(false);
+        setSolicitudAEliminar(null);
     };
 
     // El botón de confirmar solo se habilita si hay al menos una solicitud seleccionada con cambio pendiente
@@ -241,7 +305,9 @@ export default function SolicitudesBodega() {
                                             />
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.id_solc}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.fecha_creacion}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>
+                                            {row.fecha_creacion ? new Date(row.fecha_creacion).toLocaleDateString() : 'N/A'}
+                                        </TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                         {row.sucursal_nombre || "-"}
                                         </TableCell>
@@ -251,21 +317,21 @@ export default function SolicitudesBodega() {
                                                 ? row.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
                                                 : 0}
                                         </TableCell>
-                                        <TableCell style={{
-                                            color:
-                                                cambios[row.id_solc] === "aprobada"
-                                                    ? "#4CAF50"
-                                                    : cambios[row.id_solc] === "denegada"
-                                                        ? "#FF4D4F"
-                                                        : (row.estado || "pendiente") === "aprobada"
-                                                            ? "#4CAF50"
-                                                            : (row.estado || "pendiente") === "denegada"
-                                                                ? "#FF4D4F"
-                                                                : "#FFD700"
-                                        }}>
-                                            {cambios[row.id_solc]
-                                                ? (cambios[row.id_solc] || "").charAt(0).toUpperCase() + (cambios[row.id_solc] || "").slice(1) + " (sin confirmar)"
-                                                : (row.estado || "pendiente").charAt(0).toUpperCase() + (row.estado || "pendiente").slice(1)}
+                                        <TableCell>
+                                            <EstadoBadge 
+                                                estado={cambios[row.id_solc] || row.estado || "pendiente"} 
+                                                tipo="solicitud"
+                                            />
+                                            {cambios[row.id_solc] && (
+                                                <span style={{ 
+                                                    fontSize: "10px", 
+                                                    color: "#FFD700", 
+                                                    marginLeft: "4px",
+                                                    fontStyle: "italic"
+                                                }}>
+                                                    (sin confirmar)
+                                                </span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <Button
@@ -276,13 +342,12 @@ export default function SolicitudesBodega() {
                                             >
                                                 Ver detalles
                                             </Button>
-                                            <Button
-                                                variant="outlined"
-                                                style={{ borderColor: "#4CAF50", color: "#4CAF50" }}
-                                                onClick={() => generarOCI(row)}
+                                            <IconButton
+                                                color="error"
+                                                onClick={() => handleEliminarSolicitud(row)}
                                             >
-                                                Ver OCI PDF
-                                            </Button>
+                                                <DeleteIcon />
+                                            </IconButton>
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -291,34 +356,287 @@ export default function SolicitudesBodega() {
                     </Table>
                 </TableContainer>
                 {/* Modal de detalles */}
-                <Dialog open={modalOpen} onClose={handleCloseModal}>
-                    <DialogTitle>Detalles de la solicitud</DialogTitle>
+                <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="md" fullWidth>
+                    <DialogTitle sx={{ 
+                        background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                        color: "#FFD700",
+                        borderBottom: "2px solid #FFD700",
+                        fontWeight: 600
+                    }}>
+                        📋 Detalles de Solicitud #{solicitudSeleccionada?.id_solc}
+                    </DialogTitle>
+                    <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
+                        {solicitudSeleccionada && (
+                            <>
+                                {/* Información principal */}
+                                <Box sx={{ 
+                                    display: "grid", 
+                                    gridTemplateColumns: "1fr 1fr", 
+                                    gap: 2, 
+                                    mb: 3,
+                                    p: 2,
+                                    bgcolor: "#232323",
+                                    borderRadius: 2,
+                                    border: "1px solid #333"
+                                }}>
+                                    <TextField
+                                        label="N° OCI"
+                                        value={solicitudSeleccionada.id_solc}
+                                        InputProps={{ 
+                                            readOnly: true,
+                                            sx: { color: "#FFD700", fontWeight: 600 }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Fecha de emisión"
+                                        value={solicitudSeleccionada.fecha_creacion ? new Date(solicitudSeleccionada.fecha_creacion).toLocaleDateString('es-ES', {
+                                            year: 'numeric',
+                                            month: 'long',
+                                            day: 'numeric'
+                                        }) : 'N/A'}
+                                        InputProps={{ 
+                                            readOnly: true,
+                                            sx: { color: "#fff" }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Sucursal solicitante"
+                                        value={solicitudSeleccionada.sucursal_nombre || 'N/A'}
+                                        InputProps={{ 
+                                            readOnly: true,
+                                            sx: { color: "#fff" }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Persona solicitante"
+                                        value={solicitudSeleccionada.usuario_nombre || 'N/A'}
+                                        InputProps={{ 
+                                            readOnly: true,
+                                            sx: { color: "#fff" }
+                                        }}
+                                        size="small"
+                                        sx={{
+                                            "& .MuiInputLabel-root": { color: "#ccc" },
+                                            "& .MuiOutlinedInput-root": {
+                                                "& fieldset": { borderColor: "#444" },
+                                                "&:hover fieldset": { borderColor: "#FFD700" }
+                                            }
+                                        }}
+                                    />
+                                </Box>
+
+                                {/* Información de sucursal */}
+                                <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 1 }}>
+                                        📍 Información de la sucursal
+                                    </Typography>
+                                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                                        <TextField
+                                            label="Dirección"
+                                            value={solicitudSeleccionada.sucursal?.direccion || solicitudSeleccionada.sucursal_direccion || 'N/A'}
+                                            InputProps={{ 
+                                                readOnly: true,
+                                                sx: { color: "#fff" }
+                                            }}
+                                            size="small"
+                                            sx={{
+                                                "& .MuiInputLabel-root": { color: "#ccc" },
+                                                "& .MuiOutlinedInput-root": {
+                                                    "& fieldset": { borderColor: "#444" },
+                                                    "&:hover fieldset": { borderColor: "#FFD700" }
+                                                }
+                                            }}
+                                        />
+                                        <TextField
+                                            label="RUT"
+                                            value={solicitudSeleccionada.sucursal?.rut || solicitudSeleccionada.sucursal_rut || 'N/A'}
+                                            InputProps={{ 
+                                                readOnly: true,
+                                                sx: { color: "#fff" }
+                                            }}
+                                            size="small"
+                                            sx={{
+                                                "& .MuiInputLabel-root": { color: "#ccc" },
+                                                "& .MuiOutlinedInput-root": {
+                                                    "& fieldset": { borderColor: "#444" },
+                                                    "&:hover fieldset": { borderColor: "#FFD700" }
+                                                }
+                                            }}
+                                        />
+                                    </Box>
+                                </Box>
+
+                                {/* Estado con badge */}
+                                <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 1 }}>
+                                        Estado de la solicitud
+                                    </Typography>
+                                    <Chip
+                                        label={(solicitudSeleccionada.estado || "Pendiente").charAt(0).toUpperCase() + (solicitudSeleccionada.estado || "Pendiente").slice(1)}
+                                        sx={{
+                                            bgcolor: solicitudSeleccionada.estado === "Aprobada" ? "#4CAF50" : 
+                                                    solicitudSeleccionada.estado === "Denegada" ? "#f44336" : 
+                                                    solicitudSeleccionada.estado === "En camino" ? "#2196F3" : "#FF9800",
+                                            color: "#fff",
+                                            fontWeight: 600,
+                                            fontSize: "0.9rem"
+                                        }}
+                                    />
+                                </Box>
+
+                                {/* Observación */}
+                                {solicitudSeleccionada.observacion && (
+                                    <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                        <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 1 }}>
+                                            Observaciones
+                                        </Typography>
+                                        <Typography sx={{ color: "#fff", fontStyle: "italic" }}>
+                                            {solicitudSeleccionada.observacion}
+                                        </Typography>
+                                    </Box>
+                                )}
+
+                                {/* Productos */}
+                                <Box sx={{ p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                                        📦 Productos solicitados ({solicitudSeleccionada?.productos?.length || 0})
+                                    </Typography>
+                                    
+                                    {!solicitudSeleccionada?.productos || solicitudSeleccionada.productos.length === 0 ? (
+                                        <Box sx={{ 
+                                            textAlign: "center", 
+                                            py: 3, 
+                                            color: "#8A8A8A",
+                                            fontStyle: "italic"
+                                        }}>
+                                            No hay productos en esta solicitud
+                                        </Box>
+                                    ) : (
+                                        <TableContainer>
+                                            <Table size="small">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Código</TableCell>
+                                                        <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Producto</TableCell>
+                                                        <TableCell sx={{ color: "#FFD700", fontWeight: 600 }} align="right">Cantidad</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {solicitudSeleccionada.productos.map((prod: any, idx: number) => (
+                                                        <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
+                                                            <TableCell sx={{ color: "#fff", fontFamily: "monospace" }}>
+                                                                {prod.producto_codigo || 'N/A'}
+                                                            </TableCell>
+                                                            <TableCell sx={{ color: "#fff" }}>
+                                                                {prod.producto_nombre || 'N/A'}
+                                                            </TableCell>
+                                                            <TableCell align="right" sx={{ color: "#FFD700", fontWeight: 600 }}>
+                                                                {prod.cantidad}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    )}
+                                </Box>
+                            </>
+                        )}
+                    </DialogContent>
+                    <DialogActions sx={{ 
+                        bgcolor: "#1a1a1a", 
+                        borderTop: "1px solid #333",
+                        p: 2
+                    }}>
+                        <Button 
+                            onClick={handleCloseModal} 
+                            sx={{ 
+                                color: "#FFD700",
+                                borderColor: "#FFD700",
+                                "&:hover": {
+                                    borderColor: "#FFD700",
+                                    bgcolor: "rgba(255, 215, 0, 0.1)"
+                                }
+                            }}
+                            variant="outlined"
+                        >
+                            Cerrar
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                if (solicitudSeleccionada) {
+                                    generarOCIFunction(solicitudSeleccionada);
+                                }
+                            }}
+                            sx={{ 
+                                color: "#fff", 
+                                background: "#4CAF50", 
+                                fontWeight: 600,
+                                "&:hover": {
+                                    background: "#45a049"
+                                }
+                            }}
+                            variant="contained"
+                            startIcon={<span>📄</span>}
+                        >
+                            Generar OCI PDF
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Modal de confirmación de eliminación */}
+                <Dialog open={modalConfirmarEliminacion} onClose={handleCancelarEliminacion}>
+                    <DialogTitle>Confirmar eliminación</DialogTitle>
                     <DialogContent>
-                        {solicitudSeleccionada ? (
-                            <div>
-                                <div><b>ID:</b> {solicitudSeleccionada.id_solc}</div>
-                                <div><b>Fecha:</b> {solicitudSeleccionada.fecha_creacion}</div>
-                                <div>
-                                    <b>Sucursal:</b> {solicitudSeleccionada.sucursal_nombre || "-"}<br />
-                                    <b>Dirección:</b> {solicitudSeleccionada.sucursal?.direccion || "-"}<br />
-                                    <b>RUT:</b> {solicitudSeleccionada.sucursal?.rut || "-"}
-                                </div>
-                                <div><b>Responsable:</b> {solicitudSeleccionada.usuario_nombre}</div>
-                                <div><b>Observaciones:</b> {solicitudSeleccionada.observaciones || "Sin observaciones"}</div>
-                                <div><b>Estado:</b> {(solicitudSeleccionada.estado || "pendiente").charAt(0).toUpperCase() + (solicitudSeleccionada.estado || "pendiente").slice(1)}</div>
-                                <div style={{ marginTop: "12px" }}>
-                                    <b>Productos solicitados:</b>
-                                    <ul>
-                                        {solicitudSeleccionada.productos.map((prod: any, idx: number) => (
-                                            <li key={idx}>{prod.nombre} — {prod.cantidad}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            </div>
-                        ) : null}
+                        <p>¿Está seguro de que desea eliminar la solicitud #{solicitudAEliminar?.id_solc}?</p>
+                        <p style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
+                            Esta acción eliminará permanentemente:
+                        </p>
+                        <ul>
+                            <li>La solicitud y todos sus productos asociados</li>
+                            <li>Los pedidos relacionados con esta solicitud</li>
+                            <li>Los detalles de pedidos asociados</li>
+                            <li>Las notificaciones relacionadas</li>
+                            <li>El historial asociado</li>
+                        </ul>
+                        <p style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
+                            Esta acción no se puede deshacer.
+                        </p>
                     </DialogContent>
                     <DialogActions>
-                        <Button onClick={handleCloseModal} style={{ color: "#FFD700" }}>Cerrar</Button>
+                        <Button onClick={handleCancelarEliminacion} style={{ color: "#FFD700" }}>
+                            Cancelar
+                        </Button>
+                        <Button 
+                            onClick={handleConfirmarEliminacion} 
+                            style={{ color: "#ffffff", background: "#ff6b6b", fontWeight: 600 }}
+                        >
+                            Eliminar definitivamente
+                        </Button>
                     </DialogActions>
                 </Dialog>
             </div>

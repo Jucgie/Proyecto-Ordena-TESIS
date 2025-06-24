@@ -16,11 +16,13 @@ import { useInventariosStore } from "../../store/useProductoStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { BODEGA_CENTRAL } from "../../constants/ubicaciones";
 import { useCallback } from "react";
+import CloseIcon from '@mui/icons-material/Close';
 
 async function fetchImagenUnsplash(nombre: string): Promise<string> {
     const accessKey = "rz2WkwQyM7en1zvTElwVpAbqGaOroIHqoNCllxW1qlg";
+    const keywords = `${nombre} tool hardware ferretería industrial`;
     const response = await fetch(
-        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(nombre)}&client_id=${accessKey}`
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(keywords)}&client_id=${accessKey}`
     );
     const data = await response.json();
     return data.results?.[0]?.urls?.small || "";
@@ -46,8 +48,8 @@ export default function Inventario() {
             ? "bodega_central"
             : usuario?.sucursalId || "";
 
-    console.log('DEBUG - usuario:', usuario);
-    console.log('DEBUG - ubicacionId determinado:', ubicacionId);
+    console.log("🔍 DEBUG - Inventario - usuario:", usuario);
+    console.log("🔍 DEBUG - Inventario - ubicacionId:", ubicacionId);
 
     // Obtén todas las marcas/categorías y luego filtra por ubicacionId
     const allMarcas = useInventariosStore(state => state.marcas);
@@ -64,10 +66,15 @@ export default function Inventario() {
         ? categorias.map(c => typeof c === 'object' && c?.nombre ? c.nombre : '').filter(Boolean)
         : [];
 
-    // Estado principal
+    // Estado principal - MOVIDO AQUÍ ANTES DEL useEffect
     const inventarios = useInventariosStore(state => state.inventarios);
     const productos = inventarios[ubicacionId] || [];
-   // Funciones del store
+    
+    console.log("🔍 DEBUG - Inventario - inventarios completos:", inventarios);
+    console.log("🔍 DEBUG - Inventario - productos para ubicacionId:", productos);
+    console.log("🔍 DEBUG - Inventario - cantidad de productos:", productos.length);
+
+    // Funciones del store
     const addProducto = useCallback(
         (ubicacionId: string, producto: ProductInt) => useInventariosStore.getState().addProducto(ubicacionId, producto),
         []
@@ -89,7 +96,7 @@ export default function Inventario() {
     );
 
     const deleteMarca = useCallback(
-        (marca: string) => useInventariosStore.getState().deleteMarca(ubicacionId, marca),
+        (marcaId: number) => useInventariosStore.getState().deleteMarca(ubicacionId, marcaId),
         [ubicacionId]
     );
 
@@ -99,7 +106,7 @@ export default function Inventario() {
     );
 
     const deleteCategoria = useCallback(
-        (categoria: string) => useInventariosStore.getState().deleteCategoria(ubicacionId, categoria),
+        (categoriaId: number) => useInventariosStore.getState().deleteCategoria(ubicacionId, categoriaId),
         [ubicacionId]
     );
 
@@ -157,10 +164,8 @@ export default function Inventario() {
     };
 
     const handleDeleteProducts = (codes: string[]) => {
-        // Convertir códigos a IDs de productos
         const productosAEliminar = productos.filter(p => codes.includes(p.code));
         const idsAEliminar = productosAEliminar.map(p => p.id_prodc).filter(Boolean);
-        
         if (idsAEliminar.length > 0) {
             deleteProductos(ubicacionId, idsAEliminar.map(id => id!.toString()));
         }
@@ -188,6 +193,36 @@ export default function Inventario() {
             im: null,
         });
         const [errors, setErrors] = useState<{ [key: string]: string }>({});
+        const [imgPreview, setImgPreview] = useState<string>(
+            typeof initial?.im === "string" && initial.im ? initial.im : sin_imagen
+        );
+        const [isLoadingImg, setIsLoadingImg] = useState(false);
+
+        // Buscar imagen sugerida de Unsplash cuando cambia el nombre y no hay imagen subida
+        useEffect(() => {
+            let ignore = false;
+            if (!form.im && form.name.trim()) {
+                setIsLoadingImg(true);
+                fetchImagenUnsplash(form.name).then(url => {
+                    if (!ignore) {
+                        setImgPreview(url || sin_imagen);
+                        setIsLoadingImg(false);
+                    }
+                });
+            } else if (!form.im) {
+                setImgPreview(sin_imagen);
+            }
+            return () => { ignore = true; };
+        }, [form.name, form.im]);
+
+        // Cuando el usuario sube una imagen, actualizar la previsualización
+        const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            if (file) {
+                setForm(f => ({ ...f, im: file }));
+                setImgPreview(URL.createObjectURL(file));
+            }
+        };
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
             const { name, value } = e.target as HTMLInputElement;
@@ -215,6 +250,7 @@ export default function Inventario() {
             if (!imagenFinal) {
                 const url = await fetchImagenUnsplash(form.name);
                 if (url) imagenFinal = url;
+                else imagenFinal = sin_imagen;
             }
             onSave({ ...form, im: imagenFinal });
         };
@@ -224,35 +260,74 @@ export default function Inventario() {
                 component="form"
                 onSubmit={handleSubmit}
                 sx={{
-                    p: 3,
-                    bgcolor: "#232323",
-                    borderRadius: 3,
-                    minWidth: 370,
-                    boxShadow: 3,
                     display: "flex",
                     flexDirection: "column",
-                    gap: 2
+                    gap: 3
                 }}
             >
-                <Typography variant="h6" sx={{ color: "#fff", mb: 1, fontWeight: 700 }}>
-                    {initial ? "Editar Producto" : "Añadir Producto"}
-                </Typography>
+                {/* Previsualización de imagen */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 1 }}>
+                    <Box sx={{ position: 'relative', width: 110, height: 110 }}>
+                        <img
+                            src={imgPreview}
+                            alt="Previsualización"
+                            style={{
+                                width: 110,
+                                height: 110,
+                                objectFit: 'cover',
+                                borderRadius: 8,
+                                border: '2px solid #FFD700',
+                                background: '#232323',
+                                boxShadow: '0 2px 8px #0006',
+                            }}
+                        />
+                        {isLoadingImg && (
+                            <Box sx={{
+                                position: 'absolute',
+                                top: 0, left: 0, width: '100%', height: '100%',
+                                bgcolor: 'rgba(0,0,0,0.4)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: '#FFD700', fontWeight: 700, fontSize: 18,
+                                borderRadius: 2
+                            }}>
+                                Buscando imagen...
+                            </Box>
+                        )}
+                    </Box>
+                    <Button
+                        variant="contained"
+                        component="label"
+                        sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 600 }}
+                    >
+                        Subir Imagen
+                        <input
+                            type="file"
+                            accept="image/*"
+                            hidden
+                            onChange={handleImageChange}
+                        />
+                    </Button>
+                </Box>
+                {/* Primera fila */}
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
                 <TextField
-                    label="Nombre Producto"
+                        label="Nombre del Producto"
                     name="name"
                     value={form.name}
                     onChange={handleChange}
-                    fullWidth
                     error={!!errors.name}
                     helperText={errors.name}
+                        required
+                        fullWidth
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
                     sx={{
-                        "& .MuiInputBase-root": { color: "#fff" },
-                        "& .MuiInputLabel-root": { color: "#fff" },
-                        "& .MuiOutlinedInput-root": {
-                            "& fieldset": { borderColor: "#fff" },
-                            "&:hover fieldset": { borderColor: "#fff" },
-                            "&.Mui-focused fieldset": { borderColor: "#fff" }
-                        }
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            },
+                            '& .MuiFormHelperText-root': { color: "#ff6b6b" }
                     }}
                 />
                 <TextField
@@ -260,41 +335,69 @@ export default function Inventario() {
                     name="code"
                     value={form.code}
                     onChange={handleChange}
-                    fullWidth
                     error={!!errors.code}
                     helperText={errors.code}
+                        required
+                        fullWidth
                     disabled={!!initial}
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
                     sx={{
-                        "& .MuiInputBase-root": { color: "#fff" },
-                        "& .MuiInputLabel-root": { color: "#fff" },
-                        "& .MuiOutlinedInput-root": {
-                            "& fieldset": { borderColor: "#fff" },
-                            "&:hover fieldset": { borderColor: "#fff" },
-                            "&.Mui-focused fieldset": { borderColor: "#fff" }
-                        }
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            },
+                            '& .MuiFormHelperText-root': { color: "#ff6b6b" }
                     }}
                 />
+                </Box>
+
+                {/* Segunda fila */}
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
                 <TextField
                     select
                     label="Marca"
                     name="brand"
                     value={form.brand}
                     onChange={handleChange}
-                    fullWidth
                     error={!!errors.brand}
                     helperText={errors.brand}
+                        required
+                        fullWidth
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
                     sx={{
-                        "& .MuiInputBase-root": { color: "#fff" },
-                        "& .MuiInputLabel-root": { color: "#fff" },
-                        "& .MuiOutlinedInput-root": {
-                            "& fieldset": { borderColor: "#fff" },
-                            "&:hover fieldset": { borderColor: "#fff" },
-                            "&.Mui-focused fieldset": { borderColor: "#fff" }
-                        }
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            },
+                            '& .MuiFormHelperText-root': { color: "#ff6b6b" },
+                            '& .MuiSelect-icon': { color: "#E0E0E0" }
+                        }}
+                        SelectProps={{
+                            MenuProps: {
+                                PaperProps: {
+                                    sx: {
+                                        backgroundColor: '#2E2E2E',
+                                        color: '#FFFFFF',
+                                        '& .MuiMenuItem-root:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        },
+                                        '& .Mui-selected': {
+                                            backgroundColor: 'rgba(76, 175, 80, 0.2) !important',
+                                        },
+                                        '& .Mui-selected:hover': {
+                                            backgroundColor: 'rgba(76, 175, 80, 0.3) !important',
+                                        }
+                                    },
+                                },
+                            },
                     }}
                 >
-                    <MenuItem value="">Selecciona una marca</MenuItem>
-                    {marcas.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
+                        <MenuItem value="" disabled sx={{ color: "#888888" }}>Selecciona una marca</MenuItem>
+                        {marcas.map(m => <MenuItem key={m} value={m} sx={{ color: "#FFFFFF" }}>{m}</MenuItem>)}
                 </TextField>
                 <TextField
                     select
@@ -302,74 +405,131 @@ export default function Inventario() {
                     name="category"
                     value={form.category}
                     onChange={handleChange}
-                    fullWidth
                     error={!!errors.category}
                     helperText={errors.category}
+                        required
+                        fullWidth
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
                     sx={{
-                        "& .MuiInputBase-root": { color: "#fff" },
-                        "& .MuiInputLabel-root": { color: "#fff" },
-                        "& .MuiOutlinedInput-root": {
-                            "& fieldset": { borderColor: "#fff" },
-                            "&:hover fieldset": { borderColor: "#fff" },
-                            "&.Mui-focused fieldset": { borderColor: "#fff" }
-                        }
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            },
+                            '& .MuiFormHelperText-root': { color: "#ff6b6b" },
+                            '& .MuiSelect-icon': { color: "#E0E0E0" }
+                        }}
+                        SelectProps={{
+                            MenuProps: {
+                                PaperProps: {
+                                    sx: {
+                                        backgroundColor: '#2E2E2E',
+                                        color: '#FFFFFF',
+                                        '& .MuiMenuItem-root:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        },
+                                        '& .Mui-selected': {
+                                            backgroundColor: 'rgba(76, 175, 80, 0.2) !important',
+                                        },
+                                        '& .Mui-selected:hover': {
+                                            backgroundColor: 'rgba(76, 175, 80, 0.3) !important',
+                                        }
+                                    },
+                                },
+                            },
                     }}
                 >
-                    <MenuItem value="">Selecciona una categoría</MenuItem>
-                    {categorias.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                        <MenuItem value="" disabled sx={{ color: "#888888" }}>Selecciona una categoría</MenuItem>
+                        {categorias.map(c => <MenuItem key={c} value={c} sx={{ color: "#FFFFFF" }}>{c}</MenuItem>)}
                 </TextField>
+                </Box>
+
+                {/* Stock */}
                 <TextField
-                    label="Stock"
+                    label="Stock Inicial"
                     name="stock"
                     type="number"
                     value={form.stock}
                     onChange={handleChange}
-                    fullWidth
                     error={!!errors.stock}
                     helperText={errors.stock}
+                    required
+                    fullWidth
+                    InputLabelProps={{ style: { color: "#E0E0E0" } }}
                     inputProps={{ min: 0 }}
+                    onFocus={(e) => e.target.select()}
                     sx={{
-                        "& .MuiInputBase-root": { color: "#fff" },
-                        "& .MuiInputLabel-root": { color: "#fff" },
-                        "& .MuiOutlinedInput-root": {
-                            "& fieldset": { borderColor: "#fff" },
-                            "&:hover fieldset": { borderColor: "#fff" },
-                            "&.Mui-focused fieldset": { borderColor: "#fff" }
-                        }
+                        '& .MuiOutlinedInput-root': {
+                            color: "#FFFFFF",
+                            '& fieldset': { borderColor: "#666666" },
+                            '&:hover fieldset': { borderColor: "#888888" },
+                            '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                        },
+                        '& .MuiFormHelperText-root': { color: "#ff6b6b" }
                     }}
                 />
+
+                {/* Descripción */}
                 <TextField
                     label="Descripción"
                     name="description"
                     value={form.description}
                     onChange={handleChange}
-                    fullWidth
-                    multiline
-                    minRows={2}
                     error={!!errors.description}
                     helperText={errors.description}
+                    required
+                    fullWidth
+                    multiline
+                    rows={4}
+                    InputLabelProps={{ style: { color: "#E0E0E0" } }}
                     sx={{
-                        "& .MuiInputBase-root": { color: "#fff" },
-                        "& .MuiInputLabel-root": { color: "#fff" },
-                        "& .MuiOutlinedInput-root": {
-                            "& fieldset": { borderColor: "#fff" },
-                            "&:hover fieldset": { borderColor: "#fff" },
-                            "&.Mui-focused fieldset": { borderColor: "#fff" }
-                        }
+                        '& .MuiOutlinedInput-root': {
+                            color: "#FFFFFF",
+                            '& fieldset': { borderColor: "#666666" },
+                            '&:hover fieldset': { borderColor: "#888888" },
+                            '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                        },
+                        '& .MuiFormHelperText-root': { color: "#ff6b6b" }
                     }}
                 />
-                <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, mt: 1 }}>
-                    <Button onClick={onCancel} variant="contained" sx={{ bgcolor: "#444", color: "#fff" }}>
+
+                {/* Botones */}
+                <DialogActions sx={{ 
+                    bgcolor: "#1a1a1a", 
+                    borderTop: "1px solid #333",
+                    p: 2,
+                    mt: 2
+                }}>
+                    <Button 
+                        onClick={onCancel}
+                        sx={{ 
+                            color: "#FFD700",
+                            borderColor: "#FFD700",
+                            borderWidth: 1.5,
+                            fontWeight: 600,
+                            '&:hover': { 
+                                background: "#FFD70022", 
+                                borderColor: "#FFD700" 
+                            }
+                        }}
+                        variant="outlined"
+                    >
                         Cancelar
                     </Button>
                     <Button
                         type="submit"
                         variant="contained"
-                        sx={{ bgcolor: "#444", color: "#fff", fontWeight: 600, boxShadow: 1 }}
+                        sx={{
+                            background: "#FFD700",
+                            color: "#181818",
+                            fontWeight: 700,
+                            '&:hover': { background: "#FFD700cc" }
+                        }}
                     >
-                        {initial ? "Guardar" : "Agregar"}
+                        {initial ? "Guardar Cambios" : "Agregar Producto"}
                     </Button>
-                </Box>
+                </DialogActions>
             </Box>
         );
     }
@@ -382,13 +542,40 @@ export default function Inventario() {
         onEdit: () => void
     }) {
         if (!product) return null;
+        
         return (
-            <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-                <DialogTitle sx={{ bgcolor: "#232323", color: "#FFD700" }}>
-                    Detalles del Producto
+            <Dialog 
+                open={open} 
+                onClose={onClose} 
+                maxWidth="md" 
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        backgroundColor: "#1a1a1a",
+                        borderRadius: 2,
+                    }
+                }}
+            >
+                <DialogTitle sx={{ 
+                    background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                    color: "#FFD700",
+                    borderBottom: "2px solid #FFD700",
+                    fontWeight: 600,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center"
+                }}>
+                    <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        📄 Detalles del Producto
+                    </Box>
+                    <IconButton onClick={onClose} sx={{ color: "#FFD700" }}>
+                        <CloseIcon />
+                    </IconButton>
                 </DialogTitle>
-                <DialogContent sx={{ bgcolor: "#232323" }}>
-                    <Box sx={{ display: "flex", gap: 4 }}>
+                <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff", pt: '28px' }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '200px 1fr' }, gap: 4 }}>
+                        {/* Columna de la Imagen */}
+                        <Box>
                         <CardMedia
                             component="img"
                             image={
@@ -399,26 +586,95 @@ export default function Inventario() {
                                         : sin_imagen
                             }
                             alt={product.name}
-                            sx={{ borderRadius: "6px", height: 120, objectFit: "cover" }}
+                                sx={{ 
+                                    borderRadius: "8px", 
+                                    width: '100%',
+                                    height: 'auto',
+                                    maxHeight: 200,
+                                    objectFit: "cover",
+                                    border: '1px solid #333'
+                                }}
                         />
+                        </Box>
+                        
+                        {/* Columna de Detalles */}
                         <Box>
-                            <Typography variant="h5" sx={{ color: "#FFD700" }}>{product.name}</Typography>
-                            <Typography sx={{ color: "#fff" }}>Código: {product.code}</Typography>
-                            <Typography sx={{ color: "#fff" }}>Marca: {product.brand}</Typography>
-                            <Typography sx={{ color: "#fff" }}>Categoría: {product.category}</Typography>
-                            <Typography sx={{ color: "#FFD700" }}>Stock: {product.stock}</Typography>
-                            <Typography sx={{ color: "#fff", mt: 2 }}>Descripción:</Typography>
-                            <Typography sx={{ color: "#fff" }}>{product.description}</Typography>
+                            <Typography variant="h4" sx={{ color: "#FFFFFF", fontWeight: 600, mb: 1 }}>
+                                {product.name}
+                            </Typography>
+                            
+                            <Box sx={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                                gap: 2,
+                                mb: 3
+                            }}>
+                                <DetailItem label="Código" value={product.code} />
+                                <DetailItem label="Marca" value={product.brand} />
+                                <DetailItem label="Categoría" value={product.category} />
+                                <DetailItem label="Stock" value={product.stock.toString()} isHighlight />
+                            </Box>
+                            
+                            <Typography variant="subtitle1" sx={{ color: "#E0E0E0", fontWeight: 500, borderBottom: '1px solid #333', pb: 1, mb: 2 }}>
+                                Descripción
+                            </Typography>
+                            <Typography sx={{ color: "#BDBDBD", lineHeight: 1.6 }}>
+                                {product.description}
+                            </Typography>
                         </Box>
                     </Box>
                 </DialogContent>
-                <DialogActions sx={{ bgcolor: "#232323" }}>
-                    <Button onClick={onEdit} startIcon={<EditIcon />} variant="contained" sx={{ bgcolor: "#0087ff", color: "#fff" }}>
+                <DialogActions sx={{ 
+                    bgcolor: "#1a1a1a", 
+                    borderTop: "1px solid #333",
+                    p: 2 
+                }}>
+                    <Button 
+                        onClick={onClose}
+                        variant="outlined"
+                        sx={{ 
+                            color: "#FFD700",
+                            borderColor: "#FFD700",
+                            borderWidth: 1.5,
+                            fontWeight: 600,
+                            '&:hover': { background: "#FFD70022", borderColor: "#FFD700" }
+                        }}
+                    >
+                        Cerrar
+                    </Button>
+                    <Button 
+                        onClick={onEdit} 
+                        startIcon={<EditIcon />} 
+                        variant="contained" 
+                        sx={{
+                            background: "#4CAF50",
+                            color: "#fff",
+                            fontWeight: 700,
+                            '&:hover': { background: "#45a049" }
+                        }}
+                    >
                         Editar
                     </Button>
-                    <Button onClick={onClose} color="secondary" variant="outlined">Cerrar</Button>
                 </DialogActions>
             </Dialog>
+        );
+    }
+
+    // Componente auxiliar para mostrar detalles
+    function DetailItem({ label, value, isHighlight = false }: { label: string, value: string, isHighlight?: boolean }) {
+        return (
+            <Box>
+                <Typography variant="overline" sx={{ color: "#888", display: 'block', lineHeight: 1 }}>
+                    {label}
+                </Typography>
+                <Typography sx={{ 
+                    color: isHighlight ? "#4CAF50" : "#FFFFFF", 
+                    fontWeight: isHighlight ? 700 : 400,
+                    fontSize: isHighlight ? '1.2rem' : '1rem'
+                }}>
+                    {value}
+                </Typography>
+            </Box>
         );
     }
 
@@ -650,18 +906,13 @@ export default function Inventario() {
 
     // --- Render principal ---
     useEffect(() => {
+        console.log("🔍 DEBUG - Inventario - useEffect ejecutado");
+        console.log("🔍 DEBUG - Inventario - ubicacionId en useEffect:", ubicacionId);
         if (ubicacionId) {
-            // Solo hacer fetch si no tenemos productos para esta ubicación
-            const productosActuales = useInventariosStore.getState().inventarios[ubicacionId];
-            if (!productosActuales || productosActuales.length === 0) {
-                fetchProductos(ubicacionId);
-            }
-            fetchMarcas(ubicacionId);
-            fetchCategorias(ubicacionId);
+            console.log("🔍 DEBUG - Inventario - Llamando a fetchProductos con:", ubicacionId);
+            fetchProductos(ubicacionId);
         }
-    }, [ubicacionId]);
-
-    console.log('DEBUG productos:', productos);
+    }, [ubicacionId, fetchProductos]);
 
     return (
         <Layout>
@@ -830,15 +1081,57 @@ export default function Inventario() {
                 </Paper>
             </Box>
             {/* Modales */}
-            <Dialog open={modalAddOpen} onClose={() => setModalAddOpen(false)}>
+            <Dialog 
+                open={modalAddOpen} 
+                onClose={() => setModalAddOpen(false)}
+                maxWidth="md"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        backgroundColor: "#1a1a1a",
+                        borderRadius: 2,
+                    }
+                }}
+            >
+                <DialogTitle sx={{ 
+                    background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                    color: "#FFD700",
+                    borderBottom: "2px solid #FFD700",
+                    fontWeight: 600
+                }}>
+                    ➕ Añadir Producto
+                </DialogTitle>
+                <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff", pt: '28px' }}>
                 <ProductForm
                     onSave={handleAddProduct}
                     onCancel={() => setModalAddOpen(false)}
                     marcas={marcasNombres}
                     categorias={categoriasNombres}
                 />
+                </DialogContent>
             </Dialog>
-            <Dialog open={modalEditOpen} onClose={() => setModalEditOpen(false)}>
+            
+            <Dialog 
+                open={modalEditOpen} 
+                onClose={() => setModalEditOpen(false)}
+                maxWidth="md"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        backgroundColor: "#1a1a1a",
+                        borderRadius: 2,
+                    }
+                }}
+            >
+                <DialogTitle sx={{ 
+                    background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                    color: "#FFD700",
+                    borderBottom: "2px solid #FFD700",
+                    fontWeight: 600
+                }}>
+                    ✏️ Editar Producto
+                </DialogTitle>
+                <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff", pt: '28px' }}>
                 <ProductForm
                     initial={productoActual!}
                     onSave={handleUpdateProduct}
@@ -846,6 +1139,7 @@ export default function Inventario() {
                     marcas={marcasNombres}
                     categorias={categoriasNombres}
                 />
+                </DialogContent>
             </Dialog>
             <ProductDetailsModal
                 product={productoActual}
