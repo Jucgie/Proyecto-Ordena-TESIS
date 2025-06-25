@@ -1,14 +1,17 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from .views import ( login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, SolicitudesViewSet,PedidosViewSet
+from .views import ( login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, SolicitudesViewSet,PedidosViewSet,UsuarioViewSet
 )
 
 router = DefaultRouter()
 
 router.register(r'productos', ProductoViewSet, basename='producto')
 router.register(r'marcas', MarcaViewSet, basename='marca')
-router.register(r'categorias', CategoriaViewSet, basename='categoria')
+router.register(r'categorias', 
+CategoriaViewSet, basename='categoria')
+router.register(r'usuarios', UsuarioViewSet, basename='usuario')
+
 router.register(r'solicitudes', SolicitudesViewSet, basename='solicitud'),
 router.register(r'pedidos',PedidosViewSet,basename='pedido')
 

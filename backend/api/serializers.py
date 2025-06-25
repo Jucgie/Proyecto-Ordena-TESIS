@@ -180,9 +180,49 @@ class SucursalSerializer(serializers.ModelSerializer):
         fields = ['id', 'nombre_sucursal', 'direccion', 'descripcion', 'bodega_fk', 'rut']
 
 class UsuarioSerializer(serializers.ModelSerializer):
+    # Campo para leer el nombre del rol, pero no para escribirlo
+    rol_nombre = serializers.CharField(source='rol_fk.nombre_rol', read_only=True)
+
     class Meta:
         model = Usuario
-        fields = '__all__'
+        # Lista explícita de campos para evitar los problemáticos y la contraseña
+
+        #contraseña solo lectura
+        contrasena = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+        fields = [
+            'id_us', 'rut', 'nombre', 'correo','contrasena',
+            'bodeg_fk', 'sucursal_fk', 'rol_fk', 'rol_nombre',
+            'is_active',
+        ]
+        # El campo rol_fk es solo para escritura (al crear/actualizar)
+        extra_kwargs = {
+            'rol_fk': {'write_only': True}
+        }
+    def create(self, validated_data):
+        """
+        Sobrescribimos el método create para hashear la contraseña.
+        """
+        # Extraemos la contraseña del diccionario de datos validados
+        password = validated_data.pop('contrasena')
+        # Creamos la instancia del usuario con los datos restantes
+        usuario = Usuario(**validated_data)
+        # Usamos el método set_password de Django que se encarga de hashear
+        usuario.set_password(password)
+        usuario.save()
+        return usuario
+    def update(self, instance, validated_data):
+        """
+        Sobrescribimos el método update para manejar la actualización de la contraseña.
+        """
+        # Si se proporciona una nueva contraseña, la hasheamos, evitando que la contraseña se guarde en un texto plano
+        password = validated_data.pop('contrasena', None)
+        if password:
+            instance.set_password(password)
+
+        # Actualizamos los otros campos usando el método por defecto.
+        instance = super().update(instance, validated_data)
+        return instance
+
 
 class LoginSerializer(serializers.Serializer):
     correo = serializers.EmailField()
