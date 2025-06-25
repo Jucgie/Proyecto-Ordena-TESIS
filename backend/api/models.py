@@ -318,7 +318,7 @@ class Notificacion(models.Model):
 class Historial(models.Model):
     id_hst = models.BigAutoField(primary_key=True)
     fecha = models.DateTimeField()
-    usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE)
+    usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='usuario_fk')
     pedidos_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE, db_column='pedidos_fk')
     producto_fk = models.ForeignKey(Productos, on_delete=models.CASCADE)
 
@@ -354,13 +354,15 @@ class Informe(models.Model):
     titulo = models.CharField(max_length=255, null=True)
     descripcion = models.CharField(max_length=255, null=True)
     modulo_origen = models.CharField(max_length=255, null=True)
-    contenido = models.CharField(max_length=255, null=True)
+    contenido = models.TextField(null=True)
     archivo_url = models.CharField(max_length=255, null=True)
     fecha_generado = models.DateTimeField(null=True)
     usuario_fk = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, db_column='usuario_fk')
     pedidos_fk = models.ForeignKey(Pedidos, on_delete=models.SET_NULL, null=True, db_column='pedidos_fk')
     productos_fk = models.ForeignKey(Productos, on_delete=models.SET_NULL, null=True, db_column='productos_fk_id')
-
+    bodega_fk = models.ForeignKey(BodegaCentral, on_delete=models.SET_NULL, null=True, db_column='bodega_fk')
+    sucursal_fk = models.ForeignKey(Sucursal, on_delete=models.SET_NULL, null=True, db_column='sucursal_fk')
+    
     class Meta:
         db_table = 'informe'
         managed = False

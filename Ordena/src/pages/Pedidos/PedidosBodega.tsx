@@ -25,7 +25,7 @@ import { useUsuariosStore } from "../../store/useUsuarioStore";
 import { useProveedoresStore } from "../../store/useProveedorStore";
 import { useInventariosStore } from "../../store/useProductoStore";
 import { usuarioService } from "../../services/usuarioService";
-import { solicitudesService, pedidosService, personalEntregaService } from "../../services/api";
+import { solicitudesService, pedidosService, personalEntregaService, informesService } from "../../services/api";
 import EstadoBadge from "../../components/EstadoBadge";
 
 // Interfaces
@@ -73,14 +73,8 @@ interface Usuario {
     id_us?: string;
     nombre: string;
     rol: string;
-    bodega?: {
-        id: string;
-        nombre: string;
-    };
-    sucursal?: {
-        id: string;
-        nombre: string;
-    };
+    bodega?: string | number;  // Es directamente el ID de la bodega
+    sucursal?: string | number;  // Es directamente el ID de la sucursal
 }
 
 // Componente reutilizable para los botones de acción
@@ -107,6 +101,125 @@ function BotonAccion({ children, startIcon, ...props }: { children: React.ReactN
     );
 }
 
+function formatFecha(fecha: string) {
+    if (!fecha) return '-';
+    const d = new Date(fecha);
+    return d.toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+// Componente para tabla de ingresos
+function TablaIngresos({ ingresos, onVerDetalles, loading }: { ingresos: any[], onVerDetalles: (row: any) => void, loading: boolean }) {
+    return (
+        <TableContainer component={Paper} style={{ background: "#181818" }}>
+            <Table>
+                <TableHead>
+                    <TableRow>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>ID</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Proveedor</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>N° de productos</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Acción</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {loading ? (
+                        <TableRow>
+                            <TableCell colSpan={5} align="center" style={{ color: "#FFD700", fontWeight: 600, fontSize: 18 }}>
+                                Cargando pedidos...
+                            </TableCell>
+                        </TableRow>
+                    ) : ingresos.length === 0 ? (
+                        <TableRow>
+                            <TableCell colSpan={5} align="center" style={{ color: "#8A8A8A" }}>
+                                No hay ingresos para mostrar.
+                            </TableCell>
+                        </TableRow>
+                    ) : (
+                        ingresos.map((row: any) => (
+                            <TableRow key={row.id_p || row.id}>
+                                <TableCell style={{ color: "#fff" }}>{row.id_p || row.id}</TableCell>
+                                <TableCell style={{ color: "#fff" }}>{formatFecha(row.fecha_entrega || row.fecha)}</TableCell>
+                                <TableCell style={{ color: "#fff" }}>{row.proveedor_nombre || "Sin proveedor"}</TableCell>
+                                <TableCell style={{ color: "#fff" }}>{Array.isArray(row.detalles_pedido) ? row.detalles_pedido.reduce((acc: number, p: any) => acc + parseFloat(p.cantidad || '0'), 0) : 0}</TableCell>
+                                <TableCell>
+                                    <Button
+                                        variant="outlined"
+                                        startIcon={<VisibilityIcon />}
+                                        style={{ borderColor: "#FFD700", color: "#FFD700" }}
+                                        onClick={() => onVerDetalles(row)}
+                                    >
+                                        Ver detalles
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        ))
+                    )}
+                </TableBody>
+            </Table>
+        </TableContainer>
+    );
+}
+
+// Componente para tabla de salidas
+function TablaSalidas({ salidas, onVerDetalles, loading }: { salidas: any[], onVerDetalles: (row: any) => void, loading: boolean }) {
+    return (
+        <TableContainer component={Paper} style={{ background: "#181818" }}>
+            <Table>
+                <TableHead>
+                    <TableRow>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>ID</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Asignado a entrega</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Sucursal destino</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Estado</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>N° de productos</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Acción</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {loading ? (
+                        <TableRow>
+                            <TableCell colSpan={7} align="center" style={{ color: "#FFD700", fontWeight: 600, fontSize: 18 }}>
+                                Cargando pedidos...
+                            </TableCell>
+                        </TableRow>
+                    ) : salidas.length === 0 ? (
+                        <TableRow>
+                            <TableCell colSpan={7} align="center" style={{ color: "#8A8A8A" }}>
+                                No hay salidas para mostrar.
+                            </TableCell>
+                        </TableRow>
+                    ) : (
+                        salidas.map((row: any) => {
+                            console.log('Fila salida:', row);
+                            return (
+                                <TableRow key={row.id_p || row.id}>
+                                    <TableCell style={{ color: "#fff" }}>{row.id_p || row.id}</TableCell>
+                                    <TableCell style={{ color: "#fff" }}>{formatFecha(row.fecha_entrega || row.fecha)}</TableCell>
+                                    <TableCell style={{ color: "#fff" }}>{row.personal_entrega_nombre || "-"}</TableCell>
+                                    <TableCell style={{ color: "#fff" }}>{row.sucursal_nombre || "-"}</TableCell>
+                                    <TableCell style={{ color: "#fff" }}>{row.estado_pedido_nombre || "-"}</TableCell>
+                                    <TableCell style={{ color: "#fff" }}>{Array.isArray(row.detalles_pedido) ? row.detalles_pedido.reduce((acc: number, p: any) => acc + parseFloat(p.cantidad || '0'), 0) : 0}</TableCell>
+                                    <TableCell>
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={<VisibilityIcon />}
+                                            style={{ borderColor: "#FFD700", color: "#FFD700" }}
+                                            onClick={() => onVerDetalles(row)}
+                                        >
+                                            Ver detalles
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })
+                    )}
+                </TableBody>
+            </Table>
+        </TableContainer>
+    );
+}
+
 export default function PedidosBodega() {
     const { 
         pedidos, 
@@ -122,10 +235,12 @@ export default function PedidosBodega() {
     } = useBodegaStore();
 
     const usuario = useAuthStore((state: any) => state.usuario);
-    const { addProveedor } = useProveedoresStore.getState() as { addProveedor: (proveedor: Proveedor) => void };
+    const addProveedor = useProveedoresStore.getState().addProveedor;
     const [showSnackbar, setShowSnackbar] = useState(transferencias > 0);
+    const [snackbarMessage, setSnackbarMessage] = useState("");
+    const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error" | "warning" | "info">("success");
     const { usuarios, setUsuarios } = useUsuariosStore() as { usuarios: Usuario[], setUsuarios: (usuarios: Usuario[]) => void };
-    const bodegaIdActual = usuario?.bodega?.id;
+    const bodegaIdActual = usuario?.bodega;
     const [transportistas, setTransportistas] = useState<Usuario[]>([]);
 
     const pedidosArray = Array.isArray(pedidos) ? pedidos : [];
@@ -133,30 +248,31 @@ export default function PedidosBodega() {
     const [modalDespachoOpen, setModalDespachoOpen] = useState(false);
     const [solicitudADespachar, setSolicitudADespachar] = useState<any>(null);
     const [transportistaSeleccionado, setTransportistaSeleccionado] = useState<string>("");
-    const marcas = useMemo(() => {
-        const marcasData = useInventariosStore.getState().marcas["bodega-central"] || [];
-        return marcasData.map((marca: any) => marca.nombre || marca);
-    }, []);
     
-    const categorias = useMemo(() => {
-        const categoriasData = useInventariosStore.getState().categorias["bodega-central"] || [];
-        return categoriasData.map((categoria: any) => categoria.nombre || categoria);
-    }, []);
+    // Estados para marcas y categorías
+    const [marcas, setMarcas] = useState<string[]>([]);
+    const [categorias, setCategorias] = useState<string[]>([]);
+    
+    // Obtener funciones del store de inventario
+    const { fetchMarcas, fetchCategorias, fetchProductos } = useInventariosStore();
+    
+    // Obtener funciones del store de proveedores
+    const { addIngresoProveedor } = useProveedoresStore();
+
+    const [loading, setLoading] = useState(false);
+    const [pedidosBackend, setPedidosBackend] = useState<any[]>([]);
 
     const fetchSolicitudesTransferidas = useCallback(async () => {
-        if (!usuario?.bodega?.id_bdg) return;
+        if (!usuario?.bodega) return;
         try {
             const solicitudes = await solicitudesService.getSolicitudes({ 
-                bodega_id: usuario.bodega.id_bdg.toString(),
+                bodega_id: usuario.bodega.toString(),
             });
 
             // Filtrar solo solicitudes aprobadas que NO estén despachadas
             const transferidas = solicitudes.filter(
                 (s: any) => s.estado === "aprobada" && !s.despachada
             );
-            
-            console.log('Solicitudes totales:', solicitudes.length);
-            console.log('Solicitudes aprobadas no despachadas:', transferidas.length);
             
             const uniqueTransferidasMap = new Map();
             transferidas.forEach((solicitud: any) => {
@@ -185,7 +301,7 @@ export default function PedidosBodega() {
         } catch (error) {
             console.error("Error reconstruyendo solicitudes transferidas:", error);
         }
-    }, [usuario?.bodega?.id_bdg, clearSolicitudesTransferidas, addSolicitudesTransferidas]);
+    }, [usuario?.bodega, clearSolicitudesTransferidas, addSolicitudesTransferidas]);
 
     useEffect(() => {
         if (transferencias > 0) {
@@ -220,6 +336,37 @@ export default function PedidosBodega() {
         fetchTransportistas();
     }, [usuario?.bodega]);
 
+    // Cargar marcas y categorías
+    useEffect(() => {
+        const cargarMarcasYCategorias = async () => {
+            try {
+                
+                // Usar "bodega-central" como ubicacionId para la bodega
+                const ubicacionId = "bodega-central";
+                
+                // Cargar marcas
+                await fetchMarcas(ubicacionId);
+                const marcasData = useInventariosStore.getState().marcas[ubicacionId] || [];
+                const marcasNombres = marcasData.map((marca: any) => marca.nombre || marca.nombre_mprod || marca);
+                setMarcas(marcasNombres);
+                
+                // Cargar categorías
+                await fetchCategorias(ubicacionId);
+                const categoriasData = useInventariosStore.getState().categorias[ubicacionId] || [];
+                const categoriasNombres = categoriasData.map((categoria: any) => categoria.nombre || categoria);
+                setCategorias(categoriasNombres);
+                
+            } catch (error) {
+                console.error('Error cargando marcas y categorías:', error);
+                // Establecer valores por defecto
+                setMarcas(['Stanley', 'Bosch', 'Makita', 'Dewalt', 'Black+Decker', 'Einhell', 'Truper', 'Irwin', 'Hilti', '3M']);
+                setCategorias(['Herramientas manuales', 'Herramientas eléctricas', 'Materiales de fijación', 'Medición y nivelación', 'Seguridad industrial', 'Accesorios']);
+            }
+        };
+        
+        cargarMarcasYCategorias();
+    }, [fetchMarcas, fetchCategorias]);
+
     const handleSnackbarClick = () => {
         setShowSnackbar(false);
         setTransferencias(0);
@@ -240,14 +387,10 @@ export default function PedidosBodega() {
             return;
         }
 
-        console.log(`Intentando despachar solicitud ID: ${solicitud.id}`);
-
         // 1. Marcar como despachada en el backend
         try {
             await solicitudesService.updateSolicitud(solicitud.id.toString(), { despachada: true });
-            console.log(`Solicitud ${solicitud.id} marcada como despachada exitosamente`);
         } catch (error: any) {
-            console.error("Error al marcar la solicitud como despachada:", error.response?.data || error.message);
             
             // Si la solicitud no existe, limpiar el estado local
             if (error.response?.status === 404) {
@@ -276,14 +419,14 @@ export default function PedidosBodega() {
 
             // Buscar el personal de entrega correspondiente al transportista
             const personalEntrega = await personalEntregaService.getPersonalEntrega({ 
-                bodega_id: usuario?.bodega?.id_bdg?.toString() 
+                bodega_id: usuario?.bodega?.toString() 
             });
             
             let personalEncontrado = personalEntrega.find((p: any) => p.usuario_fk === transportista.id_us || p.usuario_fk === transportista.id);
             
             if (!personalEncontrado) {
                 // Si no existe, crear el personal de entrega
-                console.log('Creando personal de entrega para transportista:', transportista.nombre);
+               
                 const nuevoPersonal = await personalEntregaService.crearDesdeUsuario({
                     usuario_id: parseInt(transportista.id_us || transportista.id),
                     patente: 'N/A', // Se puede mejorar para pedir la patente
@@ -299,7 +442,6 @@ export default function PedidosBodega() {
                 descripcion: `Pedido generado desde solicitud ${solicitud.id}`
             });
 
-            console.log('Pedido creado en base de datos:', pedidoCreado);
 
             // Usar el pedido real creado en la BD para la UI
             const sucursalId = SUCURSALES.find(s => s.nombre === solicitud.sucursalDestino)?.id || "";
@@ -314,8 +456,8 @@ export default function PedidosBodega() {
                 asignado: solicitud.asignado,
                 ociAsociada: solicitud.id,
                 observacion: solicitud.observacion || "",
-                bodegaOrigen: usuario?.bodega?.nombre || "Bodega Central",
-                direccionBodega: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción",
+                bodegaOrigen: "Bodega Central",
+                direccionBodega: "Camino a Penco 2500, Concepción",
                 direccionSucursal: SUCURSALES.find(s => s.id === sucursalId)?.direccion || "-",
                 patenteVehiculo: "N/A",
                 estado: "En camino",
@@ -341,6 +483,52 @@ export default function PedidosBodega() {
         // 4. Generar guía de despacho solo si se creó el pedido exitosamente
         if (nuevoPedido) {
             generarGuiaDespacho(nuevoPedido);
+            
+            // Crear informe en la base de datos
+            try {
+                const contenidoInforme = {
+                    pedido_id: nuevoPedido.id,
+                    solicitud_id: solicitud.id,
+                    fecha: nuevoPedido.fecha,
+                    responsable: nuevoPedido.responsable,
+                    sucursal: {
+                        id: nuevoPedido.sucursalDestino,
+                        nombre: solicitud.sucursalDestino,
+                        direccion: nuevoPedido.direccionSucursal
+                    },
+                    bodega: {
+                        nombre: nuevoPedido.bodegaOrigen,
+                        direccion: nuevoPedido.direccionBodega
+                    },
+                    productos: nuevoPedido.productos.map((prod: any) => ({
+                        nombre: prod.nombre,
+                        cantidad: prod.cantidad,
+                        codigo: prod.codigo || `${prod.nombre}-${Date.now()}`.replace(/\s+/g, "-").toLowerCase()
+                    })),
+                    transportista: {
+                        nombre: nuevoPedido.asignado,
+                        patente: nuevoPedido.patenteVehiculo
+                    },
+                    observaciones: nuevoPedido.observacion,
+                    oci_asociada: solicitud.id
+                };
+                
+                await informesService.createInforme({
+                    titulo: `Guía de Despacho - Pedido ${nuevoPedido.id}`,
+                    descripcion: `Guía de despacho generada para el pedido ${nuevoPedido.id} hacia ${solicitud.sucursalDestino}`,
+                    modulo_origen: 'pedidos',
+                    contenido: JSON.stringify(contenidoInforme),
+                    archivo_url: `GuiaDespacho_${nuevoPedido.id}.pdf`,
+                    fecha_generado: new Date().toISOString(),
+                    bodega_fk: usuario?.bodega || null,
+                    pedidos_fk: nuevoPedido.id
+                });
+                
+                console.log('✅ Informe de guía de despacho creado exitosamente');
+            } catch (error) {
+                console.error('Error al crear informe de guía de despacho:', error);
+                // No mostrar error al usuario, solo log
+            }
         }
     };
 
@@ -365,37 +553,38 @@ export default function PedidosBodega() {
     const [modalTipo, setModalTipo] = useState<"ingreso" | "salida" | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
+    // Al montar, cargar pedidos desde el backend
+    useEffect(() => {
+        const fetchPedidos = async () => {
+            if (!usuario?.bodega) return;
+            setLoading(true);
+            try {
+                const pedidos = await pedidosService.getPedidos({ bodega_id: usuario.bodega.toString() });
+                setPedidosBackend(pedidos || []);
+            } catch (error) {
+                setPedidosBackend([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchPedidos();
+    }, [usuario?.bodega]);
+
+    // Separar ingresos y salidas usando los campos reales del backend
+    const ingresos = useMemo(() => pedidosBackend.filter(p => p.proveedor_fk), [pedidosBackend]);
+    const salidas = useMemo(() => pedidosBackend.filter(p => p.sucursal_fk), [pedidosBackend]);
+
     // Filtros aplicados a los datos
     const pedidosFiltrados = useMemo(() => {
-        console.log('Estado actual de pedidos:', pedidosArray);
-        console.log('Opción actual:', opcion);
-        
-        let datos = pedidosArray;
-        console.log('Datos antes del filtrado:', datos);
-        
+        let datos = opcion === 'ingresos' ? ingresos : salidas;
         datos = datos.filter((row) => {
-            console.log('Filtrando pedido:', row);
             if (opcion === "ingresos") {
-                const esIngreso = row.tipo === "ingreso";
-                console.log('Es ingreso?', esIngreso);
-                if (!esIngreso) return false;
-                
-                if (producto && !row.productos.some((p: any) => p.nombre === producto)) return false;
+                if (producto && !row.productos?.some((p: any) => p.nombre === producto)) return false;
                 if (fecha && row.fecha !== fecha) return false;
                 return true;
             }
             if (opcion === "salidas") {
-                console.log('Verificando pedido de salida:', row);
-                const esSalida = row.tipo === "salida";
-                console.log('Es salida?', esSalida);
-                if (!esSalida) return false;
-                
-                // Verificar si tiene sucursal destino
-                const tieneSucursalDestino = row.sucursalDestino || row.sucursal;
-                console.log('Tiene sucursal destino?', tieneSucursalDestino);
-                if (!tieneSucursalDestino) return false;
-                
-                if (producto && !row.productos.some((p: any) => p.nombre === producto)) return false;
+                if (producto && !row.productos?.some((p: any) => p.nombre === producto)) return false;
                 if (estado && row.estado !== estado) return false;
                 if (sucursal && row.sucursalDestino !== sucursal && row.sucursal !== sucursal) return false;
                 if (fecha && row.fecha !== fecha) return false;
@@ -403,17 +592,13 @@ export default function PedidosBodega() {
             }
             return false;
         });
-        
-        console.log('Datos después del filtrado:', datos);
-        
         if (orden === "desc") {
-            datos = [...datos].sort((a, b) => b.cantidad - a.cantidad);
+            datos = [...datos].sort((a, b) => (b.cantidad || 0) - (a.cantidad || 0));
         } else if (orden === "asc") {
-            datos = [...datos].sort((a, b) => a.cantidad - b.cantidad);
+            datos = [...datos].sort((a, b) => (a.cantidad || 0) - (b.cantidad || 0));
         }
-        
         return datos;
-    }, [pedidosArray, producto, estado, sucursal, fecha, opcion, orden]);
+    }, [ingresos, salidas, producto, estado, sucursal, fecha, opcion, orden]);
 
     const handleOpenDetailModal = (pedido: any) => {
         setPedidoSeleccionado(pedido);
@@ -429,9 +614,7 @@ export default function PedidosBodega() {
         const idsParaArchivar = solicitudesTransferidas.map((s: any) => s.id);
         if (idsParaArchivar.length > 0) {
             try {
-                console.log('Archivando solicitudes:', idsParaArchivar);
                 await solicitudesService.archivarSolicitudes(idsParaArchivar);
-                console.log('Solicitudes archivadas exitosamente');
                 
                 // Limpiar el estado local inmediatamente
                 clearSolicitudesTransferidas();
@@ -455,10 +638,10 @@ export default function PedidosBodega() {
             >
                 <MuiAlert
                     onClick={handleSnackbarClick}
-                    severity="success"
+                    severity={snackbarSeverity}
                     sx={{ width: "100%", cursor: "pointer" }}
                 >
-                    Se han transferido {transferencias} solicitud(es) aprobada(s) como pedido(s) a este módulo. Haz clic para verlas.
+                    {snackbarMessage || `Se han transferido ${transferencias} solicitud(es) aprobada(s) como pedido(s) a este módulo. Haz clic para verlas.`}
                 </MuiAlert>
             </Snackbar>
             <div style={{
@@ -494,58 +677,135 @@ export default function PedidosBodega() {
                         tipo={modalTipo as "ingreso"}
                         marcas={marcas}
                         categorias={categorias}
-                        onSubmit={data => {
-                            console.log('Creando nuevo pedido con datos:', data);
-                            
-                            const nuevoPedido: Pedido = {
-                                id: pedidosArray.length ? pedidosArray[pedidosArray.length - 1].id + 1 : 1,
-                                tipo: "ingreso" as const,
-                                fecha: data.fecha,
-                                numRem: data.numRem,
-                                numGuiaDespacho: data.numGuiaDespacho,
-                                archivoGuia: data.archivoGuia,
-                                nombreArchivo: data.nombreArchivo,
-                                observacionesRecepcion: data.observacionesRecepcion,
-                                proveedor: data.proveedor,
-                                productos: data.productos,
-                                cantidad: Array.isArray(data.productos)
-                                    ? data.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
-                                    : 0,
-                                estado: "Pendiente",
-                                responsable: usuario?.nombre || "Responsable Bodega"
-                            };
-                            
-                            console.log('Nuevo pedido a agregar:', nuevoPedido);
-                            
-                            addPedido(nuevoPedido);
+                        onSubmit={async data => {
+                            // Crear el pedido en la base de datos y agregar productos al inventario
+                            const crearIngresoEnBD = async () => {
+                                try {
+                                    // Debug: verificar la estructura del usuario
+                                    console.log('🔍 DEBUG - Usuario completo:', usuario);
+                                    console.log('🔍 DEBUG - Bodega del usuario:', usuario?.bodega);
+                                    
+                                    // La bodega es directamente el ID, no un objeto
+                                    const bodegaId = usuario?.bodega;
+                                    console.log('🔍 DEBUG - ID de bodega final:', bodegaId);
+                                    
+                                    if (!bodegaId) {
+                                        throw new Error('No se pudo obtener el ID de la bodega del usuario');
+                                    }
 
-                            // Generar Acta de Recepción
-                            generarActaRecepcion({
-                                numeroActa: String(nuevoPedido.id),
-                                fechaRecepcion: nuevoPedido.fecha,
-                                sucursal: {
-                                    nombre: "Bodega Central",
-                                    direccion: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción"
-                                },
-                                personaRecibe: {
-                                    nombre: nuevoPedido.responsable,
-                                    cargo: "Responsable de Bodega"
-                                },
-                                productos: nuevoPedido.productos.map((prod: any) => ({
-                                    codigo: `${prod.nombre}-${prod.marca}-${prod.categoria}`.replace(/\s+/g, "-").toLowerCase(),
-                                    descripcion: `${prod.nombre} - ${prod.marca} - ${prod.categoria}`,
-                                    cantidad: prod.cantidad
-                                })),
-                                observaciones: `Guía de Despacho Proveedor: ${data.numGuiaDespacho || "No especificada"}\n${data.observacionesRecepcion ? `Observaciones: ${data.observacionesRecepcion}` : ""}`,
-                                conformidad: "Recibido conforme",
-                                responsable: nuevoPedido.responsable,
-                                proveedor: {
-                                    nombre: data.proveedor.nombre,
-                                    rut: data.proveedor.rut,
-                                    contacto: data.proveedor.contacto
+                                    // 1. Crear el ingreso en el backend
+                                    const resultado = await pedidosService.crearIngresoBodega({
+                                        fecha: data.fecha,
+                                        num_rem: data.numRem,
+                                        num_guia_despacho: data.numGuiaDespacho,
+                                        observaciones: data.observacionesRecepcion,
+                                        productos: data.productos.map((prod: any) => ({
+                                            nombre: prod.nombre,
+                                            cantidad: prod.cantidad,
+                                            marca: prod.marca,
+                                            categoria: prod.categoria
+                                        })),
+                                        proveedor: {
+                                            nombre: data.proveedor.nombre,
+                                            rut: data.proveedor.rut,
+                                            contacto: data.proveedor.contacto,
+                                            telefono: data.proveedor.telefono,
+                                            email: data.proveedor.email
+                                        },
+                                        bodega_id: bodegaId
+                                    });
+
+                                    console.log('✅ Ingreso creado exitosamente:', resultado);
+
+                                    // 2. Obtener el ID real del pedido creado
+                                    const pedidoIdReal = resultado.pedido_id;
+                                    if (!pedidoIdReal) throw new Error('No se pudo obtener el ID real del pedido creado');
+
+                                    // 3. Agregar el ingreso al historial del proveedor
+                                    await addIngresoProveedor(data.proveedor, {
+                                        fecha: data.fecha,
+                                        productos: data.productos,
+                                        documentos: {
+                                            numRem: data.numRem || '',
+                                            numGuiaDespacho: data.numGuiaDespacho || '',
+                                            archivoGuia: data.nombreArchivo || ''
+                                        },
+                                        observaciones: data.observacionesRecepcion || ''
+                                    });
+
+                                    // 4. Recargar productos para mostrar el stock actualizado
+                                    await fetchProductos(bodegaId);
+
+                                    setSnackbarMessage(`Ingreso creado exitosamente. ${resultado.productos_agregados?.length || 0} productos agregados al inventario.`);
+                                    setSnackbarSeverity("success");
+                                    setShowSnackbar(true);
+
+                                    // 5. Crear informe en la base de datos para el ingreso usando el ID real
+                                    try {
+                                        const contenidoInforme = {
+                                            ingreso_id: pedidoIdReal,
+                                            fecha: data.fecha,
+                                            proveedor: {
+                                                nombre: data.proveedor.nombre,
+                                                rut: data.proveedor.rut,
+                                                contacto: data.proveedor.contacto
+                                            },
+                                            productos: data.productos.map((prod: any) => ({
+                                                nombre: prod.nombre,
+                                                marca: prod.marca,
+                                                categoria: prod.categoria,
+                                                cantidad: prod.cantidad
+                                            })),
+                                            documentos: {
+                                                num_rem: data.numRem || '',
+                                                num_guia_despacho: data.numGuiaDespacho || '',
+                                                archivo_guia: data.nombreArchivo || ''
+                                            },
+                                            observaciones: data.observacionesRecepcion || '',
+                                            responsable: usuario?.nombre || '',
+                                            bodega: {
+                                                nombre: "Bodega Central",
+                                                direccion: "Camino a Penco 2500, Concepción"
+                                            }
+                                        };
+
+                                        await informesService.createInforme({
+                                            titulo: `Acta de Recepción - ${data.proveedor.nombre}`,
+                                            descripcion: `Acta de recepción generada para el ingreso ${pedidoIdReal} del proveedor ${data.proveedor.nombre}`,
+                                            modulo_origen: 'pedidos',
+                                            contenido: JSON.stringify(contenidoInforme),
+                                            archivo_url: `ActaRecepcion_${pedidoIdReal}.pdf`,
+                                            fecha_generado: new Date().toISOString(),
+                                            bodega_fk: usuario?.bodega || null,
+                                            pedidos_fk: pedidoIdReal
+                                        });
+
+                                        console.log('✅ Informe de acta de recepción creado exitosamente');
+                                    } catch (error) {
+                                        console.error('Error al crear informe de acta de recepción:', error);
+                                        // No mostrar error al usuario, solo log
+                                    }
+
+                                    // 6. Refrescar la lista de pedidos desde el backend
+                                    try {
+                                        setLoading(true);
+                                        const pedidos = await pedidosService.getPedidos({ bodega_id: bodegaId.toString() });
+                                        setPedidosBackend(pedidos);
+                                    } catch (error) {
+                                        setPedidosBackend([]);
+                                    } finally {
+                                        setLoading(false);
+                                    }
+
+                                } catch (error) {
+                                    console.error('❌ Error al crear ingreso:', error);
+                                    setSnackbarMessage(`Error al crear ingreso: ${error}`);
+                                    setSnackbarSeverity("error");
+                                    setShowSnackbar(true);
                                 }
-                            });
-                            
+                            };
+                            // Ejecutar la creación en la base de datos
+                            await crearIngresoEnBD();
                             setOpcion("ingresos");
                             setIsModalOpen(false);
                             setModalTipo(null);
@@ -631,74 +891,11 @@ export default function PedidosBodega() {
                 <Button onClick={handleLimpiarRegistros} color="error" variant="contained" >
                 Limpiar registros pendientes
                 </Button>
-                <TableContainer component={Paper} style={{ background: "#181818" }}>
-                    <Table>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>ID</TableCell>
-                                <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
-                                {opcion === "salidas" && (
-                                    <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Asignado a entrega</TableCell>
-                                )}
-                                <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>
-                                    {opcion === "ingresos" ? "Proveedor" : "Sucursal destino"}
-                                </TableCell>
-                                {opcion === "salidas" && (
-                                    <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Estado</TableCell>
-                                )}
-                                <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>N° de productos</TableCell>
-                                <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Acción</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {pedidosFiltrados.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={8} align="center" style={{ color: "#8A8A8A" }}>
-                                        No hay registros para mostrar.
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                pedidosFiltrados.map((row: any) => (
-                                    <TableRow key={row.id}>
-                                        <TableCell style={{ color: "#fff" }}>{row.id}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.fecha}</TableCell>
-                                        {opcion === "salidas" && (
-                                            <TableCell style={{ color: "#fff" }}>{row.asignado}</TableCell>
-                                        )}
-                                        <TableCell style={{ color: "#fff" }}>
-                                            {opcion === "ingresos"
-                                                ? (row.proveedor?.nombre || row.proveedor || row.sucursalDestino || "-")
-                                                : (
-                                                    SUCURSALES.find(s => s.id === row.sucursalDestino)?.nombre || row.sucursalDestino || "-"
-                                                )
-                                            }
-                                        </TableCell>
-                                        {opcion === "salidas" && (
-                                            <TableCell style={{ color: "#fff" }}>
-                                                <EstadoBadge estado={row.estado} />
-                                            </TableCell>
-                                        )}
-                                        <TableCell style={{ color: "#fff" }}>
-                                            {Array.isArray(row.productos)
-                                                ? row.productos.reduce((acc: number, prod: any) => acc + Number(prod.cantidad), 0)
-                                                : row.cantidad || 0}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Button
-                                                variant="outlined"
-                                                startIcon={<VisibilityIcon />}
-                                                style={{ borderColor: "#FFD700", color: "#FFD700" }}
-                                                onClick={() => handleOpenDetailModal(row)}
-                                            >
-                                                Ver detalles
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
+                {opcion === 'ingresos' ? (
+                    <TablaIngresos ingresos={ingresos} onVerDetalles={handleOpenDetailModal} loading={loading} />
+                ) : (
+                    <TablaSalidas salidas={salidas} onVerDetalles={handleOpenDetailModal} loading={loading} />
+                )}
                 <div ref={tablaTransferidasRef} style={{ marginTop: 40 }}>
                     <h3 style={{ color: "#FFD700" }}>Solicitudes transferidas recientemente</h3>
                     <TableContainer component={Paper} style={{ background: "#232323" }}>
@@ -736,7 +933,6 @@ export default function PedidosBodega() {
                                             }) : '-';
                                             
                                             // Calcular cantidad total
-                                            console.log('Debug - Productos de solicitud:', s.productos);
                                             
                                             return (
                                                 <TableRow key={`${s.id}-${idx}`}>
@@ -1299,7 +1495,7 @@ export default function PedidosBodega() {
                                                 fechaRecepcion: pedidoSeleccionado.fecha,
                                                 sucursal: {
                                                     nombre: "Bodega Central",
-                                                    direccion: usuario?.bodega?.direccion || "Camino a Penco 2500, Concepción"
+                                                    direccion: "Camino a Penco 2500, Concepción"
                                                 },
                                                 personaRecibe: {
                                                     nombre: pedidoSeleccionado.responsable,
@@ -1369,8 +1565,6 @@ export default function PedidosBodega() {
                                                         cantidad: prod.cantidad
                                                     })),
                                                     observaciones: pedidoSeleccionado.observacion || "",
-                                                    conformidad: "Recibido conforme",
-                                                    responsable: pedidoSeleccionado.asignado || "-",
                                                 })}
                                             >
                                                 Acta de Recepción

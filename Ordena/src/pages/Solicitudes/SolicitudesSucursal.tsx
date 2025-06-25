@@ -140,6 +140,7 @@ export default function SolicitudesSucursal() {
     const [errorStock, setErrorStock] = useState<string>("");
     const [editandoProducto, setEditandoProducto] = useState<number | null>(null);
     const [cantidadEditando, setCantidadEditando] = useState<number>(1);
+    const [loading, setLoading] = useState(false);
 
     // Memoizamos la sucursal del usuario
     const sucursalData = useMemo(() => {
@@ -157,15 +158,16 @@ export default function SolicitudesSucursal() {
     // Función para obtener las solicitudes de la sucursal
     const fetchSolicitudes = async () => {
         try {
+            setLoading(true);
             if (sucursalData?.id) {
                 const response = await solicitudesService.getSolicitudes({ 
                     sucursal_id: sucursalData.id.toString() 
                 });
                 setSolicitudes(response);
-            } else {
-
             }
         } catch (error) {
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -471,7 +473,13 @@ export default function SolicitudesSucursal() {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {solicitudes.length === 0 ? (
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} align="center" style={{ color: "#FFD700", fontWeight: 600, fontSize: 18 }}>
+                                        Cargando solicitudes...
+                                    </TableCell>
+                                </TableRow>
+                            ) : solicitudes.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} align="center" style={{ color: "#8A8A8A" }}>
                                         No hay solicitudes para mostrar.
@@ -739,173 +747,174 @@ export default function SolicitudesSucursal() {
 
                 {/* Modal de crear nueva solicitud */}
                 <Dialog open={modalOpen} onClose={handleCloseCrear} maxWidth="md" fullWidth>
-                        <DialogTitle>Crear nueva solicitud</DialogTitle>
-                        <DialogContent>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "12px" }}>
+                    <DialogTitle sx={{ 
+                        background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                        color: "#FFD700",
+                        borderBottom: "2px solid #FFD700",
+                        fontWeight: 600
+                    }}>
+                        📝 Crear nueva solicitud
+                    </DialogTitle>
+                    <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
+                        {/* Información principal */}
+                        <Box sx={{ 
+                            mb: 3,
+                            p: 2,
+                            bgcolor: "#232323",
+                            borderRadius: 2,
+                            border: "1px solid #333"
+                        }}>
+                            <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                                📋 Datos de la solicitud
+                            </Typography>
+                            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
                                 <TextField
                                     label="N° OCI"
                                     value={nuevaSolicitud.id}
-                                    InputProps={{ readOnly: true }}
+                                    InputProps={{ readOnly: true, sx: { color: "#FFD700", fontWeight: 600 } }}
                                     size="small"
+                                    sx={{
+                                        "& .MuiInputLabel-root": { color: "#ccc" },
+                                        "& .MuiOutlinedInput-root": {
+                                            "& fieldset": { borderColor: "#444" },
+                                            "&:hover fieldset": { borderColor: "#FFD700" }
+                                        }
+                                    }}
                                 />
                                 <TextField
                                     label="Fecha de emisión"
                                     value={nuevaSolicitud.fecha}
-                                    InputProps={{ readOnly: true }}
+                                    InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                     size="small"
+                                    sx={{
+                                        "& .MuiInputLabel-root": { color: "#ccc" },
+                                        "& .MuiOutlinedInput-root": {
+                                            "& fieldset": { borderColor: "#444" },
+                                            "&:hover fieldset": { borderColor: "#FFD700" }
+                                        }
+                                    }}
                                 />
                                 <TextField
                                     label="Sucursal solicitante"
                                     value={nuevaSolicitud.sucursal.nombre}
-                                    InputProps={{ readOnly: true }}
+                                    InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                     size="small"
+                                    sx={{
+                                        "& .MuiInputLabel-root": { color: "#ccc" },
+                                        "& .MuiOutlinedInput-root": {
+                                            "& fieldset": { borderColor: "#444" },
+                                            "&:hover fieldset": { borderColor: "#FFD700" }
+                                        }
+                                    }}
                                 />
                                 <TextField
                                     label="Dirección de sucursal"
                                     value={nuevaSolicitud.sucursal.direccion}
-                                    InputProps={{ readOnly: true }}
+                                    InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                     size="small"
+                                    sx={{
+                                        "& .MuiInputLabel-root": { color: "#ccc" },
+                                        "& .MuiOutlinedInput-root": {
+                                            "& fieldset": { borderColor: "#444" },
+                                            "&:hover fieldset": { borderColor: "#FFD700" }
+                                        }
+                                    }}
                                 />
                                 <TextField
                                     label="RUT de sucursal"
                                     value={nuevaSolicitud.sucursal.rut}
-                                    InputProps={{ readOnly: true }}
+                                    InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                     size="small"
+                                    sx={{
+                                        "& .MuiInputLabel-root": { color: "#ccc" },
+                                        "& .MuiOutlinedInput-root": {
+                                            "& fieldset": { borderColor: "#444" },
+                                            "&:hover fieldset": { borderColor: "#FFD700" }
+                                        }
+                                    }}
                                 />
                                 <TextField
                                     label="Persona solicitante"
                                     value={nuevaSolicitud.responsable}
-                                    onChange={e => setNuevaSolicitud((prev: any) => ({
-                                        ...prev,
-                                        responsable: e.target.value
-                                    }))}
+                                    onChange={e => setNuevaSolicitud((prev: any) => ({ ...prev, responsable: e.target.value }))}
                                     size="small"
+                                    sx={{
+                                        "& .MuiInputLabel-root": { color: "#ccc" },
+                                        "& .MuiOutlinedInput-root": {
+                                            "& fieldset": { borderColor: "#444" },
+                                            "&:hover fieldset": { borderColor: "#FFD700" }
+                                        }
+                                    }}
                                 />
                                 <TextField
                                     label="Cargo"
                                     value={nuevaSolicitud.cargo}
-                                    InputProps={{ readOnly: true }}
+                                    InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                     size="small"
+                                    sx={{
+                                        "& .MuiInputLabel-root": { color: "#ccc" },
+                                        "& .MuiOutlinedInput-root": {
+                                            "& fieldset": { borderColor: "#444" },
+                                            "&:hover fieldset": { borderColor: "#FFD700" }
+                                        }
+                                    }}
                                 />
                                 <TextField
-                                label="Observación"
-                                value={nuevaSolicitud.observacion}
-                                    onChange={e => setNuevaSolicitud((prev: any) => ({
-                                        ...prev,
-                                    observacion: e.target.value
-                                    }))}
+                                    label="Observación"
+                                    value={nuevaSolicitud.observacion}
+                                    onChange={e => setNuevaSolicitud((prev: any) => ({ ...prev, observacion: e.target.value }))}
                                     size="small"
                                     multiline
                                     minRows={2}
+                                    sx={{
+                                        gridColumn: "1 / span 2",
+                                        "& .MuiInputLabel-root": { color: "#ccc" },
+                                        "& .MuiOutlinedInput-root": {
+                                            "& fieldset": { borderColor: "#444" },
+                                            "&:hover fieldset": { borderColor: "#FFD700" }
+                                        }
+                                    }}
                                 />
-                                <TextField
-                                    label="Estado de la OCI"
-                                    value={nuevaSolicitud.estado}
-                                    onChange={e => setNuevaSolicitud((prev: any) => ({
-                                        ...prev,
-                                        estado: e.target.value
-                                    }))}
-                                    size="small"
-                                />
-                                <TextField
-                                    label="Firma o nombre del aprobador"
-                                    value={nuevaSolicitud.aprobador}
-                                    onChange={e => setNuevaSolicitud((prev: any) => ({
-                                        ...prev,
-                                        aprobador: e.target.value
-                                    }))}
-                                    size="small"
-                                />
-                            </div>
-                        
+                            </Box>
+                        </Box>
                         {/* Sección de productos seleccionados */}
-                        <div style={{ marginBottom: "16px" }}>
+                        <Box sx={{ p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333", mb: 2 }}>
                             <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                                <Typography variant="h6">Productos seleccionados ({nuevaSolicitud.productos.length})</Typography>
+                                <Typography variant="h6" sx={{ color: "#FFD700" }}>Productos seleccionados ({nuevaSolicitud.productos.length})</Typography>
                                 <Button
-                                variant="contained"
+                                    variant="contained"
                                     startIcon={<AddIcon />}
-                                    style={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
-                                onClick={() => setModalSeleccionarProductos(true)}
+                                    sx={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
+                                    onClick={() => setModalSeleccionarProductos(true)}
                                 >
                                     Agregar productos
                                 </Button>
                             </Box>
-                            
                             {nuevaSolicitud.productos.length === 0 ? (
-                                <Alert severity="info">
+                                <Alert severity="info" sx={{ bgcolor: "#2a2a2a", color: "#FFD700" }}>
                                     No hay productos agregados. Haz clic en "Agregar productos" para comenzar.
                                 </Alert>
                             ) : (
-                                <TableContainer component={Paper} style={{ background: "#f5f5f5" }}>
-                                    <Table size="small">
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableCell><strong>Código</strong></TableCell>
-                                                <TableCell><strong>Producto</strong></TableCell>
-                                                <TableCell><strong>Cantidad</strong></TableCell>
-                                                <TableCell><strong>Stock Disponible</strong></TableCell>
-                                                <TableCell><strong>Acciones</strong></TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {nuevaSolicitud.productos.map((producto, index) => (
-                                                <TableRow key={index}>
-                                                    <TableCell>{producto.codigo}</TableCell>
-                                                    <TableCell>{producto.nombre}</TableCell>
-                                                    <TableCell>
-                                                        {editandoProducto === index ? (
-                                                            <TextField
-                                                                type="number"
-                                                                value={cantidadEditando}
-                                                                onChange={(e) => setCantidadEditando(Number(e.target.value))}
-                                                                size="small"
-                                                                inputProps={{
-                                                                    min: 1,
-                                                                    max: producto.stock_disponible
-                                                                }}
-                                                                error={cantidadEditando > producto.stock_disponible || cantidadEditando <= 0}
-                                                                helperText={
-                                                                    cantidadEditando > producto.stock_disponible 
-                                                                        ? `Máximo: ${producto.stock_disponible}`
-                                                                        : cantidadEditando <= 0 
-                                                                        ? "Mínimo: 1"
-                                                                        : ""
-                                                                }
-                                                            />
-                                                        ) : (
-                                                            <Chip 
-                                                                label={producto.cantidad}
-                                                                color={producto.cantidad > producto.stock_disponible ? "error" : "default"}
-                                                            />
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Chip 
-                                                            label={producto.stock_disponible}
-                                                            color={producto.cantidad > producto.stock_disponible ? "error" : "success"}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {editandoProducto === index ? (
-                                                            <Box sx={{ display: "flex", gap: 1 }}>
-                                                                <IconButton 
-                                                                    size="small" 
-                                                                    color="success"
-                                                                    onClick={handleGuardarEdicion}
-                                                                    disabled={cantidadEditando > producto.stock_disponible || cantidadEditando <= 0}
-                                                                >
-                                                                    ✓
-                                                                </IconButton>
-                                                                <IconButton 
-                                                                    size="small" 
-                                                                    color="error"
-                                                                    onClick={handleCancelarEdicion}
-                                                                >
-                                                                    ✕
-                                                                </IconButton>
-                                                            </Box>
-                                                        ) : (
+                                <>
+                                    <TableContainer>
+                                        <Table size="small">
+                                            <TableHead>
+                                                <TableRow>
+                                                    <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Código</TableCell>
+                                                    <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Producto</TableCell>
+                                                    <TableCell sx={{ color: "#FFD700", fontWeight: 600 }} align="right">Cantidad</TableCell>
+                                                    <TableCell sx={{ color: "#FFD700", fontWeight: 600 }} align="right">Stock Disponible</TableCell>
+                                                    <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Acciones</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {nuevaSolicitud.productos.map((producto, index) => (
+                                                    <TableRow key={index} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
+                                                        <TableCell sx={{ color: "#fff" }}>{producto.codigo}</TableCell>
+                                                        <TableCell sx={{ color: "#fff" }}>{producto.nombre}</TableCell>
+                                                        <TableCell align="right" sx={{ color: "#FFD700", fontWeight: 600 }}>{producto.cantidad}</TableCell>
+                                                        <TableCell align="right" sx={{ color: producto.cantidad > producto.stock_disponible ? "#f44336" : "#4CAF50", fontWeight: 600 }}>{producto.stock_disponible}</TableCell>
+                                                        <TableCell>
                                                             <Box sx={{ display: "flex", gap: 1 }}>
                                                                 <IconButton 
                                                                     size="small" 
@@ -922,151 +931,241 @@ export default function SolicitudesSucursal() {
                                                                     <DeleteIcon fontSize="small" />
                                                                 </IconButton>
                                                             </Box>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </TableContainer>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </TableContainer>
+                                    {/* Total */}
+                                    <Box sx={{ 
+                                        mt: 2, 
+                                        pt: 2, 
+                                        borderTop: "1px solid #444",
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center"
+                                    }}>
+                                        <Typography sx={{ color: "#FFD700", fontWeight: 600, fontSize: "1.1rem" }}>
+                                            Total de productos
+                                        </Typography>
+                                        <Typography sx={{ color: "#FFD700", fontWeight: 600, fontSize: "1.1rem" }}>
+                                            {nuevaSolicitud.productos.length} productos • {
+                                                nuevaSolicitud.productos.reduce((acc, prod) => acc + Number(prod.cantidad), 0)
+                                            } unidades
+                                        </Typography>
+                                    </Box>
+                                </>
                             )}
-                            
                             {errorStock && (
                                 <Alert severity="error" sx={{ mt: 2 }}>
                                     {errorStock}
                                 </Alert>
                             )}
-                            </div>
-                        </DialogContent>
-                        <DialogActions>
-                            <Button onClick={handleCloseCrear} style={{ color: "#FFD700" }}>Cancelar</Button>
-                            <Button
-                                onClick={handleCrearSolicitud}
-                                style={{ color: "#121212", background: "#FFD700", fontWeight: 600 }}
-                                disabled={nuevaSolicitud.productos.length === 0}
-                            >
-                                Crear solicitud
-                            </Button>
-                        </DialogActions>
-                    </Dialog>
+                        </Box>
+                    </DialogContent>
+                    <DialogActions sx={{ 
+                        bgcolor: "#1a1a1a", 
+                        borderTop: "1px solid #333",
+                        p: 2
+                    }}>
+                        <Button onClick={handleCloseCrear} sx={{ 
+                            color: "#FFD700",
+                            borderColor: "#FFD700",
+                            "&:hover": {
+                                borderColor: "#FFD700",
+                                bgcolor: "rgba(255, 215, 0, 0.1)"
+                            }
+                        }} variant="outlined">
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleCrearSolicitud}
+                            sx={{ 
+                                color: "#fff", 
+                                background: "#4CAF50", 
+                                fontWeight: 600,
+                                "&:hover": {
+                                    background: "#45a049"
+                                }
+                            }}
+                            variant="contained"
+                            startIcon={<span>📝</span>}
+                            disabled={nuevaSolicitud.productos.length === 0}
+                        >
+                            Crear solicitud
+                        </Button>
+                    </DialogActions>
+                </Dialog>
 
                 <Dialog open={modalSeleccionarProductos} onClose={() => setModalSeleccionarProductos(false)} maxWidth="lg" fullWidth>
-                        <DialogTitle>Seleccionar productos de la bodega central</DialogTitle>
-                        <DialogContent>
-                            {/* Filtros y buscador */}
-                            <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-                                <TextField
-                                    placeholder="Buscar producto..."
-                                    value={search}
-                                    onChange={e => setSearch(e.target.value)}
-                                    size="small"
-                                />
-                                <TextField
-                                    select
-                                    label="Marca"
-                                    value={filtroMarca}
-                                    onChange={e => setFiltroMarca(e.target.value)}
-                                    size="small"
-                                    sx={{ minWidth: 120 }}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                {marcasBodegaCentral.map((m, index) => (
-                                    <MenuItem key={`marca-${index}`} value={typeof m === 'string' ? m : m.nombre || m}>
-                                        {typeof m === 'string' ? m : m.nombre || m}
-                                    </MenuItem>
-                                ))}
-                                </TextField>
-                                <TextField
-                                    select
-                                    label="Categoría"
-                                    value={filtroCategoria}
-                                    onChange={e => setFiltroCategoria(e.target.value)}
-                                    size="small"
-                                    sx={{ minWidth: 120 }}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                {categoriasBodegaCentral.map((c, index) => (
-                                    <MenuItem key={`categoria-${index}`} value={typeof c === 'string' ? c : c.nombre || c}>
-                                        {typeof c === 'string' ? c : c.nombre || c}
-                                    </MenuItem>
-                                ))}
-                                </TextField>
-                            </Box>
-                            {/* Vista tipo inventario */}
-                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                                {productosFiltrados.map(prod => (
-                                    <Card key={prod.code} sx={{ width: 180, bgcolor: "#232323", color: "#fff", cursor: "pointer" }}>
-                                        <CardActionArea onClick={() => handleSeleccionarProducto(prod)}>
-                                            <CardMedia
-                                                component="img"
-                                                image={typeof prod.im === "string" ? prod.im : sin_imagen}
-                                                alt={prod.name}
-                                                sx={{ height: 100, objectFit: "cover" }}
-                                            />
-                                            <CardContent>
-                                                <Typography variant="subtitle1">{prod.name}</Typography>
-                                                <Typography variant="body2">{prod.brand} | {prod.category}</Typography>
-                                                <Typography variant="body2" sx={{ color: "#FFD700" }}>Stock: {prod.stock}</Typography>
-                                            </CardContent>
-                                        </CardActionArea>
-                                    </Card>
-                                ))}
-                            </Box>
-                        </DialogContent>
-                        <DialogActions>
-                            <Button onClick={() => setModalSeleccionarProductos(false)}>Cerrar</Button>
-                        </DialogActions>
-                    </Dialog>
-
-                    {/* Mini-modal para seleccionar cantidad */}
-                    <Dialog open={!!productoSeleccionado} onClose={() => setProductoSeleccionado(null)}>
-                        <DialogTitle>Seleccionar cantidad</DialogTitle>
-                        <DialogContent>
-                            <Typography>
-                                {productoSeleccionado?.name} (Stock disponible: {productoSeleccionado?.stock})
-                            </Typography>
+                    <DialogTitle sx={{ 
+                        background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                        color: "#FFD700",
+                        borderBottom: "2px solid #FFD700",
+                        fontWeight: 600
+                    }}>
+                        🏷️ Seleccionar productos de la bodega central
+                    </DialogTitle>
+                    <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
+                        {/* Filtros y buscador */}
+                        <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
                             <TextField
-                                type="number"
-                                label="Cantidad"
-                                value={cantidadProducto}
-                                onChange={e => setCantidadProducto(Number(e.target.value))}
-                                inputProps={{
-                                    min: 1,
-                                    max: productoSeleccionado?.stock || 1
-                                }}
+                                placeholder="Buscar producto..."
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
                                 size="small"
-                                sx={{ mt: 2 }}
-                            error={cantidadProducto > (productoSeleccionado?.stock || 0) || cantidadProducto <= 0}
-                            helperText={
-                                cantidadProducto > (productoSeleccionado?.stock || 0)
-                                    ? `Máximo disponible: ${productoSeleccionado?.stock}`
-                                    : cantidadProducto <= 0
-                                    ? "La cantidad debe ser mayor a 0"
-                                    : ""
-                            }
-                        />
-                        {errorStock && (
-                            <Alert severity="error" sx={{ mt: 2 }}>
-                                {errorStock}
-                            </Alert>
+                            />
+                            <TextField
+                                select
+                                label="Marca"
+                                value={filtroMarca}
+                                onChange={e => setFiltroMarca(e.target.value)}
+                                size="small"
+                                sx={{ minWidth: 120 }}
+                            >
+                                <MenuItem value="">Todas</MenuItem>
+                            {marcasBodegaCentral.map((m, index) => (
+                                <MenuItem key={`marca-${index}`} value={typeof m === 'string' ? m : m.nombre || m}>
+                                    {typeof m === 'string' ? m : m.nombre || m}
+                                </MenuItem>
+                            ))}
+                            </TextField>
+                            <TextField
+                                select
+                                label="Categoría"
+                                value={filtroCategoria}
+                                onChange={e => setFiltroCategoria(e.target.value)}
+                                size="small"
+                                sx={{ minWidth: 120 }}
+                            >
+                                <MenuItem value="">Todas</MenuItem>
+                            {categoriasBodegaCentral.map((c, index) => (
+                                <MenuItem key={`categoria-${index}`} value={typeof c === 'string' ? c : c.nombre || c}>
+                                    {typeof c === 'string' ? c : c.nombre || c}
+                                </MenuItem>
+                            ))}
+                            </TextField>
+                        </Box>
+                        {/* Vista tipo inventario */}
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+                            {productosFiltrados.map(prod => (
+                                <Card key={prod.code} sx={{ width: 180, bgcolor: "#232323", color: "#fff", cursor: "pointer" }}>
+                                    <CardActionArea onClick={() => handleSeleccionarProducto(prod)}>
+                                        <CardMedia
+                                            component="img"
+                                            image={typeof prod.im === "string" ? prod.im : sin_imagen}
+                                            alt={prod.name}
+                                            sx={{ height: 100, objectFit: "cover" }}
+                                        />
+                                        <CardContent>
+                                            <Typography variant="subtitle1">{prod.name}</Typography>
+                                            <Typography variant="body2">{prod.brand} | {prod.category}</Typography>
+                                            <Typography variant="body2" sx={{ color: "#FFD700" }}>Stock: {prod.stock}</Typography>
+                                        </CardContent>
+                                    </CardActionArea>
+                                </Card>
+                            ))}
+                        </Box>
+                    </DialogContent>
+                    <DialogActions sx={{ 
+                        bgcolor: "#1a1a1a", 
+                        borderTop: "1px solid #333",
+                        p: 2
+                    }}>
+                        <Button onClick={() => setModalSeleccionarProductos(false)} sx={{ color: "#FFD700" }}>Cerrar</Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Mini-modal para seleccionar cantidad */}
+                <Dialog open={!!productoSeleccionado} onClose={() => setProductoSeleccionado(null)}>
+                    <DialogTitle sx={{ 
+                        background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                        color: "#FFD700",
+                        borderBottom: "2px solid #FFD700",
+                        fontWeight: 600
+                    }}>
+                        ➕ Seleccionar cantidad
+                    </DialogTitle>
+                    <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
+                        {productoSeleccionado && (
+                            <Box sx={{
+                                p: 2,
+                                bgcolor: "#232323",
+                                borderRadius: 2,
+                                border: "1px solid #333",
+                                mb: 2
+                            }}>
+                                <Typography variant="h6" sx={{ color: "#FFD700", mb: 1 }}>
+                                    {productoSeleccionado.name}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: "#4CAF50", fontWeight: 600, mb: 2 }}>
+                                    Stock disponible: <span style={{ color: '#FFD700' }}>{productoSeleccionado.stock}</span>
+                                </Typography>
+                                <TextField
+                                    type="number"
+                                    label="Cantidad"
+                                    value={cantidadProducto}
+                                    onChange={e => setCantidadProducto(Number(e.target.value))}
+                                    inputProps={{
+                                        min: 1,
+                                        max: productoSeleccionado?.stock || 1
+                                    }}
+                                    size="small"
+                                    sx={{
+                                        mt: 2,
+                                        input: { color: '#FFD700', fontWeight: 600 },
+                                        '& .MuiInputLabel-root': { color: '#ccc' },
+                                        '& .MuiOutlinedInput-root': {
+                                            '& fieldset': { borderColor: '#444' },
+                                            '&:hover fieldset': { borderColor: '#FFD700' }
+                                        }
+                                    }}
+                                    error={cantidadProducto > (productoSeleccionado?.stock || 0) || cantidadProducto <= 0}
+                                    helperText={
+                                        cantidadProducto > (productoSeleccionado?.stock || 0)
+                                            ? `Máximo disponible: ${productoSeleccionado?.stock}`
+                                            : cantidadProducto <= 0
+                                            ? "La cantidad debe ser mayor a 0"
+                                            : ""
+                                    }
+                                />
+                                {errorStock && (
+                                    <Alert severity="error" sx={{ mt: 2 }}>
+                                        {errorStock}
+                                    </Alert>
+                                )}
+                            </Box>
                         )}
-                        </DialogContent>
-                        <DialogActions>
-                            <Button onClick={() => setProductoSeleccionado(null)}>Cancelar</Button>
-                            <Button
+                    </DialogContent>
+                    <DialogActions sx={{ 
+                        bgcolor: "#1a1a1a", 
+                        borderTop: "1px solid #333",
+                        p: 2
+                    }}>
+                        <Button onClick={() => setProductoSeleccionado(null)} sx={{ color: "#FFD700" }}>Cancelar</Button>
+                        <Button
                             variant="contained"
                             onClick={handleAgregarProductoSeleccionado}
                             disabled={!productoSeleccionado || cantidadProducto > (productoSeleccionado?.stock || 0) || cantidadProducto <= 0}
-                            >
-                                Agregar
-                            </Button>
-                        </DialogActions>
-                    </Dialog>
+                            sx={{ background: "#FFD700", color: "#232323", fontWeight: 600 }}
+                        >
+                            Agregar
+                        </Button>
+                    </DialogActions>
+                </Dialog>
 
                 {/* Modal de confirmación de eliminación */}
                 <Dialog open={modalConfirmarEliminacion} onClose={handleCancelarEliminacion}>
-                    <DialogTitle>Confirmar eliminación</DialogTitle>
-                    <DialogContent>
+                    <DialogTitle sx={{ 
+                        background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                        color: "#FFD700",
+                        borderBottom: "2px solid #FFD700",
+                        fontWeight: 600
+                    }}>
+                        ⚠️ Confirmar eliminación
+                    </DialogTitle>
+                    <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
                         <p>¿Está seguro de que desea eliminar la solicitud #{solicitudAEliminar?.id_solc}?</p>
                         <p style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
                             Esta acción eliminará permanentemente:
@@ -1082,13 +1181,19 @@ export default function SolicitudesSucursal() {
                             Esta acción no se puede deshacer.
                         </p>
                     </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelarEliminacion} style={{ color: "#FFD700" }}>
+                    <DialogActions sx={{ 
+                        bgcolor: "#1a1a1a", 
+                        borderTop: "1px solid #333",
+                        p: 2
+                    }}>
+                        <Button onClick={handleCancelarEliminacion} sx={{ color: "#FFD700" }}>
                             Cancelar
                         </Button>
                         <Button 
                             onClick={handleConfirmarEliminacion} 
-                            style={{ color: "#ffffff", background: "#ff6b6b", fontWeight: 600 }}
+                            sx={{ color: "#ffffff", background: "#ff6b6b", fontWeight: 600,
+                                '&:hover': { background: '#ff4c4c' }
+                            }}
                         >
                             Eliminar definitivamente
                         </Button>

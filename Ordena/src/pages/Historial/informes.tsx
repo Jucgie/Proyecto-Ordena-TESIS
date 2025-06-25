@@ -60,9 +60,16 @@ export default function Informes() {
     const fetchInformes = async () => {
         try {
             setLoading(true);
+            console.log('🔍 DEBUG - Obteniendo informes para usuario:', usuario?.id);
+            
             const response = await informesService.getInformes({
-                usuario_fk: usuario?.id?.toString()
+                bodega_fk: usuario?.bodega?.toString() || undefined,
+                sucursal_fk: usuario?.sucursal?.toString() || undefined
             });
+            
+            console.log('🔍 DEBUG - Informes obtenidos:', response);
+            console.log('🔍 DEBUG - Cantidad de informes:', response.length);
+            
             setInformes(response);
         } catch (error) {
             console.error("Error al obtener informes:", error);
@@ -124,17 +131,88 @@ export default function Informes() {
 
     const handleDownload = async (informe: Informe) => {
         try {
-            // Si es un OCI, regenerar el PDF
-            if (informe.modulo_origen === 'solicitudes') {
-                // Importar y regenerar el PDF
-                const { regenerarOCIDesdeInforme } = await import('../../utils/pdf/generarOCI');
-                const fileName = await regenerarOCIDesdeInforme(informe);
-            } else {
-                alert(`Descargando: ${informe.archivo_url}`);
+            console.log('🔍 DEBUG - Descargando informe:', informe);
+            
+            // Manejar diferentes tipos de informes según el módulo de origen
+            switch (informe.modulo_origen) {
+                case 'solicitudes':
+                    // Si es un OCI, regenerar el PDF
+                    const { regenerarOCIDesdeInforme } = await import('../../utils/pdf/generarOCI');
+                    const fileName = await regenerarOCIDesdeInforme(informe);
+                    console.log('✅ OCI regenerado:', fileName);
+                    break;
+                    
+                case 'proveedores':
+                    // Si es un acta de recepción de proveedor, regenerar el PDF
+                    try {
+                        const { generarActaRecepcion } = await import('../../utils/pdf/generarActaRecepcion');
+                        
+                        // Extraer datos del contenido del informe
+                        const contenido = JSON.parse(informe.contenido || '{}');
+                        console.log('🔍 DEBUG - Contenido del informe de proveedor:', contenido);
+                        
+                        // Generar el acta de recepción
+                        generarActaRecepcion({
+                            numeroActa: String(informe.id_informe),
+                            fechaRecepcion: contenido.fecha || new Date(informe.fecha_generado).toLocaleDateString('es-ES'),
+                            sucursal: {
+                                nombre: "Bodega Central",
+                                direccion: "Camino a Penco 2500, Concepción"
+                            },
+                            personaRecibe: {
+                                nombre: contenido.responsable || "Responsable de Bodega",
+                                cargo: "Responsable de Bodega"
+                            },
+                            productos: contenido.productos || [],
+                            observaciones: contenido.observaciones || informe.descripcion,
+                            conformidad: "Recibido conforme",
+                            responsable: contenido.responsable || "Responsable de Bodega",
+                            proveedor: contenido.proveedor
+                        });
+                        
+                        console.log('✅ Acta de recepción regenerada');
+                    } catch (error) {
+                        console.error('Error al regenerar acta de recepción:', error);
+                        alert('Error al regenerar el documento. Por favor, intente de nuevo.');
+                    }
+                    break;
+                    
+                case 'pedidos':
+                    // Si es un pedido, generar guía de despacho
+                    try {
+                        const { generarGuiaDespacho } = await import('../../utils/pdf/generarGuiaDespacho');
+                        
+                        // Extraer datos del contenido del informe
+                        const contenido = JSON.parse(informe.contenido || '{}');
+                        console.log('🔍 DEBUG - Contenido del informe de pedido:', contenido);
+                        
+                        // Generar la guía de despacho con la estructura correcta
+                        generarGuiaDespacho({
+                            id: String(informe.id_informe),
+                            fecha: contenido.fecha || new Date(informe.fecha_generado).toLocaleDateString('es-ES'),
+                            sucursalDestino: contenido.sucursal?.id || 1,
+                            responsable: contenido.responsable || "Responsable de Bodega",
+                            patenteVehiculo: contenido.patente || "No especificada",
+                            productos: contenido.productos || [],
+                            ociAsociada: contenido.oci_asociada || informe.pedidos_fk,
+                            observaciones: contenido.observaciones || informe.descripcion
+                        });
+                        
+                        console.log('✅ Guía de despacho regenerada');
+                    } catch (error) {
+                        console.error('Error al regenerar guía de despacho:', error);
+                        alert('Error al regenerar el documento. Por favor, intente de nuevo.');
+                    }
+                    break;
+                    
+                default:
+                    // Para otros tipos de informes, mostrar mensaje
+                    alert(`Descargando: ${informe.archivo_url}\n\nNota: Este tipo de documento se regenerará automáticamente.`);
+                    break;
             }
         } catch (error) {
             console.error('Error al descargar:', error);
-            alert('Error al descargar el documento');
+            alert('Error al descargar el documento. Por favor, intente de nuevo.');
         }
     };
 
@@ -153,7 +231,8 @@ export default function Informes() {
             'solicitudes': 'Solicitudes',
             'pedidos': 'Pedidos',
             'inventario': 'Inventario',
-            'productos': 'Productos'
+            'productos': 'Productos',
+            'proveedores': 'Proveedores'
         };
         return modulos[modulo] || modulo;
     };
@@ -327,7 +406,7 @@ export default function Informes() {
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} align="center" style={{ color: "#8A8A8A" }}>
+                                    <TableCell colSpan={6} align="center" style={{ color: "#FFD700", fontWeight: 600, fontSize: 18 }}>
                                         Cargando informes...
                                     </TableCell>
                                 </TableRow>

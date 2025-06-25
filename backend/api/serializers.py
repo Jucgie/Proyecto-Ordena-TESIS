@@ -58,7 +58,8 @@ class InformeSerializer(serializers.ModelSerializer):
         fields = [
             'id_informe', 'titulo', 'descripcion', 'modulo_origen', 
             'contenido', 'archivo_url', 'fecha_generado', 
-            'usuario_fk', 'usuario_nombre', 'pedidos_fk', 'productos_fk'
+            'usuario_fk', 'usuario_nombre', 'pedidos_fk', 'productos_fk',
+            'bodega_fk', 'sucursal_fk'
         ]
         read_only_fields = ['id_informe', 'fecha_generado']
 
@@ -71,7 +72,8 @@ class InformeCreateSerializer(serializers.ModelSerializer):
         model = Informe
         fields = [
             'titulo', 'descripcion', 'modulo_origen', 
-            'contenido', 'archivo_url', 'usuario_fk', 'pedidos_fk', 'productos_fk'
+            'contenido', 'archivo_url', 'usuario_fk', 'pedidos_fk', 'productos_fk',
+            'bodega_fk', 'sucursal_fk'
         ]
 
     def create(self, validated_data):
@@ -141,7 +143,11 @@ class PedidosCreateSerializer(serializers.ModelSerializer):
             'personal_entrega_fk', 'usuario_fk', 'solicitud_fk', 'bodega_fk', 'proveedor_fk'
         ]
         extra_kwargs = {
-            'fecha_entrega': {'required': False}  # No requerido porque se asigna automáticamente
+            'fecha_entrega': {'required': False},  # No requerido porque se asigna automáticamente
+            'personal_entrega_fk': {'required': False, 'allow_null': True},  # Opcional para ingresos
+            'solicitud_fk': {'required': False, 'allow_null': True},  # Opcional para ingresos
+            'sucursal_fk': {'required': False, 'allow_null': True},  # Opcional para ingresos de bodega
+            'proveedor_fk': {'required': False, 'allow_null': True}  # Opcional para ingresos
         }
 
     def create(self, validated_data):
@@ -173,7 +179,42 @@ class ProductosSerializer(serializers.ModelSerializer):
 class ProveedorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Proveedor
-        fields = '__all__'
+        fields = [
+            'id_provd', 'nombres_provd', 'direccion_provd', 'correo', 
+            'razon_social', 'rut_empresa'
+        ]
+        read_only_fields = ['id_provd']
+        extra_kwargs = {
+            'direccion_provd': {'required': False, 'allow_blank': True},
+            'correo': {'required': False, 'allow_blank': True},
+            'razon_social': {'required': False, 'allow_blank': True}
+        }
+
+    def validate_nombres_provd(self, value):
+        if not value or len(value.strip()) == 0:
+            raise serializers.ValidationError("El nombre del proveedor no puede estar vacío")
+        return value.strip()
+
+    def validate_rut_empresa(self, value):
+        if value:
+            # Limpiar formato del RUT
+            rut_limpio = str(value).replace('.', '').replace('-', '').replace(' ', '')
+            
+            # Remover el dígito verificador (último carácter)
+            if rut_limpio and rut_limpio[-1].isalpha():
+                rut_limpio = rut_limpio[:-1]
+            
+            # Convertir a número decimal
+            try:
+                return int(rut_limpio)
+            except ValueError:
+                raise serializers.ValidationError("El RUT debe ser un número válido")
+        return value
+
+    def validate_correo(self, value):
+        if value and '@' not in value:
+            raise serializers.ValidationError("El correo debe tener un formato válido")
+        return value
 
 class RolSerializer(serializers.ModelSerializer):
     class Meta:

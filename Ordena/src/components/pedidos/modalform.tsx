@@ -10,7 +10,6 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import { useProveedoresStore } from "../../store/useProveedorStore";
 import { Select } from "@mui/material";
 import { extraerProductosDesdePDFBackend } from '../../services/api';
 
@@ -30,7 +29,7 @@ interface Props {
     categorias: string[];
 }
 
-// Servicio simple para generar documentos automáticamente
+// Servicio para generar documentos automáticamente
 class DocumentoGenerator {
     private static remCounter = 1;
 
@@ -43,16 +42,9 @@ class DocumentoGenerator {
         return `REM-${año}${mes}-${numero}`;
     }
 
-    static generarDocumentosAutomaticos() {
-        return {
-            numRem: this.generarNumeroREM()
-        };
-    }
-
     static formatearDocumento(tipo: 'REM', numero: string): string {
         if (!numero) return '';
         
-        // Si ya tiene formato correcto, devolverlo
         const patrones = {
             REM: /^REM-\d{6}-\d{4}$/
         };
@@ -61,7 +53,6 @@ class DocumentoGenerator {
             return numero;
         }
 
-        // Limpiar y formatear
         const numeroLimpio = numero.replace(/[^0-9]/g, '');
         const fecha = new Date();
         const año = fecha.getFullYear();
@@ -72,7 +63,6 @@ class DocumentoGenerator {
             return `REM-${año}${mes}-${numeroFormateado}`;
         }
 
-        // Si no tiene suficientes dígitos, generar uno nuevo
         return this.generarNumeroREM();
     }
 }
@@ -80,131 +70,121 @@ class DocumentoGenerator {
 // Función para convertir fechas a yyyy-mm-dd
 function normalizarFecha(fecha: string): string {
     if (!fecha) return '';
-    // Reemplaza / por -
     let f = fecha.replace(/\//g, '-');
-    // Si ya es yyyy-mm-dd
     if (/^\d{4}-\d{2}-\d{2}$/.test(f)) return f;
-    // Si es dd-mm-yyyy o mm-dd-yyyy
+    
     const partes = f.split('-');
     if (partes.length === 3) {
-        // Si el año está al final
         if (partes[2].length === 4) {
-            // Si el primer valor es mayor a 12, es día-mes-año
             if (parseInt(partes[0], 10) > 12) {
                 return `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
             } else {
-                // Si el segundo valor es mayor a 12, es mes-día-año
                 return `${partes[2]}-${partes[0].padStart(2, '0')}-${partes[1].padStart(2, '0')}`;
             }
         }
-        // Si el año está al inicio
         if (partes[0].length === 4) {
             return `${partes[0]}-${partes[1].padStart(2, '0')}-${partes[2].padStart(2, '0')}`;
         }
     }
-    // Si no se puede parsear, retorna vacío
     return '';
 }
 
 export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, onSubmit, marcas, categorias }: Props) {
-    const addIngresoProveedor = useProveedoresStore(state => state.addIngresoProveedor);
-
-    // Inputs comunes
+    // Estados para productos
+    const [productos, setProductos] = useState<Producto[]>([]);
+    const [productosExtraidos, setProductosExtraidos] = useState<Producto[]>([]);
+    const [mostrarProductosExtraidos, setMostrarProductosExtraidos] = useState(false);
+    
+    // Estados para archivo PDF
+    const [archivoGuia, setArchivoGuia] = useState<File | null>(null);
+    const [nombreArchivo, setNombreArchivo] = useState("");
+    const [extrayendoProductos, setExtrayendoProductos] = useState(false);
+    const [progresoExtraccion, setProgresoExtraccion] = useState(0);
+    
+    // Estados para documentos
     const [fecha, setFecha] = useState("");
     const [numRem, setNumRem] = useState("");
-    // Inputs específicos para proveedor
+    const [numGuiaDespacho, setNumGuiaDespacho] = useState("");
+    const [observacionesRecepcion, setObservacionesRecepcion] = useState("");
+    
+    // Estados para proveedor (se rellenan automáticamente desde PDF)
     const [proveedorNombre, setProveedorNombre] = useState("");
     const [proveedorRut, setProveedorRut] = useState("");
     const [proveedorContacto, setProveedorContacto] = useState("");
+    const [proveedorTelefono, setProveedorTelefono] = useState("");
+    const [proveedorEmail, setProveedorEmail] = useState("");
+    
+    // Estados para salida
     const [asignado, setAsignado] = useState("");
     const [sucursalDestino, setSucursalDestino] = useState("");
-    
-    // Nuevos campos para guía de despacho
-    const [numGuiaDespacho, setNumGuiaDespacho] = useState("");
-    const [archivoGuia, setArchivoGuia] = useState<File | null>(null);
-    const [nombreArchivo, setNombreArchivo] = useState("");
-    const [observacionesRecepcion, setObservacionesRecepcion] = useState("");
-    
-    // Productos
-    const [productos, setProductos] = useState<Producto[]>([]);
-    const [nuevoProducto, setNuevoProducto] = useState({ nombre: "", cantidad: 1, marca: "", categoria: "" });
 
-    // Estados para extracción automática
-    const [extrayendoProductos, setExtrayendoProductos] = useState(false);
-    const [productosExtraidos, setProductosExtraidos] = useState<Producto[]>([]);
-    const [mostrarProductosExtraidos, setMostrarProductosExtraidos] = useState(false);
-    const [progresoExtraccion, setProgresoExtraccion] = useState(0);
+    const mostrarFeedback = (message: string, severity: 'success' | 'error' = 'success') => {};
 
-    // Estados para feedback
-    const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
-
-    // Función para mostrar feedback
-    const mostrarFeedback = (message: string, severity: 'success' | 'error' = 'success') => {
-        setSnackbar({ open: true, message, severity });
-    };
-
-    // Función para generar REM automáticamente
     const generarREMAutomatico = () => {
-        const rem = DocumentoGenerator.generarNumeroREM();
-        setNumRem(rem);
-        mostrarFeedback('REM generado automáticamente');
+        const numeroREM = DocumentoGenerator.generarNumeroREM();
+        setNumRem(numeroREM);
+        mostrarFeedback(`Número REM generado: ${numeroREM}`);
     };
 
-    // Función para formatear REM existente
     const formatearREM = () => {
-        const numeroFormateado = DocumentoGenerator.formatearDocumento('REM', numRem);
-        setNumRem(numeroFormateado);
-        mostrarFeedback('REM formateado correctamente');
+        if (numRem) {
+            const remFormateado = DocumentoGenerator.formatearDocumento('REM', numRem);
+            setNumRem(remFormateado);
+        }
     };
 
-    // Función para manejar la subida de archivo
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            // Validar tipo de archivo
-            const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-            if (!allowedTypes.includes(file.type)) {
-                mostrarFeedback('Solo se permiten archivos PDF, JPG, JPEG o PNG', 'error');
-                return;
-            }
-            
-            // Validar tamaño (máximo 5MB)
             if (file.size > 5 * 1024 * 1024) {
-                mostrarFeedback('El archivo no puede superar 5MB', 'error');
+                mostrarFeedback('El archivo es demasiado grande. Máximo 5MB.', 'error');
                 return;
             }
-            
             setArchivoGuia(file);
             setNombreArchivo(file.name);
-            mostrarFeedback('Archivo cargado correctamente');
+            mostrarFeedback(`Archivo cargado: ${file.name}`);
         }
     };
 
-    // Función para eliminar archivo
     const handleRemoveFile = () => {
         setArchivoGuia(null);
         setNombreArchivo("");
-        mostrarFeedback('Archivo eliminado');
+        setProductosExtraidos([]);
+        setMostrarProductosExtraidos(false);
+        mostrarFeedback('Archivo removido');
     };
 
-    
-
     const handleAddProducto = () => {
-        if (nuevoProducto.nombre && nuevoProducto.cantidad > 0 && nuevoProducto.marca && nuevoProducto.categoria) {
-            setProductos([...productos, nuevoProducto]);
-            setNuevoProducto({ nombre: "", cantidad: 1, marca: "", categoria: "" });
-        }
+        setProductos([...productos, { nombre: '', cantidad: 1, marca: '', categoria: '' }]);
     };
 
     const handleRemoveProducto = (idx: number) => {
         setProductos(productos.filter((_, i) => i !== idx));
     };
 
-    
+    // Función para agregar un producto individual desde la lista extraída
+    const handleAddProductoExtraido = (productoExtraido: Producto) => {
+        const existe = productos.some(p => p.nombre === productoExtraido.nombre);
+        if (existe) {
+            mostrarFeedback('Este producto ya está en la lista', 'error');
+            return;
+        }
+        setProductos([...productos, productoExtraido]);
+        mostrarFeedback(`Producto "${productoExtraido.nombre}" agregado`);
+    };
+
+    // Función para agregar todos los productos extraídos
+    const handleAddTodosProductosExtraidos = () => {
+        const productosNuevos = productosExtraidos.filter(
+            extraido => !productos.some(existente => existente.nombre === extraido.nombre)
+        );
+        if (productosNuevos.length === 0) {
+            mostrarFeedback('Todos los productos ya están en la lista', 'error');
+            return;
+        }
+        setProductos([...productos, ...productosNuevos]);
+        mostrarFeedback(`${productosNuevos.length} productos agregados`);
+    };
 
     // Función para extraer productos automáticamente usando el backend
     const extraerProductosAutomaticamente = async () => {
@@ -216,6 +196,7 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
         setProgresoExtraccion(0);
         setProductosExtraidos([]);
         setMostrarProductosExtraidos(false);
+        
         try {
             // Simular progreso
             const interval = setInterval(() => {
@@ -227,13 +208,16 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                     return prev + 10;
                 });
             }, 200);
+            
             const respuesta = await extraerProductosDesdePDFBackend(archivoGuia);
             clearInterval(interval);
             setProgresoExtraccion(100);
+            
             // Procesar productos
             const productos = respuesta.productos || respuesta;
             const datos = respuesta.datos || {};
-            console.log('Datos recibidos del backend:', datos);
+            const resumen = respuesta.resumen || {};
+            
             const productosFormateados = productos.map((prod: any) => ({
                 nombre: prod.nombre || '',
                 codigo: prod.codigo || '',
@@ -242,38 +226,99 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                 categoria: prod.categoria || ''
             }));
             setProductosExtraidos(productosFormateados);
-            // Rellenar campos del formulario si existen en la respuesta
-            if (datos) {
-                if (datos.proveedor) {
-                    setProveedorNombre(datos.proveedor);
-                    console.log('Seteando proveedor:', datos.proveedor);
-                }
-                if (datos.rut) {
-                    setProveedorRut(datos.rut);
-                    console.log('Seteando rut:', datos.rut);
-                }
-                if (datos.direccion) {
-                    setProveedorContacto(datos.direccion); // Usamos contacto para dirección si no hay campo específico
-                    console.log('Seteando direccion/contacto:', datos.direccion);
-                }
-                if (datos.fecha) {
-                    const fechaNormalizada = normalizarFecha(datos.fecha);
-                    setFecha(fechaNormalizada);
-                    console.log('Seteando fecha:', fechaNormalizada);
-                }
-                if (datos.num_guia) {
-                    setNumGuiaDespacho(datos.num_guia);
-                    console.log('Seteando num_guia:', datos.num_guia);
+            
+            // Rellenar campos del formulario con información extraída
+            let camposRellenados = 0;
+            
+            if (datos.proveedor) {
+                setProveedorNombre(datos.proveedor);
+                camposRellenados++;
+            } else {
+            }
+            
+            if (datos.rut) {
+                setProveedorRut(datos.rut);
+                camposRellenados++;
+            } else {
+            }
+            
+            if (datos.direccion) {
+                setProveedorContacto(datos.direccion);
+                camposRellenados++;
+            } else {
+            }
+            
+            if (datos.telefono) {
+                setProveedorTelefono(datos.telefono);
+                camposRellenados++;
+            } else {
+            }
+            
+            if (datos.contacto) {
+                const contactoActual = proveedorContacto;
+                const nuevoContacto = contactoActual ? `${contactoActual} | ${datos.contacto}` : datos.contacto;
+                setProveedorContacto(nuevoContacto);
+                camposRellenados++;
+            } else {
+            }
+            
+            if (datos.email) {
+                setProveedorEmail(datos.email);
+                camposRellenados++;
+            } else {
+            }
+            
+            if (datos.fecha) {
+                const fechaNormalizada = normalizarFecha(datos.fecha);
+                setFecha(fechaNormalizada);
+                camposRellenados++;
+            } else {
+            }
+            
+            if (datos.num_guia) {
+                setNumGuiaDespacho(datos.num_guia);
+                camposRellenados++;
+            }
+            
+            if (datos.num_rem) {
+                setNumRem(datos.num_rem);
+                camposRellenados++;
+            } else {
+            }
+            
+            if (datos.observaciones) {
+                setObservacionesRecepcion(datos.observaciones);
+                camposRellenados++;
+            } else {
+            }
+            
+            
+            // Verificar que los campos se actualizaron
+            setTimeout(() => {
+            }, 100);
+            
+            // Mostrar resumen de extracción
+            let mensaje = `✅ Extracción completada:\n`;
+            mensaje += `• ${productosFormateados.length} productos encontrados\n`;
+            mensaje += `• ${camposRellenados} campos del formulario rellenados automáticamente`;
+            
+            if (resumen.campos_extraidos) {
+                const camposExtraidos = Object.keys(resumen.campos_extraidos);
+                if (camposExtraidos.length > 0) {
+                    mensaje += `\n• Campos extraídos: ${camposExtraidos.join(', ')}`;
                 }
             }
+            
             if (productosFormateados.length > 0) {
                 setMostrarProductosExtraidos(true);
-                mostrarFeedback(`Se extrajeron ${productosFormateados.length} productos del PDF`);
+                mostrarFeedback(mensaje);
             } else {
-                mostrarFeedback('No se pudieron extraer productos del PDF.', 'error');
+                mostrarFeedback('No se pudieron extraer productos del PDF, pero se rellenaron algunos campos del formulario.', 'error');
             }
+            
         } catch (error) {
-            mostrarFeedback('Error al extraer productos del PDF', 'error');
+            console.error('Error en extracción:', error);
+            mostrarFeedback('Error al extraer información del PDF. Verifique que el archivo sea válido.', 'error');
         } finally {
             setExtrayendoProductos(false);
             setProgresoExtraccion(0);
@@ -281,31 +326,8 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
     };
 
     const handleSubmit = () => {
-        // Si es un ingreso y hay proveedor, guarda el ingreso en el historial del proveedor
-        if (
-            tipo === "ingreso" &&
-            proveedorNombre &&
-            proveedorRut &&
-            productos.length > 0
-        ) {
-            addIngresoProveedor(
-                {
-                    nombre: proveedorNombre,
-                    rut: proveedorRut,
-                    contacto: proveedorContacto
-                },
-                {
-                    fecha,
-                    productos,
-                    documentos: {
-                        numRem,
-                        numGuiaDespacho,
-                        archivoGuia: nombreArchivo
-                    },
-                    observaciones: observacionesRecepcion
-                }
-            );
-        }
+        // Eliminar la llamada duplicada a addIngresoProveedor
+        // Esta función se ejecuta en el componente principal después de crear el ingreso en la BD
 
         onSubmit({
             tipo,
@@ -313,7 +335,9 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                 ? {
                     nombre: proveedorNombre,
                     rut: proveedorRut,
-                    contacto: proveedorContacto
+                    contacto: proveedorContacto,
+                    telefono: proveedorTelefono,
+                    email: proveedorEmail
                 }
                 : undefined,
             asignado: tipo === "salida" ? asignado : undefined,
@@ -331,6 +355,8 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
         setProveedorNombre("");
         setProveedorRut("");
         setProveedorContacto("");
+        setProveedorTelefono("");
+        setProveedorEmail("");
         setAsignado("");
         setSucursalDestino("");
         setFecha("");
@@ -340,6 +366,8 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
         setNombreArchivo("");
         setObservacionesRecepcion("");
         setProductos([]);
+        setProductosExtraidos([]);
+        setMostrarProductosExtraidos(false);
         onClose();
     };
 
@@ -368,8 +396,174 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                 }}>
                     {tipo === "ingreso" ? "🟡 Nuevo Ingreso" : "Nueva Salida"}
                 </DialogTitle>
+                
                 <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
                     <form>
+                        {/* SECCIÓN 1: SUBIDA DE PDF Y EXTRACCIÓN AUTOMÁTICA */}
+                        <Box sx={{ mb: 3, p: { xs: 1, sm: 2 }, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                            <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}>
+                                📄 Extracción Automática desde PDF (Opcional)
+                            </Typography>
+                            
+                            <Typography variant="body2" sx={{ color: "#ccc", mb: 2 }}>
+                                Sube una guía de despacho o factura para extraer automáticamente la información del proveedor y productos.
+                            </Typography>
+                            
+                            {/* Subida de archivo */}
+                            <Box sx={{ mb: 2 }}>
+                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+                                    <input
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        style={{ display: 'none' }}
+                                        id="archivo-guia"
+                                        type="file"
+                                        onChange={handleFileUpload}
+                                    />
+                                    <label htmlFor="archivo-guia">
+                                        <Button
+                                            variant="outlined"
+                                            component="span"
+                                            startIcon={<UploadFileIcon />}
+                                            sx={{
+                                                borderColor: "#4CAF50",
+                                                color: "#4CAF50",
+                                                fontWeight: 600,
+                                                "&:hover": {
+                                                    borderColor: "#4CAF50",
+                                                    bgcolor: "rgba(76, 175, 80, 0.1)"
+                                                }
+                                            }}
+                                        >
+                                            {archivoGuia ? "Cambiar Archivo" : "Seleccionar PDF"}
+                                        </Button>
+                                    </label>
+                                    {nombreArchivo && (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <AttachFileIcon sx={{ color: "#4CAF50" }} />
+                                            <Typography variant="body2" sx={{ color: "#fff" }}>
+                                                {nombreArchivo}
+                                            </Typography>
+                                            <IconButton
+                                                size="small"
+                                                onClick={handleRemoveFile}
+                                                sx={{ color: "#ff4444" }}
+                                            >
+                                                <DeleteIcon fontSize="small" />
+                                            </IconButton>
+                                        </Box>
+                                    )}
+                                </Box>
+                                <Typography variant="caption" sx={{ color: "#ccc", display: 'block' }}>
+                                    Formatos permitidos: PDF, JPG, JPEG, PNG (máximo 5MB)
+                                </Typography>
+                            </Box>
+
+                            {/* Botón de extracción automática */}
+                            {archivoGuia && (
+                                <Box sx={{ mb: 2 }}>
+                                    <Button
+                                        variant="contained"
+                                        onClick={extraerProductosAutomaticamente}
+                                        disabled={extrayendoProductos}
+                                        startIcon={extrayendoProductos ? <CircularProgress size={20} /> : <AutoAwesomeIcon />}
+                                        sx={{
+                                            bgcolor: "#FFD700",
+                                            color: "#000",
+                                            fontWeight: 700,
+                                            "&:hover": {
+                                                bgcolor: "#FFC700"
+                                            },
+                                            "&:disabled": {
+                                                bgcolor: "#666"
+                                            }
+                                        }}
+                                    >
+                                        {extrayendoProductos ? `Extrayendo... ${progresoExtraccion}%` : "🤖 Extraer Información Automáticamente"}
+                                    </Button>
+                                    
+                                    {extrayendoProductos && (
+                                        <Box sx={{ mt: 1 }}>
+                                            <LinearProgress 
+                                                variant="determinate" 
+                                                value={progresoExtraccion}
+                                                sx={{
+                                                    bgcolor: "#333",
+                                                    "& .MuiLinearProgress-bar": {
+                                                        bgcolor: "#FFD700"
+                                                    }
+                                                }}
+                                            />
+                                        </Box>
+                                    )}
+                                </Box>
+                            )}
+
+                            {/* Productos extraídos */}
+                            {mostrarProductosExtraidos && productosExtraidos.length > 0 && (
+                                <Box sx={{ mb: 2, p: 2, bgcolor: "#1a1a1a", borderRadius: 2, border: "1px solid #444" }}>
+                                    <Typography variant="subtitle1" sx={{ color: "#FFD700", mb: 2, fontWeight: 600 }}>
+                                        📦 Productos Extraídos ({productosExtraidos.length})
+                                    </Typography>
+                                    
+                                    <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            onClick={handleAddTodosProductosExtraidos}
+                                            sx={{
+                                                borderColor: "#4CAF50",
+                                                color: "#4CAF50",
+                                                "&:hover": {
+                                                    borderColor: "#4CAF50",
+                                                    bgcolor: "rgba(76, 175, 80, 0.1)"
+                                                }
+                                            }}
+                                        >
+                                            ➕ Agregar Todos
+                                        </Button>
+                                    </Box>
+                                    
+                                    <Box sx={{ maxHeight: 200, overflowY: 'auto' }}>
+                                        {productosExtraidos.map((producto, index) => (
+                                            <Box key={index} sx={{ 
+                                                display: 'flex', 
+                                                justifyContent: 'space-between', 
+                                                alignItems: 'center',
+                                                p: 1,
+                                                mb: 1,
+                                                bgcolor: "#2a2a2a",
+                                                borderRadius: 1,
+                                                border: "1px solid #444"
+                                            }}>
+                                                <Box>
+                                                    <Typography variant="body2" sx={{ color: "#fff", fontWeight: 600 }}>
+                                                        {producto.nombre}
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ color: "#ccc" }}>
+                                                        Código: {producto.codigo} | Cantidad: {producto.cantidad}
+                                                    </Typography>
+                                                </Box>
+                                                <Button
+                                                    size="small"
+                                                    onClick={() => handleAddProductoExtraido(producto)}
+                                                    sx={{
+                                                        bgcolor: "#4CAF50",
+                                                        color: "#fff",
+                                                        "&:hover": {
+                                                            bgcolor: "#45a049"
+                                                        }
+                                                    }}
+                                                >
+                                                    ➕
+                                                </Button>
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                </Box>
+                            )}
+                        </Box>
+
+                        {/* SECCIÓN 2: DATOS DEL PROVEEDOR (solo para ingreso) */}
                         {tipo === "ingreso" && (
                             <Box sx={{ mb: 3, p: { xs: 1, sm: 2 }, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
                                 <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}>
@@ -418,9 +612,42 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                                         }}
                                     />
                                     <TextField
-                                        label="Contacto Proveedor"
+                                        label="Dirección"
                                         value={proveedorContacto}
                                         onChange={e => setProveedorContacto(e.target.value)}
+                                        fullWidth
+                                        InputLabelProps={{ style: { color: "#ccc" } }}
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: "#fff",
+                                                '& fieldset': { borderColor: "#444" },
+                                                '&:hover fieldset': { borderColor: "#FFD700" },
+                                                '&.Mui-focused fieldset': { borderColor: "#FFD700" }
+                                            },
+                                            '& .MuiInputLabel-root': { color: "#ccc" }
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Teléfono"
+                                        value={proveedorTelefono}
+                                        onChange={e => setProveedorTelefono(e.target.value)}
+                                        fullWidth
+                                        InputLabelProps={{ style: { color: "#ccc" } }}
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: "#fff",
+                                                '& fieldset': { borderColor: "#444" },
+                                                '&:hover fieldset': { borderColor: "#FFD700" },
+                                                '&.Mui-focused fieldset': { borderColor: "#FFD700" }
+                                            },
+                                            '& .MuiInputLabel-root': { color: "#ccc" }
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Email"
+                                        type="email"
+                                        value={proveedorEmail}
+                                        onChange={e => setProveedorEmail(e.target.value)}
                                         fullWidth
                                         InputLabelProps={{ style: { color: "#ccc" } }}
                                         sx={{
@@ -437,7 +664,59 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                             </Box>
                         )}
 
-                        {/* Sección de Documentos de Recepción */}
+                        {/* SECCIÓN 3: DATOS DE SALIDA (solo para salida) */}
+                        {tipo === "salida" && (
+                            <Box sx={{ mb: 3, p: { xs: 1, sm: 2 }, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}>
+                                    📤 Datos de Salida
+                                </Typography>
+                                <Box
+                                    sx={{
+                                        display: 'grid',
+                                        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+                                        gap: 2,
+                                        alignItems: 'end',
+                                    }}
+                                >
+                                    <TextField
+                                        label="Asignado a"
+                                        value={asignado}
+                                        onChange={e => setAsignado(e.target.value)}
+                                        fullWidth
+                                        required
+                                        InputLabelProps={{ style: { color: "#ccc" } }}
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: "#fff",
+                                                '& fieldset': { borderColor: "#444" },
+                                                '&:hover fieldset': { borderColor: "#FFD700" },
+                                                '&.Mui-focused fieldset': { borderColor: "#FFD700" }
+                                            },
+                                            '& .MuiInputLabel-root': { color: "#ccc" }
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Sucursal Destino"
+                                        value={sucursalDestino}
+                                        onChange={e => setSucursalDestino(e.target.value)}
+                                        fullWidth
+                                        required
+                                        InputLabelProps={{ style: { color: "#ccc" } }}
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: "#fff",
+                                                '& fieldset': { borderColor: "#444" },
+                                                '&:hover fieldset': { borderColor: "#FFD700" },
+                                                '&.Mui-focused fieldset': { borderColor: "#FFD700" }
+                                            },
+                                            '& .MuiInputLabel-root': { color: "#ccc" }
+                                        }}
+                                    />
+                                </Box>
+                            </Box>
+                        )}
+
+                        {/* SECCIÓN 4: DOCUMENTOS DE RECEPCIÓN */}
                         <Box sx={{ mb: 3, p: { xs: 1, sm: 2 }, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
                             <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}>
                                 📄 Documentos de Recepción
@@ -483,235 +762,13 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                                 />
                             </Box>
 
-                            {/* Subida de archivo */}
-                            <Box sx={{ mb: 2 }}>
-                                <Typography variant="subtitle1" sx={{ color: "#FFD700", mb: 1, fontWeight: 600 }}>
-                                    📎 Adjuntar Guía de Despacho
-                                </Typography>
-                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <input
-                                        accept=".pdf,.jpg,.jpeg,.png"
-                                        style={{ display: 'none' }}
-                                        id="archivo-guia"
-                                        type="file"
-                                        onChange={handleFileUpload}
-                                    />
-                                    <label htmlFor="archivo-guia">
-                                        <Button
-                                            variant="outlined"
-                                            component="span"
-                                            startIcon={<UploadFileIcon />}
-                                            sx={{
-                                                borderColor: "#4CAF50",
-                                                color: "#4CAF50",
-                                                fontWeight: 600,
-                                                "&:hover": {
-                                                    borderColor: "#4CAF50",
-                                                    bgcolor: "rgba(76, 175, 80, 0.1)"
-                                                }
-                                            }}
-                                        >
-                                            Seleccionar Archivo
-                                        </Button>
-                                    </label>
-                                    {nombreArchivo && (
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <AttachFileIcon sx={{ color: "#4CAF50" }} />
-                                            <Typography variant="body2" sx={{ color: "#fff" }}>
-                                                {nombreArchivo}
-                                            </Typography>
-                                            <IconButton
-                                                size="small"
-                                                onClick={handleRemoveFile}
-                                                sx={{ color: "#ff4444" }}
-                                            >
-                                                <DeleteIcon fontSize="small" />
-                                            </IconButton>
-                                        </Box>
-                                    )}
-                                </Box>
-                                <Typography variant="caption" sx={{ color: "#ccc", display: 'block', mt: 1 }}>
-                                    Formatos permitidos: PDF, JPG, JPEG, PNG (máximo 5MB)
-                                </Typography>
-                            </Box>
-
-                            {/* Extracción automática de productos */}
-                            {nombreArchivo && (
-                                <Box sx={{ mb: 2, p: 2, bgcolor: "#1a1a1a", borderRadius: 2, border: "1px solid #333" }}>
-                                    <Typography variant="subtitle1" sx={{ color: "#FFD700", mb: 2, fontWeight: 600, display: "flex", alignItems: "center", gap: 1 }}>
-                                        🤖 Extracción Automática de Productos
-                                    </Typography>
-                                    
-                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
-                                        <Tooltip title="Extraer productos automáticamente del documento usando IA">
-                                            <Button
-                                                variant="contained"
-                                                startIcon={extrayendoProductos ? <CircularProgress size={20} color="inherit" /> : <AutoAwesomeIcon />}
-                                                onClick={extraerProductosAutomaticamente}
-                                                disabled={extrayendoProductos}
-                                                sx={{
-                                                    bgcolor: "#9C27B0",
-                                                    color: "#fff",
-                                                    fontWeight: 600,
-                                                    "&:hover": { bgcolor: "#7B1FA2" },
-                                                    "&:disabled": { bgcolor: "#666", color: "#999" }
-                                                }}
-                                            >
-                                                {extrayendoProductos ? 'Extrayendo...' : 'Extraer Productos'}
-                                            </Button>
-                                        </Tooltip>
-                                        
-                                        {productosExtraidos.length > 0 && (
-                                            <Chip
-                                                label={`${productosExtraidos.length} productos extraídos`}
-                                                color="success"
-                                                variant="outlined"
-                                                sx={{ color: "#4CAF50", borderColor: "#4CAF50" }}
-                                            />
-                                        )}
-                                    </Box>
-
-                                    {/* Barra de progreso */}
-                                    {extrayendoProductos && (
-                                        <Box sx={{ mb: 2 }}>
-                                            <LinearProgress 
-                                                variant="determinate" 
-                                                value={progresoExtraccion}
-                                                sx={{
-                                                    height: 8,
-                                                    borderRadius: 4,
-                                                    bgcolor: "#333",
-                                                    '& .MuiLinearProgress-bar': {
-                                                        bgcolor: "#9C27B0"
-                                                    }
-                                                }}
-                                            />
-                                            <Typography variant="caption" sx={{ color: "#ccc", mt: 1, display: 'block' }}>
-                                                Procesando documento... {progresoExtraccion}%
-                                            </Typography>
-                                        </Box>
-                                    )}
-
-                                    {/* Resultados de extracción */}
-                                    {mostrarProductosExtraidos && productosExtraidos.length > 0 && (
-                                        <Box sx={{ mt: 2 }}>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                                <Typography variant="subtitle2" sx={{ color: "#FFD700", fontWeight: 600 }}>
-                                                    📋 Productos Detectados
-                                                </Typography>
-                                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                                    <Button
-                                                        variant="outlined"
-                                                        size="small"
-                                                        startIcon={<VisibilityIcon />}
-                                                        onClick={() => setMostrarProductosExtraidos(!mostrarProductosExtraidos)}
-                                                        sx={{
-                                                            borderColor: "#FFD700",
-                                                            color: "#FFD700",
-                                                            "&:hover": {
-                                                                borderColor: "#FFD700",
-                                                                bgcolor: "rgba(255, 215, 0, 0.1)"
-                                                            }
-                                                        }}
-                                                    >
-                                                        {mostrarProductosExtraidos ? 'Ocultar' : 'Ver'}
-                                                    </Button>
-                                                    <Button
-                                                        variant="contained"
-                                                        size="small"
-                                                        startIcon={<AddIcon />}
-                                                        onClick={() => {
-                                                            setProductos(productosExtraidos);
-                                                            setMostrarProductosExtraidos(false);
-                                                        }}
-                                                        sx={{
-                                                            bgcolor: "#4CAF50",
-                                                            color: "#fff",
-                                                            "&:hover": { bgcolor: "#45a049" }
-                                                        }}
-                                                    >
-                                                        Agregar Todos
-                                                    </Button>
-                                                </Box>
-                                            </Box>
-
-                                            {mostrarProductosExtraidos && (
-                                                <TableContainer component={Paper} sx={{ bgcolor: "#2a2a2a", border: "1px solid #444", maxHeight: 300 }}>
-                                                    <Table size="small">
-                                                        <TableHead>
-                                                            <TableRow sx={{ bgcolor: "#333" }}>
-                                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600, fontSize: '0.8rem' }}>Producto</TableCell>
-                                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600, fontSize: '0.8rem' }}>Código</TableCell>
-                                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600, fontSize: '0.8rem' }}>Cantidad</TableCell>
-                                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600, fontSize: '0.8rem' }}>Marca</TableCell>
-                                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600, fontSize: '0.8rem' }}>Categoría</TableCell>
-                                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600, fontSize: '0.8rem' }}>Acciones</TableCell>
-                                                            </TableRow>
-                                                        </TableHead>
-                                                        <TableBody>
-                                                            {productosExtraidos.map((producto, idx) => (
-                                                                <TableRow key={idx} sx={{ '&:nth-of-type(odd)': { bgcolor: '#232323' } }}>
-                                                                    <TableCell sx={{ color: "#fff", fontSize: '0.8rem' }}>{producto.nombre}</TableCell>
-                                                                    <TableCell sx={{ color: "#fff", fontSize: '0.8rem' }}>{producto.codigo || '-'}</TableCell>
-                                                                    <TableCell sx={{ color: "#fff", fontSize: '0.8rem' }}>{producto.cantidad}</TableCell>
-                                                                    <TableCell sx={{ color: "#fff", fontSize: '0.8rem' }}>{producto.marca || '-'}</TableCell>
-                                                                    <TableCell sx={{ color: "#fff", fontSize: '0.8rem' }}>{producto.categoria || '-'}</TableCell>
-                                                                    <TableCell>
-                                                                        <IconButton
-                                                                            size="small"
-                                                                            onClick={() => {
-                                                                                setProductos(productos.filter((p) => p.nombre !== producto.nombre));
-                                                                                setMostrarProductosExtraidos(false);
-                                                                            }}
-                                                                            sx={{ color: "#ff4444" }}
-                                                                        >
-                                                                            <DeleteIcon fontSize="small" />
-                                                                        </IconButton>
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                    </Table>
-                                                </TableContainer>
-                                            )}
-                                        </Box>
-                                    )}
-                                </Box>
-                            )}
-
-                            {/* Generación automática de REM */}
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                <Typography variant="subtitle1" sx={{ color: "#FFD700", fontWeight: 600 }}>
-                                    📋 Nota de Recepción Interna (REM)
-                                </Typography>
-                                <Tooltip title="Generar número de REM automáticamente">
-                                    <Button
-                                        variant="outlined"
-                                        startIcon={<AutoFixHighIcon />}
-                                        onClick={generarREMAutomatico}
-                                        sx={{
-                                            borderColor: "#4CAF50",
-                                            color: "#4CAF50",
-                                            fontWeight: 600,
-                                            "&:hover": {
-                                                borderColor: "#4CAF50",
-                                                bgcolor: "rgba(76, 175, 80, 0.1)"
-                                            }
-                                        }}
-                                    >
-                                        Generar REM
-                                    </Button>
-                                </Tooltip>
-                            </Box>
-                            
-                            <Box sx={{ position: 'relative' }}>
+                            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2, alignItems: 'end', mb: 2 }}>
                                 <TextField
                                     label="N° REM"
                                     value={numRem}
                                     onChange={e => setNumRem(e.target.value)}
                                     fullWidth
-                                    required
-                                    placeholder="REM-202412-0001"
+                                    placeholder="Ej: REM-2024-001234"
                                     InputLabelProps={{ style: { color: "#ccc" } }}
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
@@ -723,55 +780,46 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                                         '& .MuiInputLabel-root': { color: "#ccc" }
                                     }}
                                 />
-                                <Box sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}>
-                                    <Tooltip title="Formatear número de REM">
-                                        <IconButton
-                                            size="small"
-                                            onClick={formatearREM}
-                                            sx={{ color: "#FFD700", p: 0.5 }}
-                                        >
-                                            <RefreshIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
+                                
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                    <Button
+                                        variant="outlined"
+                                        onClick={generarREMAutomatico}
+                                        sx={{
+                                            borderColor: "#FFD700",
+                                            color: "#FFD700",
+                                            "&:hover": {
+                                                borderColor: "#FFD700",
+                                                bgcolor: "rgba(255, 215, 0, 0.1)"
+                                            }
+                                        }}
+                                    >
+                                        Generar REM
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        onClick={formatearREM}
+                                        sx={{
+                                            borderColor: "#FFD700",
+                                            color: "#FFD700",
+                                            "&:hover": {
+                                                borderColor: "#FFD700",
+                                                bgcolor: "rgba(255, 215, 0, 0.1)"
+                                            }
+                                        }}
+                                    >
+                                        Formatear
+                                    </Button>
                                 </Box>
                             </Box>
 
-                            {/* Indicadores de estado */}
-                            <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                <Chip
-                                    label={`Guía: ${numGuiaDespacho ? '✓ Registrada' : '⚠ Pendiente'}`}
-                                    size="small"
-                                    color={numGuiaDespacho ? "success" : "warning"}
-                                    variant="outlined"
-                                />
-                                <Chip
-                                    label={`Archivo: ${nombreArchivo ? '✓ Adjuntado' : '⚠ Pendiente'}`}
-                                    size="small"
-                                    color={nombreArchivo ? "success" : "warning"}
-                                    variant="outlined"
-                                />
-                                <Chip
-                                    label={`REM: ${numRem ? '✓ Generado' : '⚠ Pendiente'}`}
-                                    size="small"
-                                    color={numRem ? "success" : "warning"}
-                                    variant="outlined"
-                                />
-                            </Box>
-                        </Box>
-
-                        {/* Observaciones de Recepción */}
-                        <Box sx={{ mb: 3, p: { xs: 1, sm: 2 }, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
-                            <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}>
-                                📝 Observaciones de Recepción
-                            </Typography>
                             <TextField
-                                label="Diferencias encontradas, observaciones o comentarios"
+                                label="Observaciones de Recepción"
                                 value={observacionesRecepcion}
                                 onChange={e => setObservacionesRecepcion(e.target.value)}
+                                fullWidth
                                 multiline
                                 rows={3}
-                                fullWidth
-                                placeholder="Ej: Producto X llegó con 2 unidades menos, Producto Y en buen estado..."
                                 InputLabelProps={{ style: { color: "#ccc" } }}
                                 sx={{
                                     '& .MuiOutlinedInput-root': {
@@ -785,235 +833,251 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                             />
                         </Box>
 
-                        {/* Productos */}
-                        <Box sx={{ mt: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                        {/* SECCIÓN 5: PRODUCTOS */}
+                        <Box sx={{ mb: 3, p: { xs: 1, sm: 2 }, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
                             <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}>
-                                🛒 Productos Recibidos
+                                📦 Productos
                             </Typography>
-                            <Box
-                                sx={{
-                                    display: 'grid',
-                                    gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(5, 1fr)' },
-                                    gap: 2,
-                                    mb: 2,
-                                    alignItems: 'end',
-                                }}
-                            >
-                                <TextField
-                                    label="Producto"
-                                    value={nuevoProducto.nombre}
-                                    onChange={e => setNuevoProducto({ ...nuevoProducto, nombre: e.target.value })}
-                                    size="small"
-                                    required
-                                    InputLabelProps={{ style: { color: "#ccc" } }}
-                                    sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                            color: "#fff",
-                                            '& fieldset': { borderColor: "#444" },
-                                            '&:hover fieldset': { borderColor: "#FFD700" },
-                                            '&.Mui-focused fieldset': { borderColor: "#FFD700" }
-                                        },
-                                        '& .MuiInputLabel-root': { color: "#ccc" }
-                                    }}
-                                />
-                                <FormControl fullWidth size="small">
-                                    <InputLabel sx={{ color: "#ccc" }}>Marca</InputLabel>
-                                    <Select
-                                        value={nuevoProducto.marca}
-                                        label="Marca"
-                                        onChange={e => setNuevoProducto({ ...nuevoProducto, marca: e.target.value })}
-                                        sx={{
-                                            color: "#fff",
-                                            '& .MuiOutlinedInput-notchedOutline': { borderColor: "#444" },
-                                            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: "#FFD700" },
-                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: "#FFD700" }
-                                        }}
-                                        MenuProps={{
-                                            PaperProps: {
-                                                sx: {
-                                                    bgcolor: '#232323',
-                                                    border: '1px solid #333',
-                                                    '& .MuiMenuItem-root': {
-                                                        color: '#fff',
-                                                        '&:hover': {
-                                                            bgcolor: '#2a2a2a'
-                                                        },
-                                                        '&.Mui-selected': {
-                                                            bgcolor: '#FFD700',
-                                                            color: '#232323',
-                                                            '&:hover': {
-                                                                bgcolor: '#FFD700'
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }}
-                                    >
-                                        {marcas.map((marca, idx) => (
-                                            <MenuItem key={idx} value={marca}>{marca}</MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                                <FormControl fullWidth size="small">
-                                    <InputLabel sx={{ color: "#ccc" }}>Categoría</InputLabel>
-                                    <Select
-                                        value={nuevoProducto.categoria}
-                                        label="Categoría"
-                                        onChange={e => setNuevoProducto({ ...nuevoProducto, categoria: e.target.value })}
-                                        sx={{
-                                            color: "#fff",
-                                            '& .MuiOutlinedInput-notchedOutline': { borderColor: "#444" },
-                                            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: "#FFD700" },
-                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: "#FFD700" }
-                                        }}
-                                        MenuProps={{
-                                            PaperProps: {
-                                                sx: {
-                                                    bgcolor: '#232323',
-                                                    border: '1px solid #333',
-                                                    '& .MuiMenuItem-root': {
-                                                        color: '#fff',
-                                                        '&:hover': {
-                                                            bgcolor: '#2a2a2a'
-                                                        },
-                                                        '&.Mui-selected': {
-                                                            bgcolor: '#FFD700',
-                                                            color: '#232323',
-                                                            '&:hover': {
-                                                                bgcolor: '#FFD700'
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }}
-                                    >
-                                        {categorias.map((cat, idx) => (
-                                            <MenuItem key={idx} value={cat}>{cat}</MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                                <TextField
-                                    label="Cantidad"
-                                    type="number"
-                                    value={nuevoProducto.cantidad}
-                                    onChange={e => setNuevoProducto({ ...nuevoProducto, cantidad: Number(e.target.value) })}
-                                    inputProps={{ min: 1 }}
-                                    size="small"
-                                    required
-                                    sx={{
-                                        width: 120,
-                                        '& .MuiOutlinedInput-root': {
-                                            color: "#fff",
-                                            '& fieldset': { borderColor: "#444" },
-                                            '&:hover fieldset': { borderColor: "#FFD700" },
-                                            '&.Mui-focused fieldset': { borderColor: "#FFD700" }
-                                        },
-                                        '& .MuiInputLabel-root': { color: "#ccc" }
-                                    }}
-                                />
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                <Typography variant="body2" sx={{ color: "#ccc" }}>
+                                    {productos.length} producto{productos.length !== 1 ? 's' : ''} agregado{productos.length !== 1 ? 's' : ''}
+                                </Typography>
                                 <Button
-                                    variant="contained"
-                                    startIcon={<AddIcon />}
+                                    variant="outlined"
                                     onClick={handleAddProducto}
-                                    disabled={!nuevoProducto.nombre || !nuevoProducto.marca || !nuevoProducto.categoria || nuevoProducto.cantidad <= 0}
+                                    startIcon={<AddIcon />}
                                     sx={{
-                                        bgcolor: "#4CAF50",
-                                        color: "#fff",
-                                        fontWeight: 600,
-                                        "&:hover": { bgcolor: "#45a049" },
-                                        "&:disabled": { bgcolor: "#666", color: "#999" }
+                                        borderColor: "#4CAF50",
+                                        color: "#4CAF50",
+                                        "&:hover": {
+                                            borderColor: "#4CAF50",
+                                            bgcolor: "rgba(76, 175, 80, 0.1)"
+                                        }
                                     }}
                                 >
-                                    Agregar
+                                    Agregar Producto
                                 </Button>
                             </Box>
 
-                            {/* Tabla de productos */}
-                            {productos.length > 0 && (
-                                <TableContainer component={Paper} sx={{ bgcolor: "#2a2a2a", border: "1px solid #444" }}>
-                                    <Table>
-                                        <TableHead>
-                                            <TableRow sx={{ bgcolor: "#333" }}>
-                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Producto</TableCell>
-                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Marca</TableCell>
-                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Categoría</TableCell>
-                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Cantidad</TableCell>
-                                                <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Acciones</TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {productos.map((producto, idx) => (
-                                                <TableRow key={idx} sx={{ '&:nth-of-type(odd)': { bgcolor: '#232323' } }}>
-                                                    <TableCell sx={{ color: "#fff" }}>{producto.nombre}</TableCell>
-                                                    <TableCell sx={{ color: "#fff" }}>{producto.marca}</TableCell>
-                                                    <TableCell sx={{ color: "#fff" }}>{producto.categoria}</TableCell>
-                                                    <TableCell sx={{ color: "#fff" }}>{producto.cantidad}</TableCell>
-                                                    <TableCell>
-                                                        <IconButton
-                                                            onClick={() => handleRemoveProducto(idx)}
-                                                            sx={{ color: "#ff4444" }}
-                                                        >
-                                                            <DeleteIcon />
-                                                        </IconButton>
-                                                    </TableCell>
-                                                </TableRow>
+                            {productos.map((producto, index) => (
+                                <Box key={index} sx={{ 
+                                    mb: 2, 
+                                    p: 2, 
+                                    bgcolor: "#1a1a1a", 
+                                    borderRadius: 2, 
+                                    border: "1px solid #444",
+                                    position: 'relative'
+                                }}>
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => handleRemoveProducto(index)}
+                                        sx={{
+                                            position: 'absolute',
+                                            top: 8,
+                                            right: 8,
+                                            color: "#ff4444",
+                                            "&:hover": {
+                                                bgcolor: "rgba(255, 68, 68, 0.1)"
+                                            }
+                                        }}
+                                    >
+                                        <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                    
+                                    <Box sx={{ 
+                                        display: 'grid', 
+                                        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, 
+                                        gap: 2 
+                                    }}>
+                                        <TextField
+                                            label="Nombre del Producto"
+                                            value={producto.nombre}
+                                            onChange={e => {
+                                                const nuevosProductos = [...productos];
+                                                nuevosProductos[index].nombre = e.target.value;
+                                                setProductos(nuevosProductos);
+                                            }}
+                                            fullWidth
+                                            required
+                                            InputLabelProps={{ style: { color: "#ccc" } }}
+                                            sx={{
+                                                '& .MuiOutlinedInput-root': {
+                                                    color: "#fff",
+                                                    '& fieldset': { borderColor: "#444" },
+                                                    '&:hover fieldset': { borderColor: "#FFD700" },
+                                                    '&.Mui-focused fieldset': { borderColor: "#FFD700" }
+                                                },
+                                                '& .MuiInputLabel-root': { color: "#ccc" }
+                                            }}
+                                        />
+                                        <TextField
+                                            label="Cantidad"
+                                            type="number"
+                                            value={producto.cantidad}
+                                            onChange={e => {
+                                                const nuevosProductos = [...productos];
+                                                nuevosProductos[index].cantidad = parseInt(e.target.value) || 0;
+                                                setProductos(nuevosProductos);
+                                            }}
+                                            fullWidth
+                                            required
+                                            InputLabelProps={{ style: { color: "#ccc" } }}
+                                            sx={{
+                                                '& .MuiOutlinedInput-root': {
+                                                    color: "#fff",
+                                                    '& fieldset': { borderColor: "#444" },
+                                                    '&:hover fieldset': { borderColor: "#FFD700" },
+                                                    '&.Mui-focused fieldset': { borderColor: "#FFD700" }
+                                                },
+                                                '& .MuiInputLabel-root': { color: "#ccc" }
+                                            }}
+                                        />
+                                        <TextField
+                                            select
+                                            label="Marca"
+                                            value={producto.marca}
+                                            onChange={e => {
+                                                const nuevosProductos = [...productos];
+                                                nuevosProductos[index].marca = e.target.value;
+                                                setProductos(nuevosProductos);
+                                            }}
+                                            fullWidth
+                                            InputLabelProps={{ style: { color: "#ccc" } }}
+                                            sx={{
+                                                '& .MuiOutlinedInput-root': {
+                                                    color: "#fff",
+                                                    '& fieldset': { borderColor: "#444" },
+                                                    '&:hover fieldset': { borderColor: "#FFD700" },
+                                                    '&.Mui-focused fieldset': { borderColor: "#FFD700" }
+                                                },
+                                                '& .MuiInputLabel-root': { color: "#ccc" }
+                                            }}
+                                            SelectProps={{
+                                                MenuProps: {
+                                                    PaperProps: {
+                                                        sx: {
+                                                            bgcolor: "#2a2a2a",
+                                                            border: "1px solid #444",
+                                                            "& .MuiMenuItem-root": {
+                                                                color: "#fff",
+                                                                "&:hover": {
+                                                                    bgcolor: "#3a3a3a"
+                                                                },
+                                                                "&.Mui-selected": {
+                                                                    bgcolor: "#FFD700",
+                                                                    color: "#000",
+                                                                    "&:hover": {
+                                                                        bgcolor: "#FFC700"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            {marcas.map((marca) => (
+                                                <MenuItem key={marca} value={marca}>
+                                                    {marca}
+                                                </MenuItem>
                                             ))}
-                                        </TableBody>
-                                    </Table>
-                                </TableContainer>
-                            )}
+                                        </TextField>
+                                        <TextField
+                                            select
+                                            label="Categoría"
+                                            value={producto.categoria}
+                                            onChange={e => {
+                                                const nuevosProductos = [...productos];
+                                                nuevosProductos[index].categoria = e.target.value;
+                                                setProductos(nuevosProductos);
+                                            }}
+                                            fullWidth
+                                            InputLabelProps={{ style: { color: "#ccc" } }}
+                                            sx={{
+                                                '& .MuiOutlinedInput-root': {
+                                                    color: "#fff",
+                                                    '& fieldset': { borderColor: "#444" },
+                                                    '&:hover fieldset': { borderColor: "#FFD700" },
+                                                    '&.Mui-focused fieldset': { borderColor: "#FFD700" }
+                                                },
+                                                '& .MuiInputLabel-root': { color: "#ccc" }
+                                            }}
+                                            SelectProps={{
+                                                MenuProps: {
+                                                    PaperProps: {
+                                                        sx: {
+                                                            bgcolor: "#2a2a2a",
+                                                            border: "1px solid #444",
+                                                            "& .MuiMenuItem-root": {
+                                                                color: "#fff",
+                                                                "&:hover": {
+                                                                    bgcolor: "#3a3a3a"
+                                                                },
+                                                                "&.Mui-selected": {
+                                                                    bgcolor: "#FFD700",
+                                                                    color: "#000",
+                                                                    "&:hover": {
+                                                                        bgcolor: "#FFC700"
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            {categorias.map((categoria) => (
+                                                <MenuItem key={categoria} value={categoria}>
+                                                    {categoria}
+                                                </MenuItem>
+                                            ))}
+                                        </TextField>
+                                    </Box>
+                                </Box>
+                            ))}
                         </Box>
                     </form>
                 </DialogContent>
-                <DialogActions sx={{ bgcolor: "#1a1a1a", p: 2, gap: 1 }}>
+                
+                <DialogActions sx={{ 
+                    bgcolor: "#1a1a1a", 
+                    p: 2, 
+                    borderTop: "1px solid #333",
+                    gap: 1
+                }}>
                     <Button
                         onClick={onClose}
                         sx={{
                             color: "#ccc",
-                            borderColor: "#666",
                             "&:hover": {
-                                borderColor: "#999",
-                                bgcolor: "rgba(255, 255, 255, 0.1)"
+                                bgcolor: "rgba(204, 204, 204, 0.1)"
                             }
                         }}
-                        variant="outlined"
                     >
                         Cancelar
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={!fecha || !numRem || !numGuiaDespacho || productos.length === 0 || (tipo === "ingreso" && (!proveedorNombre || !proveedorRut))}
+                        variant="contained"
+                        disabled={!proveedorNombre || !proveedorRut || productos.length === 0}
                         sx={{
                             bgcolor: "#FFD700",
-                            color: "#232323",
+                            color: "#000",
                             fontWeight: 700,
-                            "&:hover": { bgcolor: "#FFC700" },
-                            "&:disabled": { bgcolor: "#666", color: "#999" }
+                            "&:hover": {
+                                bgcolor: "#FFC700"
+                            },
+                            "&:disabled": {
+                                bgcolor: "#666",
+                                color: "#999"
+                            }
                         }}
-                        variant="contained"
                     >
-                        {tipo === "ingreso" ? "Crear Ingreso" : "Crear Salida"}
+                        {tipo === "ingreso" ? "Registrar Ingreso" : "Registrar Salida"}
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            {/* Snackbar para feedback */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={4000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </>
     );
 });

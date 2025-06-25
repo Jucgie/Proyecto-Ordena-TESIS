@@ -91,7 +91,8 @@ export async function generarOCI(solicitud: any) {
                     modulo_origen: 'solicitudes',
                     contenido: JSON.stringify(contenido),
                     archivo_url: fileName,
-                    usuario_fk: usuario?.id || null
+                    bodega_fk: usuario?.bodega || null,
+                    sucursal_fk: usuario?.sucursal || null
                 };
 
                 await informesService.createInforme(informeData);

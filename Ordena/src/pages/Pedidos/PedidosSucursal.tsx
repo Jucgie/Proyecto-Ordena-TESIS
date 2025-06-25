@@ -16,7 +16,7 @@ import { SUCURSALES } from "../../constants/ubicaciones";
 import { generarActaRecepcion } from "../../utils/pdf/generarActaRecepcion";
 import { generarOCI } from "../../utils/pdf/generarOCI";
 import EstadoBadge from "../../components/EstadoBadge";
-import { pedidosService } from "../../services/api";
+import { pedidosService, informesService } from "../../services/api";
 import { useInventariosStore } from "../../store/useProductoStore";
 
 export default function PedidosSucursal() {
@@ -41,7 +41,8 @@ export default function PedidosSucursal() {
             return;
         }
         
-        fetchPedidosSucursal();
+        setLoading(true);
+        fetchPedidosSucursal().finally(() => setLoading(false));
     }, [sucursalActualId]);
 
     const fetchPedidosSucursal = async () => {
@@ -108,8 +109,8 @@ export default function PedidosSucursal() {
 
     // Función temporal para limpiar localStorage
     const handleLimpiarLocalStorage = () => {
-        limpiarLocalStorageBodega();
-        verificarLocalStorage();
+        // Limpiar el store de bodega
+        clearPedidos();
         // Recargar la página para aplicar los cambios
         window.location.reload();
     };
@@ -132,34 +133,79 @@ export default function PedidosSucursal() {
             // Confirmar recepción usando el nuevo endpoint
             const resultado = await pedidosService.confirmarRecepcion(id.toString());
             
-        const pedido = pedidos.find((p: any) => p.id === id);
-        if (pedido) {
-            // Buscar sucursal receptora
-            const sucursal = SUCURSALES.find(s => s.id === pedido.sucursalDestino);
-            // Generar productos recibidos
-            const productos = (pedido.productos || []).map((prod: any, idx: number) => ({
-                codigo: prod.codigo || `P${idx + 1}`,
-                descripcion: prod.nombre || prod.descripcion || "-",
-                cantidad: prod.cantidad || 0,
-            }));
+            const pedido = pedidos.find((p: any) => p.id === id);
+            if (pedido) {
+                // Buscar sucursal receptora
+                const sucursal = SUCURSALES.find(s => s.id === pedido.sucursalDestino);
+                // Generar productos recibidos
+                const productos = (pedido.productos || []).map((prod: any, idx: number) => ({
+                    codigo: prod.codigo || `P${idx + 1}`,
+                    descripcion: prod.nombre || prod.descripcion || "-",
+                    cantidad: prod.cantidad || 0,
+                }));
 
-            generarActaRecepcion({
-                numeroActa: String(pedido.id),
-                fechaRecepcion: pedido.fecha,
-                sucursal: {
-                    nombre: sucursal?.nombre || pedido.sucursalDestino || "-",
-                    direccion: sucursal?.direccion || pedido.direccionSucursal || "-",
-                },
-                personaRecibe: {
-                    nombre: usuario?.nombre || "-",
-                    cargo: usuario?.rol || "-",
-                },
-                productos,
-                observaciones: pedido.observacion || pedido.observaciones || "",
-                conformidad: "Recibido conforme",
-                responsable: usuario?.nombre || "-",
-            });
-        }
+                generarActaRecepcion({
+                    numeroActa: String(pedido.id),
+                    fechaRecepcion: pedido.fecha,
+                    sucursal: {
+                        nombre: sucursal?.nombre || pedido.sucursalDestino || "-",
+                        direccion: sucursal?.direccion || pedido.direccionSucursal || "-",
+                    },
+                    personaRecibe: {
+                        nombre: usuario?.nombre || "-",
+                        cargo: usuario?.rol || "-",
+                    },
+                    productos,
+                    observaciones: pedido.observacion || pedido.observaciones || "",
+                    conformidad: "Recibido conforme",
+                    responsable: usuario?.nombre || "-",
+                });
+
+                // Crear informe en la base de datos para la confirmación de recepción
+                try {
+                    const contenidoInforme = {
+                        pedido_id: pedido.id,
+                        fecha: pedido.fecha,
+                        sucursal: {
+                            id: pedido.sucursalDestino,
+                            nombre: sucursal?.nombre || pedido.sucursalDestino || "-",
+                            direccion: sucursal?.direccion || pedido.direccionSucursal || "-"
+                        },
+                        bodega: {
+                            nombre: pedido.bodegaOrigen || "Bodega Central",
+                            direccion: pedido.direccionBodega || "Camino a Penco 2500, Concepción"
+                        },
+                        productos: productos.map((prod: any) => ({
+                            nombre: prod.descripcion,
+                            codigo: prod.codigo,
+                            cantidad: prod.cantidad
+                        })),
+                        transportista: {
+                            nombre: pedido.asignado || "Sin asignar",
+                            patente: pedido.patenteVehiculo || "N/A"
+                        },
+                        observaciones: pedido.observacion || pedido.observaciones || "",
+                        responsable: usuario?.nombre || "-",
+                        oci_asociada: pedido.ociAsociada || ""
+                    };
+
+                    await informesService.createInforme({
+                        titulo: `Confirmación de Recepción - Pedido ${pedido.id}`,
+                        descripcion: `Confirmación de recepción del pedido ${pedido.id} en ${sucursal?.nombre || pedido.sucursalDestino}`,
+                        modulo_origen: 'pedidos',
+                        contenido: JSON.stringify(contenidoInforme),
+                        archivo_url: `ConfirmacionRecepcion_${pedido.id}.pdf`,
+                        fecha_generado: new Date().toISOString(),
+                        sucursal_fk: usuario?.sucursal || null,
+                        pedidos_fk: pedido.id
+                    });
+
+                    console.log('✅ Informe de confirmación de recepción creado exitosamente');
+                } catch (error) {
+                    console.error('Error al crear informe de confirmación de recepción:', error);
+                    // No mostrar error al usuario, solo log
+                }
+            }
             
             // Mostrar mensaje de éxito con los productos agregados
             if (resultado.productos_agregados && resultado.productos_agregados.length > 0) {
@@ -172,7 +218,7 @@ export default function PedidosSucursal() {
             }
             
             // Actualizar el estado local
-        updatePedido(id, { estado: "Completado" });
+            updatePedido(id, { estado: "Completado" });
             
             // Recargar pedidos para sincronizar
             await fetchPedidosSucursal();
@@ -187,7 +233,10 @@ export default function PedidosSucursal() {
             
         } catch (error: any) {
             console.error("Error al confirmar recepción:", error);
-            const mensaje = error.response?.data?.error || "Error al confirmar la recepción. Por favor, intente de nuevo.";
+            let mensaje = "Error al confirmar la recepción. Por favor, intente de nuevo.";
+            if (error && error.response && error.response.data && error.response.data.error) {
+                mensaje = error.response.data.error;
+            }
             alert(mensaje);
         }
     };
@@ -201,23 +250,6 @@ export default function PedidosSucursal() {
         setModalOpen(false);
         setPedidoSeleccionado(null);
     };
-
-    if (loading) {
-        return (
-            <Layout>
-                <div style={{
-                    padding: "24px",
-                    maxWidth: "1200px",
-                    margin: "0 auto",
-                    width: "100%",
-                    boxSizing: "border-box",
-                    textAlign: "center"
-                }}>
-                    <h2 style={{ color: "#FFD700" }}>Cargando pedidos...</h2>
-                </div>
-            </Layout>
-        );
-    }
 
     return (
         <Layout>
@@ -340,7 +372,13 @@ export default function PedidosSucursal() {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {pedidosFiltrados.length === 0 ? (
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} align="center" style={{ color: "#FFD700", fontWeight: 700 }}>
+                                        Cargando pedidos...
+                                    </TableCell>
+                                </TableRow>
+                            ) : pedidosFiltrados.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={7} align="center" style={{ color: "#8A8A8A" }}>
                                         No hay registros para mostrar.

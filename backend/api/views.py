@@ -2,8 +2,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes,Pedidos,PersonalEntrega,DetallePedido,EstadoPedido, Informe, SolicitudProductos, Pedidos, DetallePedido, Notificacion, Historial, Stock, EstadoPedido, PersonalEntrega, MovInventario
-from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer
+from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes,Pedidos,PersonalEntrega,DetallePedido,EstadoPedido, Informe, SolicitudProductos, Pedidos, DetallePedido, Notificacion, Historial, Stock, EstadoPedido, PersonalEntrega, MovInventario, Proveedor
+from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer
 from django.db import transaction
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
@@ -631,11 +631,26 @@ class InformeViewSet(viewsets.ModelViewSet):
         queryset = Informe.objects.all()
         modulo_origen = self.request.query_params.get('modulo_origen')
         usuario_fk = self.request.query_params.get('usuario_fk')
+        bodega_fk = self.request.query_params.get('bodega_fk')
+        sucursal_fk = self.request.query_params.get('sucursal_fk')
+        
+        logger.info(f"🔍 DEBUG - InformeViewSet.get_queryset - Parámetros recibidos:")
+        logger.info(f"  - modulo_origen: {modulo_origen}")
+        logger.info(f"  - usuario_fk: {usuario_fk}")
+        logger.info(f"  - Informes totales antes de filtros: {queryset.count()}")
         
         if modulo_origen:
             queryset = queryset.filter(modulo_origen=modulo_origen)
+            logger.info(f"  - Informes después de filtro módulo: {queryset.count()}")
         if usuario_fk:
             queryset = queryset.filter(usuario_fk=usuario_fk)
+            logger.info(f"  - Informes después de filtro usuario: {queryset.count()}")
+        if bodega_fk:
+            queryset = queryset.filter(bodega_fk=bodega_fk)
+        if sucursal_fk:
+            queryset = queryset.filter(sucursal_fk=sucursal_fk)
+
+        logger.info(f"  - Informes finales a devolver: {queryset.count()}")
         
         return queryset.order_by('-fecha_generado')
 
@@ -933,6 +948,248 @@ class PedidosViewSet(viewsets.ModelViewSet):
             logger.error(f"Error al confirmar recepción del pedido {id_p}: {str(e)}")
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['post'], url_path='crear-ingreso-bodega')
+    def crear_ingreso_bodega(self, request):
+        """
+        Crea un pedido de ingreso para la bodega y agrega los productos al inventario
+        """
+        try:
+            # Debug: log de datos recibidos
+            logger.info(f"DEBUG - Datos recibidos en crear_ingreso_bodega: {request.data}")
+            
+            # Obtener datos del request
+            fecha = request.data.get('fecha')
+            num_rem = request.data.get('num_rem', '')
+            num_guia_despacho = request.data.get('num_guia_despacho', '')
+            observaciones = request.data.get('observaciones', '')
+            productos_data = request.data.get('productos', [])
+            proveedor_data = request.data.get('proveedor', {})
+            bodega_id = request.data.get('bodega_id')
+            
+            logger.info(f"DEBUG - Fecha: {fecha}")
+            logger.info(f"DEBUG - Bodega ID: {bodega_id}")
+            logger.info(f"DEBUG - Productos: {productos_data}")
+            logger.info(f"DEBUG - Proveedor: {proveedor_data}")
+            
+            if not fecha:
+                return Response({'error': 'Fecha es requerida'}, status=status.HTTP_400_BAD_REQUEST)
+            if not productos_data:
+                return Response({'error': 'Debe incluir al menos un producto'}, status=status.HTTP_400_BAD_REQUEST)
+            if not bodega_id:
+                return Response({'error': 'ID de bodega es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obtener o crear el estado "Pendiente"
+            try:
+                estado_pendiente = EstadoPedido.objects.get(nombre='Pendiente')
+            except EstadoPedido.DoesNotExist:
+                estado_pendiente = EstadoPedido.objects.create(
+                    nombre='Pendiente',
+                    descripcion='Pedido pendiente de procesamiento'
+                )
+            
+            # Obtener la bodega
+            try:
+                bodega = BodegaCentral.objects.get(id_bdg=bodega_id)
+            except BodegaCentral.DoesNotExist:
+                return Response({'error': 'Bodega no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Crear o actualizar el proveedor si se proporciona información
+            proveedor_obj = None
+            if proveedor_data and proveedor_data.get('nombre'):
+                try:
+                    # Buscar proveedor por RUT
+                    rut_empresa = proveedor_data.get('rut', '').replace('.', '').replace('-', '').replace(' ', '')
+                    
+                    # Remover el dígito verificador si es una letra
+                    if rut_empresa and rut_empresa[-1].isalpha():
+                        rut_empresa = rut_empresa[:-1]
+                    
+                    # Convertir a número
+                    if rut_empresa:
+                        rut_numero = int(rut_empresa)
+                        proveedor_obj, created = Proveedor.objects.get_or_create(
+                            rut_empresa=rut_numero,
+                            defaults={
+                                'nombres_provd': proveedor_data.get('nombre', ''),
+                                'direccion_provd': proveedor_data.get('contacto', 'Sin dirección'),
+                                'correo': proveedor_data.get('email', 'sin@email.com'),
+                                'razon_social': proveedor_data.get('nombre', '')
+                            }
+                        )
+                        if not created:
+                            # Actualizar información del proveedor existente
+                            proveedor_obj.nombres_provd = proveedor_data.get('nombre', proveedor_obj.nombres_provd)
+                            proveedor_obj.direccion_provd = proveedor_data.get('contacto', proveedor_obj.direccion_provd)
+                            proveedor_obj.correo = proveedor_data.get('email', proveedor_obj.correo)
+                            proveedor_obj.save()
+                except (ValueError, Exception) as e:
+                    logger.warning(f"No se pudo crear/actualizar proveedor: {str(e)}")
+            
+            # Crear el pedido
+            pedido_data = {
+                'descripcion': f"Ingreso desde proveedor {proveedor_data.get('nombre', 'N/A')} - REM: {num_rem} - Guía: {num_guia_despacho}",
+                'estado_pedido_fk': estado_pendiente.id_estped,
+                'sucursal_fk': None,  # Los ingresos de bodega no tienen sucursal
+                'personal_entrega_fk': None,  # Los ingresos no tienen personal de entrega
+                'usuario_fk': request.user.id_us if hasattr(request, 'user') else None,
+                'solicitud_fk': None,  # Los ingresos no vienen de solicitudes
+                'bodega_fk': bodega.id_bdg,
+                'proveedor_fk': proveedor_obj.id_provd if proveedor_obj else None
+            }
+            
+            serializer = PedidosCreateSerializer(data=pedido_data)
+            serializer.is_valid(raise_exception=True)
+            pedido = serializer.save()
+            
+            # Procesar productos y agregarlos al inventario
+            productos_agregados = []
+            for producto_info in productos_data:
+                nombre = producto_info.get('nombre', '')
+                cantidad = producto_info.get('cantidad', 0)
+                marca_nombre = producto_info.get('marca', '')
+                categoria_nombre = producto_info.get('categoria', '')
+                
+                if not nombre or cantidad <= 0:
+                    continue
+                
+                # Buscar o crear la marca
+                marca, created = Marca.objects.get_or_create(
+                    nombre_mprod=marca_nombre,
+                    defaults={'descripcion_mprod': f'Marca {marca_nombre}'}
+                )
+                
+                # Buscar o crear la categoría
+                categoria, created = Categoria.objects.get_or_create(
+                    nombre=categoria_nombre,
+                    defaults={'descripcion': f'Categoría {categoria_nombre}'}
+                )
+                
+                # Buscar o crear el producto
+                producto = None
+                try:
+                    # Primero buscar por nombre exacto, marca y categoría
+                    producto = Productos.objects.get(
+                        nombre_prodc__iexact=nombre,
+                        marca_fk__nombre_mprod__iexact=marca_nombre,
+                        categoria_fk__nombre__iexact=categoria_nombre,
+                        bodega_fk=bodega
+                    )
+                    logger.info(f"Producto existente encontrado: {producto.nombre_prodc}")
+                except Productos.DoesNotExist:
+                    # Si no existe, crear uno nuevo
+                    producto = Productos.objects.create(
+                        nombre_prodc=nombre,
+                        marca_fk=marca,
+                        categoria_fk=categoria,
+                        bodega_fk=bodega,
+                        descripcion_prodc=f'{nombre} - {marca_nombre} - {categoria_nombre}',
+                        codigo_interno=f'{nombre}-{marca_nombre}-{categoria_nombre}'.replace(' ', '-').lower(),
+                        fecha_creacion=timezone.now(),
+                        sucursal_fk=None
+                    )
+                    logger.info(f"Nuevo producto creado: {producto.nombre_prodc}")
+                
+                # Crear detalle del pedido
+                DetallePedido.objects.create(
+                    cantidad=cantidad,
+                    descripcion=f"Producto de ingreso: {nombre}",
+                    productos_pedido_fk=producto,
+                    pedidos_fk=pedido
+                )
+                
+                # Buscar o crear el stock para este producto en la bodega
+                stock_obj, created = Stock.objects.get_or_create(
+                    productos_fk=producto,
+                    bodega_fk=bodega.id_bdg,
+                    defaults={
+                        'stock': 0,
+                        'stock_minimo': 5,
+                        'sucursal_fk': None,
+                        'proveedor_fk': None
+                    }
+                )
+                
+                # Agregar la cantidad al stock existente
+                stock_obj.stock += cantidad
+                stock_obj.save()
+                
+                # Registrar movimiento de inventario
+                MovInventario.objects.create(
+                    cantidad=cantidad,
+                    fecha=timezone.now(),
+                    productos_fk=producto,
+                    usuario_fk=request.user
+                )
+                
+                productos_agregados.append({
+                    'producto': producto.nombre_prodc,
+                    'cantidad': float(cantidad),
+                    'stock_actual': float(stock_obj.stock),
+                    'marca': marca.nombre_mprod,
+                    'categoria': categoria.nombre
+                })
+            
+            logger.info(f"Ingreso creado para bodega {bodega.nombre_bdg}. Productos agregados: {productos_agregados}")
+            
+            # Guardar historial de ingreso del proveedor si existe
+            if proveedor_obj:
+                try:
+                    # Crear un registro de historial por cada producto del ingreso
+                    for producto_info in productos_data:
+                        nombre = producto_info.get('nombre', '')
+                        cantidad = producto_info.get('cantidad', 0)
+                        
+                        # Buscar el producto en la base de datos
+                        try:
+                            # Buscar el producto más específicamente usando marca y categoría también
+                            producto_obj = Productos.objects.get(
+                                nombre_prodc__iexact=nombre,
+                                marca_fk__nombre_mprod__iexact=producto_info.get('marca', ''),
+                                categoria_fk__nombre__iexact=producto_info.get('categoria', ''),
+                                bodega_fk=bodega
+                            )
+                            
+                            # Crear registro de historial
+                            Historial.objects.create(
+                                fecha=timezone.now(),
+                                usuario_fk=request.user,
+                                pedidos_fk=pedido,
+                                producto_fk=producto_obj
+                            )
+                        except Productos.DoesNotExist:
+                            logger.warning(f"Producto {nombre} no encontrado para historial")
+                        except Productos.MultipleObjectsReturned:
+                            # Si hay múltiples productos, usar el más reciente
+                            producto_obj = Productos.objects.filter(
+                                nombre_prodc__iexact=nombre,
+                                bodega_fk=bodega
+                            ).order_by('-fecha_creacion').first()
+                            
+                            if producto_obj:
+                                Historial.objects.create(
+                                    fecha=timezone.now(),
+                                    usuario_fk=request.user,
+                                    pedidos_fk=pedido,
+                                    producto_fk=producto_obj
+                                )
+                            else:
+                                logger.warning(f"No se pudo encontrar producto {nombre} para historial")
+                    
+                    logger.info(f"Historial de ingreso guardado para proveedor {proveedor_obj.nombres_provd}")
+                except Exception as e:
+                    logger.warning(f"No se pudo guardar historial de ingreso: {str(e)}")
+            
+            return Response({
+                'mensaje': 'Ingreso creado exitosamente',
+                'pedido_id': pedido.id_p,
+                'productos_agregados': productos_agregados,
+                'bodega': bodega.nombre_bdg
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Error al crear ingreso de bodega: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 class PersonalEntregaViewSet(viewsets.ModelViewSet):
     queryset = PersonalEntrega.objects.all()
     serializer_class = PersonalEntregaSerializer
@@ -994,6 +1251,188 @@ class PersonalEntregaViewSet(viewsets.ModelViewSet):
             logger.error(f"Error al crear personal de entrega: {str(e)}")
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+class ProveedorViewSet(viewsets.ModelViewSet):
+    queryset = Proveedor.objects.all()
+    serializer_class = ProveedorSerializer
+    lookup_field = 'id_provd'
+    authentication_classes = [JWTAuthentication]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        queryset = Proveedor.objects.all()
+        # Aquí podrías agregar filtros si es necesario
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        try:
+            logger.info(f"Creando proveedor con datos: {request.data}")
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            logger.error(f"Error al crear proveedor: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error al actualizar proveedor: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            self.perform_destroy(instance)
+            return Response(
+                {'mensaje': f'Proveedor {instance.id_provd} eliminado exitosamente'},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            logger.error(f"Error al eliminar proveedor: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='crear-o-actualizar')
+    def crear_o_actualizar(self, request):
+        """
+        Crea un proveedor si no existe, o lo actualiza si ya existe pero no tiene pedidos
+        """
+        try:
+            logger.info(f"🔍 DEBUG - Datos recibidos en crear_o_actualizar: {request.data}")
+            rut_empresa = request.data.get('rut_empresa')
+            if not rut_empresa:
+                logger.error("❌ ERROR - RUT de empresa es requerido")
+                return Response({'error': 'RUT de empresa es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            logger.info(f"🔍 DEBUG - Buscando proveedor con RUT: {rut_empresa}")
+            
+            # Buscar si ya existe el proveedor
+            try:
+                proveedor = Proveedor.objects.get(rut_empresa=rut_empresa)
+                logger.info(f"🔍 DEBUG - Proveedor encontrado: {proveedor.nombres_provd} (ID: {proveedor.id_provd})")
+                
+                # Verificar si el proveedor tiene pedidos asociados
+                tiene_pedidos = Pedidos.objects.filter(proveedor_fk=proveedor).exists()
+                logger.info(f"🔍 DEBUG - Proveedor tiene pedidos: {tiene_pedidos}")
+                
+                if tiene_pedidos:
+                    # Si tiene pedidos, no permitir actualizar para preservar el historial
+                    logger.info(f"🔍 DEBUG - No se puede actualizar proveedor con pedidos existentes")
+                    return Response({
+                        'error': 'No se puede actualizar este proveedor porque ya tiene pedidos asociados. Para cambios, cree un nuevo proveedor con un RUT diferente.',
+                        'proveedor_existente': {
+                            'id': proveedor.id_provd,
+                            'nombre_empresa': proveedor.nombres_provd,
+                            'rut_empresa': proveedor.rut_empresa,
+                            'email': proveedor.correo,
+                            'direccion': proveedor.direccion_provd
+                        }
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                else:
+                    # Si no tiene pedidos, permitir actualizar
+                    logger.info(f"🔍 DEBUG - Actualizando proveedor sin pedidos")
+                    serializer = self.get_serializer(proveedor, data=request.data, partial=True)
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save()
+                    logger.info(f"✅ Proveedor actualizado exitosamente")
+                    return Response({
+                        'mensaje': 'Proveedor actualizado exitosamente',
+                        'proveedor': serializer.data
+                    }, status=status.HTTP_200_OK)
+                    
+            except Proveedor.DoesNotExist:
+                # Crear nuevo proveedor
+                logger.info(f"🔍 DEBUG - Creando nuevo proveedor")
+                serializer = self.get_serializer(data=request.data)
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
+                logger.info(f"✅ Nuevo proveedor creado exitosamente")
+                return Response({
+                    'mensaje': 'Proveedor creado exitosamente',
+                    'proveedor': serializer.data
+                }, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            logger.error(f"❌ Error al crear o actualizar proveedor: {str(e)}")
+            logger.error(f"❌ Tipo de error: {type(e).__name__}")
+            import traceback
+            logger.error(f"❌ Traceback completo: {traceback.format_exc()}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'], url_path='historial-ingresos')
+    def historial_ingresos(self, request, id_provd=None):
+        """
+        Obtiene el historial de ingresos de un proveedor específico
+        """
+        try:
+            # Buscar el proveedor
+            proveedor = Proveedor.objects.get(id_provd=id_provd)
+            
+            # Buscar pedidos asociados a este proveedor
+            pedidos = Pedidos.objects.filter(proveedor_fk=proveedor).order_by('-fecha_entrega')
+            
+            historiales_data = []
+            for pedido in pedidos:
+                # Obtener detalles del pedido
+                detalles = DetallePedido.objects.filter(pedidos_fk=pedido)
+                
+                # Agrupar productos por pedido
+                productos_pedido = []
+                for detalle in detalles:
+                    productos_pedido.append({
+                        'nombre': detalle.productos_pedido_fk.nombre_prodc,
+                        'cantidad': float(detalle.cantidad),
+                        'marca': detalle.productos_pedido_fk.marca_fk.nombre_mprod if detalle.productos_pedido_fk.marca_fk else '',
+                        'categoria': detalle.productos_pedido_fk.categoria_fk.nombre if detalle.productos_pedido_fk.categoria_fk else ''
+                    })
+                
+                # Extraer información del pedido (REM, guía, etc. desde la descripción)
+                descripcion = pedido.descripcion
+                num_rem = ''
+                num_guia_despacho = ''
+                
+                # Intentar extraer REM y guía de la descripción usando regex más robusto
+                # Buscar patrones como "REM: REM-202506-0001" o "REM: 12345"
+                rem_match = re.search(r'REM:\s*([A-Za-z0-9\-]+)', descripcion, re.IGNORECASE)
+                if rem_match:
+                    num_rem = rem_match.group(1).strip()
+                
+                # Buscar patrones como "Guía: GD-2025-0087" o "Guía: 12345"
+                guia_match = re.search(r'Guía:\s*([A-Za-z0-9\-]+)', descripcion, re.IGNORECASE)
+                if guia_match:
+                    num_guia_despacho = guia_match.group(1).strip()
+                
+                historiales_data.append({
+                    'id': pedido.id_p,
+                    'fecha': pedido.fecha_entrega.strftime('%Y-%m-%d'),
+                    'num_rem': num_rem,
+                    'num_guia_despacho': num_guia_despacho,
+                    'archivo_guia': f'ActaRecepcion_{pedido.id_p}.pdf',
+                    'observaciones': descripcion,
+                    'productos': productos_pedido,
+                    'pedido_id': pedido.id_p
+                })
+            
+            return Response({
+                'proveedor_id': id_provd,
+                'historiales': historiales_data
+            }, status=status.HTTP_200_OK)
+            
+        except Proveedor.DoesNotExist:
+            return Response({'error': 'Proveedor no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error al obtener historial de ingresos: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 MARCAS = [
     'Stanley', 'Bosch', 'Makita', 'Dewalt', 'Black+Decker', 'Einhell', 'Truper', 'Irwin', 'Hilti', '3M'
 ]
@@ -1018,62 +1457,136 @@ class ExtraerProductosPDF(APIView):
         archivo = request.FILES.get('archivo')
         if not archivo:
             return Response({'error': 'No se envió archivo'}, status=400)
+        
         productos = []
         datos = {
             'proveedor': '',
             'rut': '',
             'direccion': '',
             'fecha': '',
-            'num_guia': ''
+            'num_guia': '',
+            'num_rem': '',
+            'observaciones': '',
+            'contacto': '',
+            'email': '',
+            'telefono': ''
         }
-        with pdfplumber.open(archivo) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text() or ''
-                print('TEXTO EXTRAÍDO:', repr(text))  # Debug
-                for i, line in enumerate(text.split('\n')):
-                    print(f"Línea {i}: {repr(line)}")
-                    if line.strip().startswith('Proveedor:'):
-                        datos['proveedor'] = line.split(':', 1)[1].strip()
-                    if line.strip().startswith('RUT:'):
-                        datos['rut'] = line.split(':', 1)[1].strip()
-                    if line.strip().startswith('Dirección:'):
-                        datos['direccion'] = line.split(':', 1)[1].strip()
-                    if line.strip().startswith('Fecha de emisión:'):
-                        datos['fecha'] = line.split(':', 1)[1].strip()
-                    if line.strip().startswith('Guía Nº:'):
-                        datos['num_guia'] = line.split(':', 1)[1].strip()
-                # Procesar productos como antes...
-                tables = page.extract_tables()
-                for table in tables:
-                    for i, row in enumerate(table):
-                        if i == 0:
-                            continue  # Saltar encabezado
-                        if not row or all(cell is None or cell.strip() == '' for cell in row):
-                            continue
-                        nombre = row[0] or ''
-                        codigo = row[1] or ''
-                        try:
-                            cantidad = int(row[2]) if row[2] and row[2].isdigit() else 1
-                        except Exception:
-                            cantidad = 1
-                        # Inferir marca y categoría como antes...
-                        marca = ''
-                        for m in MARCAS:
-                            if m.lower() in nombre.lower():
-                                marca = m
-                                break
-                        categoria = 'General'
-                        for cat, palabras in CATEGORIAS.items():
-                            if any(palabra in nombre.lower() for palabra in palabras):
-                                categoria = cat
-                                break
-                        if nombre and cantidad > 0:
-                            productos.append({
-                                'nombre': nombre,
-                                'codigo': codigo,
-                                'cantidad': cantidad,
-                                'marca': marca,
-                                'categoria': categoria
-                            })
-        print('DATOS ENVIADOS:', datos)
-        return Response({'productos': productos, 'datos': datos})
+        
+        try:
+            with pdfplumber.open(archivo) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text() or ''
+                    print('TEXTO EXTRAÍDO:', repr(text))  # Debug
+                    
+                    # Procesar línea por línea para extraer datos
+                    for i, line in enumerate(text.split('\n')):
+                        line = line.strip()
+                        print(f"Línea {i}: {repr(line)}")
+                        
+                        # Patrones más flexibles para extraer información
+                        if any(keyword in line.lower() for keyword in ['proveedor:', 'empresa:', 'razón social:', 'nombre:']):
+                            if ':' in line:
+                                datos['proveedor'] = line.split(':', 1)[1].strip()
+                        
+                        if any(keyword in line.lower() for keyword in ['rut:', 'r.u.t:', 'identificación:', 'cédula:']):
+                            if ':' in line:
+                                rut = line.split(':', 1)[1].strip()
+                                # Limpiar formato del RUT
+                                rut = re.sub(r'[^\d\-kK]', '', rut)
+                                datos['rut'] = rut
+                        
+                        if any(keyword in line.lower() for keyword in ['dirección:', 'direccion:', 'domicilio:', 'address:']):
+                            if ':' in line:
+                                datos['direccion'] = line.split(':', 1)[1].strip()
+                        
+                        if any(keyword in line.lower() for keyword in ['fecha:', 'fecha de emisión:', 'fecha emisión:', 'date:']):
+                            if ':' in line:
+                                fecha = line.split(':', 1)[1].strip()
+                                # Limpiar y normalizar fecha
+                                fecha = re.sub(r'[^\d\/\-]', '', fecha)
+                                datos['fecha'] = fecha
+                        
+                        if any(keyword in line.lower() for keyword in ['guía:', 'guia:', 'número de guía:', 'numero de guia:', 'guía nº:', 'guia nº:']):
+                            if ':' in line:
+                                guia = line.split(':', 1)[1].strip()
+                                datos['num_guia'] = guia
+                        
+                        if any(keyword in line.lower() for keyword in ['rem:', 'número rem:', 'numero rem:', 'rem nº:', 'rem n°:']):
+                            if ':' in line:
+                                rem = line.split(':', 1)[1].strip()
+                                datos['num_rem'] = rem
+                        
+                        if any(keyword in line.lower() for keyword in ['teléfono:', 'telefono:', 'fono:', 'phone:']):
+                            if ':' in line:
+                                datos['telefono'] = line.split(':', 1)[1].strip()
+                        
+                        if any(keyword in line.lower() for keyword in ['email:', 'correo:', 'e-mail:']):
+                            if ':' in line:
+                                datos['email'] = line.split(':', 1)[1].strip()
+                        
+                        if any(keyword in line.lower() for keyword in ['contacto:', 'representante:', 'atencion:']):
+                            if ':' in line:
+                                datos['contacto'] = line.split(':', 1)[1].strip()
+                        
+                        if any(keyword in line.lower() for keyword in ['observaciones:', 'observación:', 'notas:', 'comentarios:']):
+                            if ':' in line:
+                                datos['observaciones'] = line.split(':', 1)[1].strip()
+                    
+                    # Procesar tablas para productos
+                    tables = page.extract_tables()
+                    for table in tables:
+                        for i, row in enumerate(table):
+                            if i == 0:
+                                continue  # Saltar encabezado
+                            if not row or all(cell is None or cell.strip() == '' for cell in row):
+                                continue
+                            
+                            nombre = row[0] or ''
+                            codigo = row[1] or ''
+                            try:
+                                cantidad = int(row[2]) if row[2] and str(row[2]).replace('.', '').isdigit() else 1
+                            except Exception:
+                                cantidad = 1
+                            
+                            # Inferir marca y categoría
+                            marca = ''
+                            for m in MARCAS:
+                                if m.lower() in nombre.lower():
+                                    marca = m
+                                    break
+                            
+                            categoria = 'General'
+                            for cat, palabras in CATEGORIAS.items():
+                                if any(palabra in nombre.lower() for palabra in palabras):
+                                    categoria = cat
+                                    break
+                            
+                            if nombre and cantidad > 0:
+                                productos.append({
+                                    'nombre': nombre,
+                                    'codigo': codigo,
+                                    'cantidad': cantidad,
+                                    'marca': marca,
+                                    'categoria': categoria
+                                })
+            
+            print('DATOS EXTRAÍDOS:', datos)
+            print('PRODUCTOS EXTRAÍDOS:', len(productos))
+            
+            return Response({
+                'productos': productos, 
+                'datos': datos,
+                'resumen': {
+                    'total_productos': len(productos),
+                    'campos_extraidos': {k: v for k, v in datos.items() if v},
+                    'campos_vacios': {k: v for k, v in datos.items() if not v}
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Error al procesar PDF: {str(e)}")
+            return Response({
+                'error': f'Error al procesar el PDF: {str(e)}',
+                'productos': [],
+                'datos': datos
+            }, status=500)

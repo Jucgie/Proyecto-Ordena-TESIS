@@ -149,6 +149,31 @@ export const pedidosService = {
     confirmarRecepcion: async (id: string) => {
         const response = await api.post(`/pedidos/${id}/confirmar-recepcion/`);
         return response.data;
+    },
+
+    // Crear ingreso de bodega
+    crearIngresoBodega: async (data: {
+        fecha: string;
+        num_rem?: string;
+        num_guia_despacho?: string;
+        observaciones?: string;
+        productos: Array<{
+            nombre: string;
+            cantidad: number;
+            marca: string;
+            categoria: string;
+        }>;
+        proveedor: {
+            nombre: string;
+            rut: string;
+            contacto?: string;
+            telefono?: string;
+            email?: string;
+        };
+        bodega_id: string;
+    }) => {
+        const response = await api.post('/pedidos/crear-ingreso-bodega/', data);
+        return response.data;
     }
 };
 
@@ -185,7 +210,7 @@ export const personalEntregaService = {
 };
 
 // Extracción de productos desde PDF
-export const extraerProductosDesdePDFBackend = async (archivo: File): Promise<any[]> => {
+export const extraerProductosDesdePDFBackend = async (archivo: File): Promise<any> => {
     const formData = new FormData();
     formData.append('archivo', archivo);
     const response = await api.post('/extraer-productos-pdf/', formData, {
@@ -193,7 +218,51 @@ export const extraerProductosDesdePDFBackend = async (archivo: File): Promise<an
             'Content-Type': 'multipart/form-data',
         },
     });
-    return response.data.productos;
+    return response.data; // Devolver toda la respuesta, no solo productos
+};
+
+// Proveedores
+export const proveedoresService = {
+    // Obtener todos los proveedores
+    getProveedores: async () => {
+        const response = await api.get('/proveedores/');
+        return response.data;
+    },
+
+    // Obtener proveedor por ID
+    getProveedor: async (id: string) => {
+        const response = await api.get(`/proveedores/${id}/`);
+        return response.data;
+    },
+
+    // Crear proveedor
+    createProveedor: async (proveedorData: any) => {
+        const response = await api.post('/proveedores/', proveedorData);
+        return response.data;
+    },
+
+    // Actualizar proveedor
+    updateProveedor: async (id: string, data: any) => {
+        const response = await api.patch(`/proveedores/${id}/`, data);
+        return response.data;
+    },
+
+    // Eliminar proveedor
+    deleteProveedor: async (id: string) => {
+        await api.delete(`/proveedores/${id}/`);
+    },
+
+    // Crear o actualizar proveedor (usando el endpoint especial)
+    crearOActualizar: async (proveedorData: any) => {
+        const response = await api.post('/proveedores/crear-o-actualizar/', proveedorData);
+        return response.data;
+    },
+
+    // Obtener historial de ingresos de un proveedor
+    getHistorialIngresos: async (proveedorId: string) => {
+        const response = await api.get(`/proveedores/${proveedorId}/historial-ingresos/`);
+        return response.data;
+    }
 };
 
 export default api;

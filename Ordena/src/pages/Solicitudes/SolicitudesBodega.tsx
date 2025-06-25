@@ -32,7 +32,8 @@ export default function SolicitudesBodega() {
     const [modalConfirmarEliminacion, setModalConfirmarEliminacion] = useState(false);
     const [solicitudAEliminar, setSolicitudAEliminar] = useState<any>(null);
     const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<any>(null);
-
+    const [loading, setLoading] = useState(false);
+    
     // Estado para checks
     const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
     // Estado local para cambios antes de confirmar
@@ -50,7 +51,9 @@ export default function SolicitudesBodega() {
         console.log('DEBUG - SolicitudesBodega: usuario?.bodega =', usuario?.bodega);
         if (usuario?.bodega) {
             console.log('DEBUG - SolicitudesBodega: Cargando solicitudes para bodega_id =', usuario.bodega.toString());
-            fetchSolicitudes({ bodega_id: usuario.bodega.toString() });
+            setLoading(true);
+            fetchSolicitudes({ bodega_id: usuario.bodega.toString() })
+                .finally(() => setLoading(false));
         }
     }, [usuario?.bodega, fetchSolicitudes]);
 
@@ -288,7 +291,13 @@ export default function SolicitudesBodega() {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {solicitudesFiltradas.length === 0 ? (
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={8} align="center" style={{ color: "#FFD700", fontWeight: 700 }}>
+                                        Cargando solicitudes...
+                                    </TableCell>
+                                </TableRow>
+                            ) : solicitudesFiltradas.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={8} align="center" style={{ color: "#8A8A8A" }}>
                                         No hay solicitudes para mostrar.
