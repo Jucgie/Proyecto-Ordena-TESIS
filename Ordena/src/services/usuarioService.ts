@@ -1,5 +1,5 @@
 import api from './api';
-import type { CreateUsuarioData } from '../store/useUsuarioStore';
+import type { CreateUsuarioData, Usuario } from '../store/useUsuarioStore';
 
 export const usuarioService = {
   getUsuarios: async () => {
@@ -10,12 +10,12 @@ export const usuarioService = {
     const response = await api.get(`/usuarios/${id}/`);
     return response.data;
   },
-  createUsuario: async (usuario: any) => {
+  createUsuario: async (usuario: CreateUsuarioData) => {
     const response = await api.post('/usuarios/', usuario);
     return response.data;
   },
-  updateUsuario: async (id: string, usuario: any) => {
-    const response = await api.put(`/usuarios/${id}/`, usuario);
+  updateUsuario: async (id: string, usuario: Partial<Usuario>) => {
+    const response = await api.patch(`/usuarios/${id}/`, usuario);
     return response.data;
   },
   deleteUsuario: async (id: string) => {

@@ -34,6 +34,7 @@ export default function Empleados() {
     const [errores, setErrores] = useState<Partial<Record<keyof CreateUsuarioData, string>>>({});
 
     useEffect(() => {
+        
         // Llama a la función para traer los usuarios de la API 
         fetchUsuarios();
     }, [fetchUsuarios]);
@@ -88,8 +89,23 @@ export default function Empleados() {
 
     // Solo empleados de la sucursal del supervisor
     const empleadosSucursal = usuarios.filter(
-        (emp: Usuario) => emp.sucursal_fk === usuario.sucursal && emp.is_active
+        (emp: Usuario) => emp.sucursal_fk == usuario.sucursal
     );
+
+    const empleadosActivosSucursal = empleadosSucursal.filter(
+        (emp: Usuario) => emp.is_active
+    );
+
+
+        // --- INICIO DEPURACIÓN ---
+    // Para ayudarte a encontrar el problema, hemos añadido estos logs.
+    // Abre la consola de tu navegador (F12) para verlos.
+    console.log("--- DEPURANDO VISTA DE EMPLEADOS ---");
+    console.log("Usuario Supervisor:", usuario);
+    console.log("Todos los usuarios recibidos de la API:", usuarios);
+    console.log(`Empleados encontrados en la sucursal (${usuario.sucursal}):`, empleadosSucursal);
+    console.log("Empleados activos (los que se deberían mostrar en la tabla):", empleadosActivosSucursal);
+    console.log("--- FIN DEPURACIÓN ---")
 
     //
 
@@ -133,11 +149,19 @@ export default function Empleados() {
             removeUsuario(id);
         }
     }; */
-    const handleDisable = (id: string) => {
+    const handleDisable = async (id: string) => {
         if (window.confirm("¿Seguro que deseas deshabilitar este empleado?")) {
-            // Llamamos a updateUsuario para cambiar el estado a inactivo
-            // El backend ya sabe cómo manejar 'is_active'
-            updateUsuario(id, { is_active: false });
+            try {
+                // 1. Llamamos a updateUsuario y esperamos a que termine la actualización en el backend.
+                await updateUsuario(id, { is_active: false });
+
+                // 2. Una vez confirmado el cambio, volvemos a pedir la lista de usuarios.
+                // Esto refresca el estado local y hace que el usuario desaparezca de la tabla de activos.
+                await fetchUsuarios();
+            } catch (error) {
+                console.error("Error al deshabilitar el usuario:", error);
+                // Opcional: podrías mostrar una notificación de error al usuario aquí.
+            }
         }
     };
     return (
@@ -177,7 +201,9 @@ export default function Empleados() {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {empleadosSucursal.map((emp: Usuario) => (
+                        {empleadosActivosSucursal.length > 0 ? (
+
+                        empleadosActivosSucursal.map((emp: Usuario) => (
                             <TableRow key={emp.id_us}>
                                 <TableCell style={{ color: "#fff" }}>{emp.nombre}</TableCell>
                                 <TableCell style={{ color: "#fff" }}>{emp.correo}</TableCell>
@@ -206,7 +232,15 @@ export default function Empleados() {
 
                                 </TableCell>
                             </TableRow>
-                        ))}
+                        ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={6} style={{ textAlign: 'center', color: '#ccc', padding: '20px' }}>
+                                    No se encontraron empleados activos para esta sucursal.
+                                    
+                                </TableCell>
+                            </TableRow>   
+                        )}                 
                     </TableBody>
                 </Table>
             </TableContainer>

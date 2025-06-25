@@ -342,8 +342,6 @@ class UsuarioSerializer(serializers.ModelSerializer):
     # Campo para leer el nombre del rol, pero no para escribirlo
     rol_nombre = serializers.CharField(source='rol_fk.nombre_rol', read_only=True)
 
-    # Campo para leer el nombre del rol, pero no para escribirlo
-    rol_nombre = serializers.CharField(source='rol_fk.nombre_rol', read_only=True)
 
     class Meta:
         model = Usuario

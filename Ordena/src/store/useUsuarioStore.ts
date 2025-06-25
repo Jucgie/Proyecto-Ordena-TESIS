@@ -34,7 +34,7 @@ interface UsuarioState {
   error: string | null;
   fetchUsuarios: () => Promise<void>;
   addUsuario: (usuarioData: CreateUsuarioData) => Promise<void>;
-  updateUsuario: (id: string, cambios: Partial<CreateUsuarioData>) => Promise<void>;
+  updateUsuario: (id: string, cambios: Partial<Usuario>) => Promise<void>;
   removeUsuario: (id: string) => Promise<void>;
 }
 
@@ -76,7 +76,7 @@ export const useUsuariosStore = create<UsuarioState>()(
       //Para actualizar un usuario
       updateUsuario: async (id, cambios) => {
         console.log(`Actualizando usuario ${id} con:`, cambios);
-                set({ loading: true, error: null });
+        set({ loading: true, error: null });
         try {
           const usuarioActualizado = await usuarioService.updateUsuario(id, cambios);
           set((state) => ({
