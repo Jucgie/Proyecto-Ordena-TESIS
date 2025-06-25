@@ -433,6 +433,29 @@ class CategoriaViewSet(viewsets.ModelViewSet):
                 {'error': f'Error al eliminar la categoría: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+class UsuarioViewSet(viewsets.ModelViewSet):
+    queryset = Usuario.objects.all()
+    serializer_class = UsuarioSerializer
+    authentication_classes = [JWTAuthentication]
+
+    def get_permissions(self):
+        return [IsAuthenticated()]
+
+    @action(detail=False, methods=['get'], url_path='transportistas-bodega/(?P<bodega_id>[^/.]+)')
+    def transportistas_bodega(self, request, bodega_id=None):
+        """
+        Devuelve una lista de usuarios que tienen el rol de 'transportista'
+        y están asociados a una bodega específica.
+        """
+        try:
+            transportistas = Usuario.objects.filter(
+                rol_fk__nombre_rol='transportista',
+                bodeg_fk__id_bdg=bodega_id
+            )
+            serializer = self.get_serializer(transportistas, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class SolicitudesViewSet(viewsets.ModelViewSet):
     queryset = Solicitudes.objects.all()

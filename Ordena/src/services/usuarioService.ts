@@ -1,4 +1,5 @@
 import api from './api';
+import type { CreateUsuarioData } from '../store/useUsuarioStore';
 
 export const usuarioService = {
   getUsuarios: async () => {

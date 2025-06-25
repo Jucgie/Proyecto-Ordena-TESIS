@@ -391,9 +391,8 @@ const Container = styled.div`
     }
   }
  `
-// Definición de la animación de pulsación
 
-
+//Estilos para loading
  const Loader = styled.div`
     display:flex;
     position:fixed;
