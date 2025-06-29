@@ -1,6 +1,10 @@
 //Obtención de datos de la api por medio del archivo store
 import { useHistorialStore } from "../../store/useHistorialStore";
 
+import { useBodegaStore } from "../../store/useBodegaStore";
+
+import { useAuthStore } from "../../store/useAuthStore";
+
 import { useMemo } from "react";
 
 import styled from "styled-components";
@@ -64,17 +68,26 @@ export function Grafics_b() {
   const pedidos = useHistorialStore(state => state.pedidos);
 
 
+  const {usuario} = useAuthStore();
+
 
   //Definiciónde Memo para guardar datos previos, evitanto cargar constantemente si no hay cambios 
   const datagrafica = useMemo(() => {
+    let pedidosMostrados = pedidos;
+
+    if (usuario?.tipo === 'bodega' && usuario.bodega) {
+      pedidosMostrados = pedidos.filter(p => String(p.bodega_fk)===String(usuario.bodega));
+    } else if (usuario?.tipo === 'sucursal' && usuario.sucursal) {
+      pedidosMostrados =pedidos.filter(p => String(p.sucursal_fk)===String(usuario.sucursal));
+    }
 
   //Array para contar los pedidos, empezando con un minimo de 0
   const pedidosPorDia = [0, 0, 0, 0, 0, 0, 0];
 
   //Se obtiene la cantidad de pedidos según el día.
-  pedidos.forEach(p => {
-    if (p.solicitud_fk?.fecha_creacion){
-      const fecha = new Date(p.solicitud_fk.fecha_creacion);
+  pedidosMostrados.forEach(p => {
+    if (p.fecha_entrega){
+      const fecha = new Date(p.fecha_entrega);
 
       const dia = (fecha.getDay() + 6) % 7; // 
       pedidosPorDia[dia]++;
@@ -94,7 +107,7 @@ export function Grafics_b() {
       }
     ],
   };
-},[pedidos]);
+},[pedidos, usuario]);
 
   return (
     <Container>

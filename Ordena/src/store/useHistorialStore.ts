@@ -28,6 +28,13 @@ interface Solicitud {
   usuario_nombre: string;
 }
 
+interface Bodega {
+  id_bdg: number;
+  nombre_bdg: string;
+  direccion: string;
+  
+}
+
 interface Sucursal {
   id: number;
   nombre_sucursal: string;
@@ -54,7 +61,7 @@ export interface Pedidos{
     personal_entrega_fk?: PersonalEntrega;
     usuario_fk: number;
     solicitud_fk?: Solicitud;
-    bodega_fk?: number;
+    bodega_fk: Bodega;
     proveedor_fk?: number;
 
 }
@@ -112,6 +119,7 @@ export interface Productos {
   description: string;
   stock: number;
   stock_minimo:number;
+  bodega_fk:number;
   im: File | string | null;
 }
 
@@ -139,6 +147,9 @@ create<productStock>()(
                 set({loading:true,error:null});
                 try {
                     const data = await HistProductService.getProducts();
+                    if (data && data.length > 0) {
+                        console.log("DEBUG: Primer producto recibido de la API:", data[0]);
+                    }
                     set({productos:data,loading:false});
 
                 //seccion error

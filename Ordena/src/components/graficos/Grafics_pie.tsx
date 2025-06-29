@@ -9,6 +9,7 @@ import {useMemo } from 'react';
 //Obtención de datos de la api por medio del archivo store
 import { useBodegaStore } from '../../store/useBodegaStore';
 import { useHistorialStore } from "../../store/useHistorialStore";
+import { useAuthStore } from '../../store/useAuthStore';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -17,46 +18,59 @@ export function Grafics_Pie() {
 
   //Definición de constantes para obtener los datos 
   const pedidos = useHistorialStore(state=>state.pedidos);
-  const SolicitudesTrasnferidas = useBodegaStore(state=>state.solicitudes);
+  const solicitudesTransferidas = useBodegaStore(state=>state.solicitudesTransferidas);
+  const {usuario} = useAuthStore();
   
 
   //Definición de Memo para guardar datos previos, evitanto cargar constantemente si no hay cambios 
     const data = useMemo(() =>{
-      const TransferenciaCount=SolicitudesTrasnferidas.length;
-      const pedidosEnCamino = pedidos.filter(p => p.estado_pedido_fk === 1).length;
-      const pedidosCompletados = pedidos.filter(p => p.estado_pedido_fk === 2).length;
+      let pedidosMostrados = pedidos;
+
+
+      if (usuario?.tipo === 'bodega' && usuario.bodega) {
+        pedidosMostrados = pedidos.filter(p => String(p.bodega_fk)===String(usuario.bodega));
+
+      }else if (usuario?.tipo === 'sucursal' && usuario.sucursal) {
+        pedidosMostrados = pedidos.filter(p => String(p.sucursal_fk) === String(usuario.sucursal));
+      // Las sucursales no ven las solicitudes pendientes de despacho en la bodega
+    }
+
+
+      const pedidosEnCamino = pedidosMostrados.filter(p => p.estado_pedido_fk === 1).length;
+      const pedidosCompletados = pedidosMostrados.filter(p => p.estado_pedido_fk === 2).length;
+      const pedidosPendientes = pedidosMostrados.filter(p => p.estado_pedido_fk === 3).length;
       
         const counts=[
-          TransferenciaCount,
-          pedidosCompletados,
+          
+          pedidosPendientes,
           pedidosEnCamino,
+          pedidosCompletados,
           
         ]
 
         return {
-  labels: ['No Iniciado', 'En Camino', 'Terminado'],
+  labels: ['Pendiente','En Camino', 'Terminado'],
   datasets: [
     {
       label: 'Pedidos',
       data: counts,
       backgroundColor: [
-        'rgba(255, 99, 132, 0.5)',
-        'rgba(54, 163, 235, 0.5)',
-        'rgba(255, 206, 86, 0.5)',
-       // 'rgba(75, 192, 192, 0.5)',
+                  'rgba(255, 99, 132, 0.5)', // Morado para Aprobadas
+                'rgba(54, 162, 235, 0.5)',   // Azul para En Camino
+                'rgba(75, 192, 192, 0.5)',   // Verde para Completados
+ 
       ],
       borderColor: [
-        'rgba(255, 99, 132, 1)',
-        'rgba(54, 162, 235, 1)',
-        'rgba(255, 206, 86, 1)',
-    // const pedidosCompletados = pedidos.filter(p => p.estado_pedido_fk === 2).length;    'rgba(75, 192, 192, 1)',
+                'rgba(255, 99, 132, 1)',
+                'rgb(75, 192, 110)',
+                'rgba(54, 162, 235, 1)',
       ],
       borderWidth: 1,
     },
   ],
 };
 
-    }, [pedidos, SolicitudesTrasnferidas])
+}, [pedidos, solicitudesTransferidas,usuario]);
 
   return (
 
