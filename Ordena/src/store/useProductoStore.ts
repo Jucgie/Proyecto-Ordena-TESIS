@@ -10,6 +10,8 @@ export interface ProductInt {
     category: string;
     description: string;
     stock: number;
+    stock_minimo: number;
+    stock_maximo: number;
     im: File | string | null;
 }
 
@@ -24,6 +26,8 @@ const mapBackendToFrontend = (p: any): ProductInt => {
         category: p.categoria_nombre || p.categoria_fk,
         description: p.descripcion_prodc,
         stock: p.stock ?? 0,
+        stock_minimo: p.stock_minimo ?? 5,
+        stock_maximo: p.stock_maximo ?? 100,
         im: null, // La imagen se maneja localmente
     };
     console.log("🔍 DEBUG - mapBackendToFrontend - Producto mapeado:", mapeado);
@@ -36,7 +40,7 @@ interface InventariosState {
     categorias: { [ubicacionId: string]: { id: number; nombre: string }[] };
     addProducto: (ubicacionId: string, producto: ProductInt) => Promise<void>;
     updateProducto: (ubicacionId: string, producto: ProductInt) => Promise<void>;
-    deleteProductos: (ubicacionId: string, ids: string[]) => Promise<void>;
+    desactivarProductos: (ubicacionId: string, ids: string[]) => Promise<void>;
     addMarca: (ubicacionId: string, marca: string) => Promise<void>;
     deleteMarca: (ubicacionId: string, marcaId: number) => Promise<void>;
     addCategoria: (ubicacionId: string, categoria: string) => Promise<void>;
@@ -56,7 +60,7 @@ export const useInventariosStore = create<InventariosState>()(
             fetchProductos: async (ubicacionId: string) => {
                 console.log("🔍 DEBUG - Store - fetchProductos llamado con ubicacionId:", ubicacionId);
                 try {
-                    const productos = await productoService.getProductos(ubicacionId);
+                    const productos = await productoService.getProductosActivos(ubicacionId);
                     console.log("🔍 DEBUG - Store - Respuesta del backend:", productos);
                     // Usamos el helper para mapear
                     const productosMapeados = productos.map(mapBackendToFrontend);
@@ -142,12 +146,12 @@ export const useInventariosStore = create<InventariosState>()(
                 }
             },
 
-            deleteProductos: async (ubicacionId: string, ids: string[]) => {
+            desactivarProductos: async (ubicacionId: string, ids: string[]) => {
                 try {
                     if (ids.length > 0) {
-                        await Promise.all(ids.map(id => productoService.deleteProducto(id)));
+                        await Promise.all(ids.map(id => productoService.desactivarProducto(id)));
                     }
-                    // Una vez eliminados en el backend, los quitamos del estado local.
+                    // Una vez desactivados en el backend, los quitamos del estado local.
                     set(state => ({
                         inventarios: {
                             ...state.inventarios,
@@ -157,7 +161,7 @@ export const useInventariosStore = create<InventariosState>()(
                         },
                     }));
                 } catch (error) {
-                    console.error('Error deleting productos:', error);
+                    console.error('Error desactivando productos:', error);
                     // Si hay un error, refrescamos desde el servidor para garantizar consistencia.
                     await get().fetchProductos(ubicacionId);
                 }

@@ -24,10 +24,10 @@ interface ProductProps {
     products: ProductInt[];
     onAddProduct: (product: ProductInt) => void;
     onUpdateProduct: (product: ProductInt) => void;
-    onDeleteProduct: (code: string[]) => void;
+    onDesactivarProduct: (code: string[]) => void;
 }
 
-export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onDeleteProduct }: ProductProps) {
+export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onDesactivarProduct }: ProductProps) {
 
     const [state, setState] = useState(false);
     const [prod, setProd] = useState<ProductInt | null>(null);
@@ -91,7 +91,7 @@ export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onD
                                 titulo={<>
                                     <DeleteIcon
                                         sx={{ fontSize: 25, marginRight: 1 }}
-                                    />Eliminar
+                                    />Desactivar
                                 </>}
                                 background="#ff1b00"
                                 funcion={() => setDeleteMode(!deleteMode)} />
@@ -300,7 +300,7 @@ export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onD
                         }}
                 onClick={async () => {
                         const result = await Swal.fire({
-                            title: '¿Estás seguro de eliminar?',
+                            title: '¿Estás seguro de desactivar?',
                             text: "¡No podrás revertir esto!",
                             icon: 'warning',
                             showCancelButton: true,
@@ -310,14 +310,14 @@ export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onD
                             cancelButtonText: 'Cancelar'
                         })
                         if (result.isConfirmed) {
-                            onDeleteProduct([...selected]);
+                            onDesactivarProduct([...selected]);
                             setSelected([]);
                             setDeleteMode(false);
-                            Swal.fire('¡Eliminado!', 'Los productos han sido eliminados.', 'success');
+                            Swal.fire('¡Desactivado!', 'Los productos han sido desactivados.', 'success');
                         }
                     }}
                     >
-                        Eliminar seleccionados
+                        Desactivar seleccionados
                     </button>
                 )}
             </section>

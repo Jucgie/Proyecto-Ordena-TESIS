@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Table, TableHead, TableRow, TableCell, TableBody, IconButton, Box, Typography, FormControl, InputLabel, MenuItem, Tooltip, Chip, Snackbar, Alert, TableContainer, Paper, CircularProgress, LinearProgress
 } from "@mui/material";
@@ -120,6 +120,24 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
 
     const mostrarFeedback = (message: string, severity: 'success' | 'error' = 'success') => {};
 
+    // Función para validar y corregir categorías inválidas
+    const validarCategorias = (productos: Producto[]) => {
+        return productos.map(producto => ({
+            ...producto,
+            categoria: categorias.includes(producto.categoria) ? producto.categoria : categorias[0] || ''
+        }));
+    };
+
+    // Validar productos cuando cambian las categorías
+    useEffect(() => {
+        if (categorias.length > 0 && productos.length > 0) {
+            const productosValidados = validarCategorias(productos);
+            if (JSON.stringify(productosValidados) !== JSON.stringify(productos)) {
+                setProductos(productosValidados);
+            }
+        }
+    }, [categorias]);
+
     const generarREMAutomatico = () => {
         const numeroREM = DocumentoGenerator.generarNumeroREM();
         setNumRem(numeroREM);
@@ -155,6 +173,7 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
     };
 
     const handleAddProducto = () => {
+        // Agregar producto al array local como antes
         setProductos([...productos, { nombre: '', cantidad: 1, marca: '', categoria: '' }]);
     };
 
@@ -326,8 +345,13 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
     };
 
     const handleSubmit = () => {
-        // Eliminar la llamada duplicada a addIngresoProveedor
-        // Esta función se ejecuta en el componente principal después de crear el ingreso en la BD
+        // Validar que todos los productos tengan los campos requeridos
+        const productosValidos = productos.filter(p => p.nombre.trim() && p.cantidad > 0);
+        
+        if (productosValidos.length === 0) {
+            mostrarFeedback('Debe agregar al menos un producto válido', 'error');
+            return;
+        }
 
         onSubmit({
             tipo,
@@ -348,7 +372,7 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
             archivoGuia,
             nombreArchivo,
             observacionesRecepcion,
-            productos,
+            productos: productosValidos,
         });
         
         // Limpiar formulario
@@ -373,31 +397,47 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
 
     return (
         <>
-            <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+            <Dialog
+                open={open}
+                onClose={onClose}
+                maxWidth="lg"
+                fullWidth
                 PaperProps={{
                     sx: {
-                        backgroundColor: "#1a1a1a",
+                        bgcolor: "#1a1a1a",
                         color: "#fff",
-                        borderRadius: 3,
-                        boxShadow: 8
+                        borderRadius: "12px",
+                        border: "1px solid #333"
                     }
                 }}
+                aria-labelledby="modal-title"
+                aria-describedby="modal-description"
+                disableEnforceFocus
+                disableAutoFocus
+                keepMounted={false}
             >
                 <DialogTitle sx={{
-                    background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                    bgcolor: "#1a1a1a",
                     color: "#FFD700",
-                    borderBottom: "2px solid #FFD700",
                     fontWeight: 700,
-                    fontSize: "1.35rem",
-                    letterSpacing: 0.5,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1
-                }}>
-                    {tipo === "ingreso" ? "🟡 Nuevo Ingreso" : "Nueva Salida"}
+                    fontSize: "24px",
+                    borderBottom: "1px solid #333",
+                    p: 3
+                }}
+                id="modal-title"
+                >
+                    {tipo === "ingreso" ? "Registrar Ingreso de Productos" : "Registrar Salida de Productos"}
                 </DialogTitle>
                 
-                <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
+                <DialogContent sx={{ 
+                    bgcolor: "#1a1a1a", 
+                    p: 3,
+                    "& .MuiDialogContent-root": {
+                        bgcolor: "#1a1a1a"
+                    }
+                }}
+                id="modal-description"
+                >
                     <form>
                         {/* SECCIÓN 1: SUBIDA DE PDF Y EXTRACCIÓN AUTOMÁTICA */}
                         <Box sx={{ mb: 3, p: { xs: 1, sm: 2 }, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>

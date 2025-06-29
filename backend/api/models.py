@@ -145,6 +145,7 @@ class Productos(models.Model):
     descripcion_prodc = models.CharField(max_length=255, null=True)
     codigo_interno = models.CharField(max_length=255)
     fecha_creacion = models.DateTimeField()
+    activo = models.BooleanField(default=True)
     marca_fk = models.ForeignKey(Marca, on_delete=models.CASCADE, db_column='marca_fk')
     categoria_fk = models.ForeignKey(Categoria, on_delete=models.CASCADE, db_column='categoria_fk')
     bodega_fk = models.ForeignKey(BodegaCentral, on_delete=models.CASCADE, null=True, db_column='bodega_fk')
@@ -271,8 +272,9 @@ class Stock(models.Model):
     id_stock = models.BigAutoField(primary_key=True)
     stock = models.DecimalField(max_digits=10, decimal_places=2)
     stock_minimo = models.DecimalField(max_digits=10, decimal_places=2, null=True)
+    stock_maximo = models.DecimalField(max_digits=10, decimal_places=2, null=True)
     bodega_fk = models.IntegerField(null=True, db_column='bodega_fk')
-    productos_fk = models.ForeignKey('Productos', on_delete=models.CASCADE, db_column='productos_fk')
+    productos_fk = models.ForeignKey('Productos', on_delete=models.RESTRICT, db_column='productos_fk')
     sucursal_fk = models.IntegerField(null=True, db_column='sucursal_fk')
     proveedor_fk = models.IntegerField(null=True, db_column='proveedor_fk')
 

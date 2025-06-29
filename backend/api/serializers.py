@@ -411,6 +411,7 @@ class ProductoSerializer(serializers.ModelSerializer):
     stock = serializers.SerializerMethodField()
     stock_write = serializers.IntegerField(write_only=True, required=False, source='stock')
     stock_minimo = serializers.SerializerMethodField()
+    stock_minimo_write = serializers.IntegerField(write_only=True, required=False, source='stock_minimo')
 
     def get_stock(self, obj):
         """Obtiene el stock real desde la tabla Stock"""
@@ -489,12 +490,13 @@ class ProductoSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'id_prodc', 'nombre_prodc', 'descripcion_prodc', 'codigo_interno',
             'fecha_creacion', 'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre',
-            'bodega_fk', 'bodega_nombre', 'sucursal_fk', 'sucursal_nombre', 'stock', 'stock_minimo', 'stock_write'
+            'bodega_fk', 'bodega_nombre', 'sucursal_fk', 'sucursal_nombre', 'stock', 'stock_minimo', 'stock_write', 'stock_minimo_write'
         ]
         read_only_fields = ['id_prodc', 'fecha_creacion']
 
     def create(self, validated_data):
         stock_data = validated_data.pop('stock', 0)
+        stock_minimo_data = validated_data.pop('stock_minimo', 5)
         validated_data['fecha_creacion'] = timezone.now()
         producto = Productos.objects.create(**validated_data)
         
@@ -502,7 +504,7 @@ class ProductoSerializer(serializers.ModelSerializer):
         Stock.objects.create(
             productos_fk=producto,
             stock=stock_data,
-            stock_minimo=5, # Valor por defecto
+            stock_minimo=stock_minimo_data,
             bodega_fk=producto.bodega_fk.id_bdg if producto.bodega_fk else None,
             sucursal_fk=producto.sucursal_fk.id if producto.sucursal_fk else None,
             proveedor_fk=None
@@ -511,12 +513,13 @@ class ProductoSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         stock_data = validated_data.pop('stock', None)
+        stock_minimo_data = validated_data.pop('stock_minimo', None)
 
         # Actualiza los campos del producto principal
         instance = super().update(instance, validated_data)
 
-        # Si se envió un nuevo stock, actualiza la tabla Stock
-        if stock_data is not None:
+        # Si se envió un nuevo stock o stock mínimo, actualiza la tabla Stock
+        if stock_data is not None or stock_minimo_data is not None:
             # Determinar si es bodega o sucursal
             if instance.bodega_fk:
                 stock_obj, created = Stock.objects.get_or_create(
@@ -543,7 +546,10 @@ class ProductoSerializer(serializers.ModelSerializer):
             else:
                 return instance
             
-            stock_obj.stock = stock_data
+            if stock_data is not None:
+                stock_obj.stock = stock_data
+            if stock_minimo_data is not None:
+                stock_obj.stock_minimo = stock_minimo_data
             stock_obj.save()
 
         return instance

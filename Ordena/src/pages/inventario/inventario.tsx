@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import Layout from "../../components/layout/layout";
 import {
     Paper, Typography, Box, Button, TextField, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
-    Card, CardContent, CardMedia, CardActionArea, Checkbox, FormControl, InputLabel, Select, IconButton
+    Card, CardContent, CardMedia, CardActionArea, Checkbox, FormControl, InputLabel, Select, IconButton,
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip
 } from "@mui/material";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -10,6 +11,10 @@ import EditIcon from '@mui/icons-material/Edit';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import SearchIcon from '@mui/icons-material/Search';
 import WarningTwoToneIcon from '@mui/icons-material/WarningTwoTone';
+import ViewModuleIcon from '@mui/icons-material/ViewModule';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import QrCodeIcon from '@mui/icons-material/QrCode';
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import Tooltip from '@mui/material/Tooltip';
 import sin_imagen from "../../assets/sin_imagen.png";
 import { useInventariosStore } from "../../store/useProductoStore";
@@ -36,9 +41,51 @@ export interface ProductInt {
     category: string;
     description: string;
     stock: number;
+    stock_minimo: number;
+    stock_maximo: number;
     im: File | string | null;
 }
 
+// Componente para indicadores de stock inteligentes
+const StockIndicator = ({ stock, stockMinimo = 5 }: { stock: number; stockMinimo?: number }) => {
+    const getStockColor = (stock: number, stockMinimo: number) => {
+        if (stock === 0) return "#F44336"; // Rojo - Sin stock
+        if (stock < stockMinimo) return "#FF9800";   // Naranja - Stock bajo
+        if (stock < stockMinimo * 2) return "#FFC107";  // Amarillo - Stock medio
+        return "#4CAF50";                  // Verde - Stock bueno
+    };
+
+    const getStockText = (stock: number, stockMinimo: number) => {
+        if (stock === 0) return "Sin stock";
+        if (stock < stockMinimo) return "Stock bajo";
+        if (stock < stockMinimo * 2) return "Stock medio";
+        return "Stock bueno";
+    };
+
+    return (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Box sx={{
+                width: 12,
+                height: 12,
+                borderRadius: "50%",
+                bgcolor: getStockColor(stock, stockMinimo),
+                animation: stock < stockMinimo ? "pulse 2s infinite" : "none",
+                "@keyframes pulse": {
+                    "0%": { opacity: 1 },
+                    "50%": { opacity: 0.5 },
+                    "100%": { opacity: 1 }
+                }
+            }} />
+            <Typography sx={{ 
+                color: getStockColor(stock, stockMinimo), 
+                fontWeight: stock < stockMinimo ? 700 : 400,
+                fontSize: "0.875rem"
+            }}>
+                {stock} {stock < stockMinimo && `(${getStockText(stock, stockMinimo)})`}
+            </Typography>
+        </Box>
+    );
+};
 
 export default function Inventario() {
     const usuario = useAuthStore(state => state.usuario);
@@ -85,8 +132,8 @@ export default function Inventario() {
         []
     );
 
-    const deleteProductos = useCallback(
-        (ubicacionId: string, codes: string[]) => useInventariosStore.getState().deleteProductos(ubicacionId, codes),
+    const desactivarProductos = useCallback(
+        (ubicacionId: string, codes: string[]) => useInventariosStore.getState().desactivarProductos(ubicacionId, codes),
         []
     );
 
@@ -140,14 +187,20 @@ export default function Inventario() {
     // Producto seleccionado para editar/ver
     const [productoActual, setProductoActual] = useState<ProductInt | null>(null);
 
+    // Modo de vista (cards o tabla)
+    const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
-    // Filtrado
-    const filteredProducts = productos.filter(product => {
+    // --- Ordenar productos por stock (mayor a menor) ---
+    const productosOrdenados = [...productos].sort((a, b) => b.stock - a.stock);
+    const filteredProducts = productosOrdenados.filter(product => {
         const matchProductName = product.name.toLowerCase().includes(search.toLowerCase());
         const matchCategoria = !filtros.categoria || product.category === filtros.categoria;
         const matchMarca = !filtros.marca || product.brand === filtros.marca;
         return matchProductName && matchCategoria && matchMarca;
     });
+
+    // --- Mejorar función de filtro para alertas ---
+    const [alertaFiltro, setAlertaFiltro] = useState<null | 'bajo' | 'alto'>(null);
 
     // Handlers CRUD
     const handleAddProduct = (p: ProductInt) => {
@@ -163,11 +216,11 @@ export default function Inventario() {
         setModalDetailOpen(false);
     };
 
-    const handleDeleteProducts = (codes: string[]) => {
-        const productosAEliminar = productos.filter(p => codes.includes(p.code));
-        const idsAEliminar = productosAEliminar.map(p => p.id_prodc).filter(Boolean);
-        if (idsAEliminar.length > 0) {
-            deleteProductos(ubicacionId, idsAEliminar.map(id => id!.toString()));
+    const handleDesactivarProductos = (codes: string[]) => {
+        const productosADesactivar = productos.filter(p => codes.includes(p.code));
+        const idsADesactivar = productosADesactivar.map(p => p.id_prodc).filter(Boolean);
+        if (idsADesactivar.length > 0) {
+            desactivarProductos(ubicacionId, idsADesactivar.map(id => id!.toString()));
         }
         setSelected([]);
         setDeleteMode(false);
@@ -190,6 +243,8 @@ export default function Inventario() {
             category: "",
             description: "",
             stock: 0,
+            stock_minimo: 5,
+            stock_maximo: 100,
             im: null,
         });
         const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -242,6 +297,11 @@ export default function Inventario() {
             if (!form.category.trim()) newErrors.category = "Campo obligatorio";
             if (!form.description.trim()) newErrors.description = "Campo obligatorio";
             if (form.stock < 0) newErrors.stock = "Stock no puede ser negativo";
+            if (form.stock_minimo < 0) newErrors.stock_minimo = "Stock mínimo no puede ser negativo";
+            if (form.stock_minimo > form.stock) newErrors.stock_minimo = "Stock mínimo no puede ser mayor al stock inicial";
+            if (form.stock_maximo < 0) newErrors.stock_maximo = "Stock máximo no puede ser negativo";
+            if (form.stock_maximo < form.stock) newErrors.stock_maximo = "Stock máximo no puede ser menor al stock inicial";
+            if (form.stock_maximo < form.stock_minimo) newErrors.stock_maximo = "Stock máximo no puede ser menor al stock mínimo";
             setErrors(newErrors);
             if (Object.keys(newErrors).length > 0) return;
 
@@ -446,29 +506,77 @@ export default function Inventario() {
                 </Box>
 
                 {/* Stock */}
-                <TextField
-                    label="Stock Inicial"
-                    name="stock"
-                    type="number"
-                    value={form.stock}
-                    onChange={handleChange}
-                    error={!!errors.stock}
-                    helperText={errors.stock}
-                    required
-                    fullWidth
-                    InputLabelProps={{ style: { color: "#E0E0E0" } }}
-                    inputProps={{ min: 0 }}
-                    onFocus={(e) => e.target.select()}
-                    sx={{
-                        '& .MuiOutlinedInput-root': {
-                            color: "#FFFFFF",
-                            '& fieldset': { borderColor: "#666666" },
-                            '&:hover fieldset': { borderColor: "#888888" },
-                            '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
-                        },
-                        '& .MuiFormHelperText-root': { color: "#ff6b6b" }
-                    }}
-                />
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 2 }}>
+                    <TextField
+                        label="Stock Inicial"
+                        name="stock"
+                        type="number"
+                        value={form.stock}
+                        onChange={handleChange}
+                        error={!!errors.stock}
+                        helperText={errors.stock}
+                        required
+                        fullWidth
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
+                        inputProps={{ min: 0 }}
+                        onFocus={(e) => e.target.select()}
+                        sx={{
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            },
+                            '& .MuiFormHelperText-root': { color: "#ff6b6b" }
+                        }}
+                    />
+                    <TextField
+                        label="Stock Mínimo"
+                        name="stock_minimo"
+                        type="number"
+                        value={form.stock_minimo}
+                        onChange={handleChange}
+                        error={!!errors.stock_minimo}
+                        helperText={errors.stock_minimo || "Cantidad mínima antes de alertar"}
+                        required
+                        fullWidth
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
+                        inputProps={{ min: 0 }}
+                        onFocus={(e) => e.target.select()}
+                        sx={{
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            },
+                            '& .MuiFormHelperText-root': { color: "#ff6b6b" }
+                        }}
+                    />
+                    <TextField
+                        label="Stock Máximo"
+                        name="stock_maximo"
+                        type="number"
+                        value={form.stock_maximo}
+                        onChange={handleChange}
+                        error={!!errors.stock_maximo}
+                        helperText={errors.stock_maximo || "Cantidad máxima antes de alertar"}
+                        required
+                        fullWidth
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
+                        inputProps={{ min: 0 }}
+                        onFocus={(e) => e.target.select()}
+                        sx={{
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            },
+                            '& .MuiFormHelperText-root': { color: "#ff6b6b" }
+                        }}
+                    />
+                </Box>
 
                 {/* Descripción */}
                 <TextField
@@ -791,7 +899,7 @@ export default function Inventario() {
                                     }}
                                 >
                                     {m.nombre}
-                                    <Tooltip title="Eliminar marca">
+                                    <Tooltip title="Desactivar marca">
                                         <IconButton
                                             size="small"
                                             className="delete-icon"
@@ -799,7 +907,7 @@ export default function Inventario() {
                                                 ml: 1,
                                                 opacity: 0,
                                                 transition: "opacity 0.2s",
-                                                "&:hover": { color: "#ff1b00" }
+                                                "&:hover": { color: "#ff4444" }
                                             }}
                                             onClick={() => handleDeleteMarca(m.nombre)}
                                         >
@@ -857,19 +965,12 @@ export default function Inventario() {
                                     }}
                                 >
                                     {c.nombre}
-                                    <Tooltip title="Eliminar categoría">
+                                    <Tooltip title="Desactivar categoría">
                                         <IconButton
-                                            size="small"
-                                            className="delete-icon"
-                                            sx={{
-                                                ml: 1,
-                                                opacity: 0,
-                                                transition: "opacity 0.2s",
-                                                "&:hover": { color: "#ff1b00" }
-                                            }}
                                             onClick={() => handleDeleteCategoria(c.nombre)}
+                                            sx={{ color: "#ff4444" }}
                                         >
-                                            <DeleteIcon fontSize="small" />
+                                            <DeleteIcon />
                                         </IconButton>
                                     </Tooltip>
                                 </Box>
@@ -904,6 +1005,305 @@ export default function Inventario() {
         );
     }
 
+    // --- Componentes de UI ---
+
+    // Componente para filtros avanzados con chips
+    const AdvancedFilters = () => {
+        const hasActiveFilters = filtros.categoria || filtros.marca || search;
+        
+        if (!hasActiveFilters) return null;
+
+        return (
+            <Box sx={{ mb: 3, p: 2, bgcolor: "#1a1a1a", borderRadius: 2, border: "1px solid #333" }}>
+                <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, fontSize: "1rem" }}>
+                    Filtros Activos
+                </Typography>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                    {filtros.categoria && (
+                        <Chip 
+                            label={`Categoría: ${filtros.categoria}`}
+                            onDelete={() => setFiltros(prev => ({ ...prev, categoria: undefined }))}
+                            sx={{ 
+                                bgcolor: "#FFD700", 
+                                color: "#232323",
+                                "& .MuiChip-deleteIcon": { color: "#232323" }
+                            }}
+                        />
+                    )}
+                    {filtros.marca && (
+                        <Chip 
+                            label={`Marca: ${filtros.marca}`}
+                            onDelete={() => setFiltros(prev => ({ ...prev, marca: undefined }))}
+                            sx={{ 
+                                bgcolor: "#FFD700", 
+                                color: "#232323",
+                                "& .MuiChip-deleteIcon": { color: "#232323" }
+                            }}
+                        />
+                    )}
+                    {search && (
+                        <Chip 
+                            label={`Búsqueda: "${search}"`}
+                            onDelete={() => setSearch("")}
+                            sx={{ 
+                                bgcolor: "#FFD700", 
+                                color: "#232323",
+                                "& .MuiChip-deleteIcon": { color: "#232323" }
+                            }}
+                        />
+                    )}
+                </Box>
+            </Box>
+        );
+    };
+
+    // Componente para vista de tabla
+    const TableView = () => (
+        <Box sx={{ overflowX: "auto" }}>
+            <TableContainer component={Paper} sx={{ bgcolor: "#1E1E1E", borderRadius: 2, minWidth: 800 }}>
+                <Table>
+                    <TableHead>
+                        <TableRow sx={{ bgcolor: "#232323" }}>
+                            <TableCell sx={{ color: "#FFD700", fontWeight: 700, borderBottom: "2px solid #FFD700", width: 80 }}>
+                                Imagen
+                            </TableCell>
+                            <TableCell sx={{ color: "#FFD700", fontWeight: 700, borderBottom: "2px solid #FFD700", minWidth: 200 }}>
+                                Producto
+                            </TableCell>
+                            <TableCell sx={{ color: "#FFD700", fontWeight: 700, borderBottom: "2px solid #FFD700", width: 120 }}>
+                                Código
+                            </TableCell>
+                            <TableCell sx={{ color: "#FFD700", fontWeight: 700, borderBottom: "2px solid #FFD700", width: 120 }}>
+                                Marca
+                            </TableCell>
+                            <TableCell sx={{ color: "#FFD700", fontWeight: 700, borderBottom: "2px solid #FFD700", width: 120 }}>
+                                Categoría
+                            </TableCell>
+                            <TableCell sx={{ color: "#FFD700", fontWeight: 700, borderBottom: "2px solid #FFD700", width: 100 }}>
+                                Stock
+                            </TableCell>
+                            <TableCell sx={{ color: "#FFD700", fontWeight: 700, borderBottom: "2px solid #FFD700", width: 100 }}>
+                                Mínimo
+                            </TableCell>
+                            <TableCell sx={{ color: "#FFD700", fontWeight: 700, borderBottom: "2px solid #FFD700", width: 100 }}>
+                                Máximo
+                            </TableCell>
+                            <TableCell sx={{ color: "#FFD700", fontWeight: 700, borderBottom: "2px solid #FFD700", width: 120 }}>
+                                Acciones
+                            </TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {filteredProducts.map((product, index) => (
+                            <TableRow 
+                                key={product.code + index}
+                                sx={{ 
+                                    backgroundColor: product.stock === 0 ? '#4a1a1a' : product.stock < product.stock_minimo ? '#4a3a1a' : product.stock > product.stock_maximo ? '#1a4a1a' : 'inherit',
+                                    '&:hover': { backgroundColor: '#333' },
+                                    cursor: deleteMode ? "pointer" : "default",
+                                    bgcolor: selected.includes(product.code) ? "#333" : "transparent"
+                                }}
+                                onClick={() => {
+                                    if (deleteMode) {
+                                        setSelected(prev =>
+                                            prev.includes(product.code)
+                                                ? prev.filter(code => code !== product.code)
+                                                : [...prev, product.code]
+                                        );
+                                    } else {
+                                        setProductoActual(product);
+                                        setModalDetailOpen(true);
+                                    }
+                                }}
+                            >
+                                <TableCell>
+                                    <img 
+                                        src={
+                                            typeof product.im === "string"
+                                                ? product.im
+                                                : product.im
+                                                    ? URL.createObjectURL(product.im)
+                                                    : sin_imagen
+                                        } 
+                                        alt={product.name}
+                                        style={{ 
+                                            width: 50, 
+                                            height: 50, 
+                                            borderRadius: 8,
+                                            objectFit: "cover",
+                                            border: "2px solid #444"
+                                        }} 
+                                    />
+                                </TableCell>
+                                <TableCell sx={{ color: "#fff", fontWeight: 500 }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                        {product.name}
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ color: "#aaa" }}>
+                                        {product.description}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell sx={{ color: "#ccc", fontFamily: "monospace", fontSize: "0.875rem" }}>
+                                    {product.code}
+                                </TableCell>
+                                <TableCell sx={{ color: "#fff" }}>
+                                    {product.brand}
+                                </TableCell>
+                                <TableCell sx={{ color: "#fff" }}>
+                                    {product.category}
+                                </TableCell>
+                                <TableCell>
+                                    <Tooltip title={
+                                        product.stock === 0 ? 'Sin stock' :
+                                        product.stock < product.stock_minimo ? 'Stock bajo' :
+                                        product.stock > product.stock_maximo ? 'Sobre stock máximo' : 'Stock adecuado'
+                                    }>
+                                        <span>{product.stock}</span>
+                                    </Tooltip>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography sx={{ color: "#FFD700", fontWeight: 600 }}>
+                                        {product.stock_minimo}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography sx={{ color: "#FFD700", fontWeight: 600 }}>
+                                        {product.stock_maximo}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Box sx={{ display: "flex", gap: 1 }}>
+                                        <Tooltip title="Ver detalles">
+                                            <IconButton
+                                                size="small"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setProductoActual(product);
+                                                    setModalDetailOpen(true);
+                                                }}
+                                                sx={{ color: "#FFD700" }}
+                                            >
+                                                <SearchIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Editar">
+                                            <IconButton
+                                                size="small"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setProductoActual(product);
+                                                    setModalEditOpen(true);
+                                                }}
+                                                sx={{ color: "#4CAF50" }}
+                                            >
+                                                <EditIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        {deleteMode && (
+                                            <Checkbox
+                                                checked={selected.includes(product.code)}
+                                                sx={{
+                                                    color: "#FFD700",
+                                                    '&.Mui-checked': {
+                                                        color: "#FFD700",
+                                                    },
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        )}
+                                    </Box>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+
+    // Componente para alertas de stock bajo
+    const StockAlerts = () => {
+        const lowStockProducts = productos.filter(p => p.stock < p.stock_minimo);
+        const outOfStockProducts = productos.filter(p => p.stock === 0);
+        
+        if (lowStockProducts.length === 0) return null;
+
+        return (
+            <Box
+                sx={{
+                    p: 2,
+                    bgcolor: outOfStockProducts.length > 0 ? "#4a1a1a" : "#4a3a1a",
+                    borderRadius: 2,
+                    border: `1px solid ${outOfStockProducts.length > 0 ? "#f44336" : "#ff9800"}`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 2,
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                    '&:hover': {
+                        bgcolor: outOfStockProducts.length > 0 ? '#6e2323' : '#6e4a23',
+                        boxShadow: 3,
+                    },
+                }}
+                onClick={() => setAlertaFiltro('bajo')}
+            >
+                <WarningTwoToneIcon sx={{ color: outOfStockProducts.length > 0 ? "#f44336" : "#ff9800", fontSize: 28 }} />
+                <Box>
+                    <Typography variant="body1" sx={{ color: outOfStockProducts.length > 0 ? "#f44336" : "#ff9800", fontWeight: 600 }}>
+                        {outOfStockProducts.length > 0 
+                            ? `${outOfStockProducts.length} productos sin stock`
+                            : `${lowStockProducts.length} productos bajo stock mínimo`
+                        }
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "#ccc", mt: 0.5 }}>
+                        {outOfStockProducts.length > 0 
+                            ? "Algunos productos están completamente agotados"
+                            : "Productos con stock menor al mínimo establecido"
+                        }
+                    </Typography>
+                </Box>
+            </Box>
+        );
+    };
+
+    // Componente para alertas de stock alto
+    const HighStockAlerts = () => {
+        const highStockProducts = productos.filter(p => p.stock > p.stock_maximo);
+        
+        if (highStockProducts.length === 0) return null;
+
+        return (
+            <Box
+                sx={{
+                    p: 2,
+                    bgcolor: "#1a4a1a",
+                    borderRadius: 2,
+                    border: `1px solid #4caf50`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 2,
+                    cursor: 'pointer',
+                    transition: 'background 0.2s',
+                    '&:hover': {
+                        bgcolor: '#236e23',
+                        boxShadow: 3,
+                    },
+                }}
+                onClick={() => setAlertaFiltro('alto')}
+            >
+                <WarningTwoToneIcon sx={{ color: "#4caf50", fontSize: 28 }} />
+                <Box>
+                    <Typography variant="body1" sx={{ color: "#4caf50", fontWeight: 600 }}>
+                        {highStockProducts.length} productos superan el stock máximo
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "#ccc", mt: 0.5 }}>
+                        Productos con stock mayor al máximo recomendado
+                    </Typography>
+                </Box>
+            </Box>
+        );
+    };
+
     // --- Render principal ---
     useEffect(() => {
         console.log("🔍 DEBUG - Inventario - useEffect ejecutado");
@@ -913,6 +1313,13 @@ export default function Inventario() {
             fetchProductos(ubicacionId);
         }
     }, [ubicacionId, fetchProductos]);
+
+    // --- Mejorar función de filtro para alertas ---
+    const productosParaMostrar = alertaFiltro === 'bajo'
+        ? productosOrdenados.filter(p => p.stock < p.stock_minimo)
+        : alertaFiltro === 'alto'
+            ? productosOrdenados.filter(p => p.stock > p.stock_maximo)
+            : filteredProducts;
 
     return (
         <Layout>
@@ -937,7 +1344,7 @@ export default function Inventario() {
                             sx={{ bgcolor: "#ff1b00", color: "#fff", fontWeight: 600 }}
                             onClick={() => setDeleteMode(!deleteMode)}
                         >
-                            Eliminar
+                            Desactivar
                         </Button>
                         <Button
                             startIcon={<FilterAltIcon />}
@@ -955,6 +1362,33 @@ export default function Inventario() {
                             Gestionar marcas/categorías
                         </Button>
                         <Box sx={{ flex: 1 }} />
+                        {/* Toggle de vista */}
+                        <Box sx={{ display: "flex", alignItems: "center", bgcolor: "#1a1a1a", borderRadius: 2, p: 0.5 }}>
+                            <Tooltip title="Vista de tarjetas">
+                                <IconButton
+                                    onClick={() => setViewMode('cards')}
+                                    sx={{ 
+                                        bgcolor: viewMode === 'cards' ? "#FFD700" : "transparent",
+                                        color: viewMode === 'cards' ? "#232323" : "#FFD700",
+                                        "&:hover": { bgcolor: viewMode === 'cards' ? "#FFD700" : "#333" }
+                                    }}
+                                >
+                                    <ViewModuleIcon />
+                                </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Vista de tabla">
+                                <IconButton
+                                    onClick={() => setViewMode('table')}
+                                    sx={{ 
+                                        bgcolor: viewMode === 'table' ? "#FFD700" : "transparent",
+                                        color: viewMode === 'table' ? "#232323" : "#FFD700",
+                                        "&:hover": { bgcolor: viewMode === 'table' ? "#FFD700" : "#333" }
+                                    }}
+                                >
+                                    <ViewListIcon />
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
                         <Box sx={{ display: "flex", alignItems: "center", bgcolor: "#fff", borderRadius: 2, px: 2 }}>
                             <SearchIcon sx={{ color: "#232323" }} />
                             <TextField
@@ -970,93 +1404,141 @@ export default function Inventario() {
                             />
                         </Box>
                     </Box>
+                    
+                    {/* Alertas de stock bajo */}
+                    <StockAlerts />
+                    
+                    {/* Alertas de stock alto */}
+                    <HighStockAlerts />
+                    
+                    {/* Filtros avanzados */}
+                    <AdvancedFilters />
+                    
+                    {/* Información de productos */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                        <Typography variant="body2" sx={{ color: "#ccc" }}>
+                            Mostrando {productosParaMostrar.length} de {productos.length} productos
+                        </Typography>
+                        {alertaFiltro && (
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                sx={{ borderColor: '#888', color: '#888', ml: 2 }}
+                                onClick={() => setAlertaFiltro(null)}
+                            >
+                                Limpiar filtro
+                            </Button>
+                        )}
+                    </Box>
+                    
                     {/* Lista de productos */}
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, mt: 2 }}>
+                    <Box sx={{ mt: 2 }}>
                         {productos.length === 0 ? (
                             <Box sx={{ width: "100%", textAlign: "center", color: "#aaa", fontSize: "1.9rem", mt: 10 }}>
                                 <WarningTwoToneIcon sx={{ fontSize: "90px" }} />
                                 <p>No existen registros previos, empieza a agregarlos en "+ Añadir".</p>
                             </Box>
-                        ) : filteredProducts.length === 0 ? (
+                        ) : productosParaMostrar.length === 0 ? (
                             <Box sx={{ width: "100%", textAlign: "center", color: "#aaa", fontSize: "1.9rem", mt: 10 }}>
                                 <WarningTwoToneIcon sx={{ fontSize: "90px" }} />
-                                <p>El producto no existe. ¿Quieres agregarlo?</p>
-                            </Box>
-                        ) : (
-                            filteredProducts.map((product, idx) => (
-                                <Card
-                                    key={product.code + idx}
-                                    sx={{
-                                        maxWidth: 180,
-                                        padding: 1.5,
-                                        background: "#1E1E1E",
-                                        border: selected.includes(product.code) ? "2px solid #FFD700" : "1px solid #a1a2a4",
-                                        position: "relative",
-                                        cursor: deleteMode ? "pointer" : "default",
-                                        transition: "0.3s cubic-bezier(.47,1.64,.41,.8)",
-                                        "&:hover": {
-                                            borderColor: "#FFD700",
-                                            transform: "scale(1.04)",
-                                        }
-                                    }}
+                                <p>No se encontraron productos con los filtros aplicados.</p>
+                                <Button 
+                                    variant="outlined" 
+                                    sx={{ mt: 2, color: "#FFD700", borderColor: "#FFD700" }}
                                     onClick={() => {
-                                        if (deleteMode) {
-                                            setSelected(prev =>
-                                                prev.includes(product.code)
-                                                    ? prev.filter(code => code !== product.code)
-                                                    : [...prev, product.code]
-                                            );
-                                        } else {
-                                            setProductoActual(product);
-                                            setModalDetailOpen(true);
-                                        }
+                                        setFiltros({});
+                                        setSearch("");
                                     }}
                                 >
-                                    {deleteMode && (
-                                        <Checkbox
-                                            checked={selected.includes(product.code)}
+                                    Limpiar filtros
+                                </Button>
+                            </Box>
+                        ) : (
+                            viewMode === 'cards' ? (
+                                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center" }}>
+                                    {productosParaMostrar.map((product, idx) => (
+                                        <Card
+                                            key={product.code + idx}
                                             sx={{
-                                                position: "absolute",
-                                                top: 8,
-                                                left: 8,
-                                                color: "#FFD700",
-                                                '&.Mui-checked': {
-                                                    color: "#FFD700",
+                                                width: 200,
+                                                bgcolor: "#232323",
+                                                color: "#fff",
+                                                cursor: deleteMode ? "pointer" : "default",
+                                                border: selected.includes(product.code) ? "2px solid #FFD700" : "1px solid #333",
+                                                transition: "all 0.2s",
+                                                "&:hover": {
+                                                    transform: "translateY(-2px)",
+                                                    boxShadow: "0 4px 8px rgba(0,0,0,0.3)",
                                                 },
                                             }}
-                                        />
-                                    )}
-                                    <CardActionArea>
-                                        <CardMedia
-                                            component="img"
-                                            image={
-                                                typeof product.im === "string"
-                                                    ? product.im
-                                                    : product.im
-                                                        ? URL.createObjectURL(product.im)
-                                                        : sin_imagen
-                                            }
-                                            alt={product.name}
-                                            sx={{ borderRadius: "6px", height: 120, objectFit: "cover" }}
-                                        />
-                                        <CardContent sx={{ alignContent: "center", padding: "0px" }}>
-                                            <Typography gutterBottom variant="h6" component="div"
-                                                sx={{ fontSize: "18px", color: "white", fontWeight: "bold" }}>
-                                                {product.name}
-                                            </Typography>
-                                            <Typography variant="body2" sx={{ color: "#a1a2a4" }}>
-                                                {product.brand} | {product.category}
-                                            </Typography>
-                                            <Typography variant="body2" sx={{ color: "#FFD700", fontWeight: 700 }}>
-                                                Stock: {product.stock ?? 0}
-                                            </Typography>
-                                        </CardContent>
-                                    </CardActionArea>
-                                </Card>
-                            ))
+                                            onClick={() => {
+                                                if (deleteMode) {
+                                                    setSelected(prev =>
+                                                        prev.includes(product.code)
+                                                            ? prev.filter(code => code !== product.code)
+                                                            : [...prev, product.code]
+                                                    );
+                                                } else {
+                                                    setProductoActual(product);
+                                                    setModalDetailOpen(true);
+                                                }
+                                            }}
+                                        >
+                                            {deleteMode && (
+                                                <Checkbox
+                                                    checked={selected.includes(product.code)}
+                                                    sx={{
+                                                        position: "absolute",
+                                                        top: 8,
+                                                        left: 8,
+                                                        color: "#FFD700",
+                                                        '&.Mui-checked': {
+                                                            color: "#FFD700",
+                                                        },
+                                                    }}
+                                                />
+                                            )}
+                                            <CardActionArea>
+                                                <CardMedia
+                                                    component="img"
+                                                    image={
+                                                        typeof product.im === "string"
+                                                            ? product.im
+                                                            : product.im
+                                                                ? URL.createObjectURL(product.im)
+                                                                : sin_imagen
+                                                    }
+                                                    alt={product.name}
+                                                    sx={{ borderRadius: "6px", height: 120, objectFit: "cover" }}
+                                                />
+                                                <CardContent sx={{ alignContent: "center", padding: "0px" }}>
+                                                    <Typography gutterBottom variant="h6" component="div"
+                                                        sx={{ fontSize: "18px", color: "white", fontWeight: "bold" }}>
+                                                        {product.name}
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{ color: "#a1a2a4" }}>
+                                                        {product.brand} | {product.category}
+                                                    </Typography>
+                                                    <Box sx={{ mt: 1 }}>
+                                                        <StockIndicator stock={product.stock} stockMinimo={product.stock_minimo} />
+                                                    </Box>
+                                                    <Typography variant="caption" sx={{ color: "#888", display: "block", mt: 0.5 }}>
+                                                        Mínimo: {product.stock_minimo}
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ color: "#888", display: "block", mt: 0.5 }}>
+                                                        Máximo: {product.stock_maximo}
+                                                    </Typography>
+                                                </CardContent>
+                                            </CardActionArea>
+                                        </Card>
+                                    ))}
+                                </Box>
+                            ) : (
+                                <TableView />
+                            )
                         )}
                     </Box>
-                    {/* Botón eliminar seleccionados */}
+                    {/* Botón desactivar seleccionados */}
                     {deleteMode && selected.length > 0 && (
                         <Button
                             variant="contained"
@@ -1073,9 +1555,9 @@ export default function Inventario() {
                                 border: "none",
                                 cursor: "pointer"
                             }}
-                            onClick={() => handleDeleteProducts(selected)}
+                            onClick={() => handleDesactivarProductos(selected)}
                         >
-                            Eliminar seleccionados
+                            Desactivar seleccionados
                         </Button>
                     )}
                 </Paper>

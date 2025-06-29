@@ -162,6 +162,7 @@ export const pedidosService = {
             cantidad: number;
             marca: string;
             categoria: string;
+            modelo?: string;
         }>;
         proveedor: {
             nombre: string;
@@ -263,6 +264,85 @@ export const proveedoresService = {
         const response = await api.get(`/proveedores/${proveedorId}/historial-ingresos/`);
         return response.data;
     }
+};
+
+// Funciones para códigos QR
+export const generarQRProducto = async (productoId: number) => {
+  try {
+    const response = await api.get(`/qr/producto/${productoId}/`);
+    return response.data;
+  } catch (error) {
+    console.error('Error generando QR:', error);
+    throw error;
+  }
+};
+
+export const obtenerProductoPorCodigo = async (codigoInterno: string) => {
+  try {
+    const response = await api.get(`/qr/producto-codigo/${codigoInterno}/`);
+    return response.data;
+  } catch (error) {
+    console.error('Error obteniendo producto por código:', error);
+    throw error;
+  }
+};
+
+export const actualizarStockPorCodigo = async (data: {
+  codigo_interno: string;
+  cantidad: number;
+  tipo_movimiento?: 'ENTRADA' | 'SALIDA' | 'AJUSTE';
+}) => {
+  try {
+    const response = await api.post('/qr/actualizar-stock/', data);
+    return response.data;
+  } catch (error) {
+    console.error('Error actualizando stock:', error);
+    throw error;
+  }
+};
+
+export const obtenerListaProductosQR = async () => {
+  try {
+    const response = await api.get('/qr/lista-productos/');
+    return response.data;
+  } catch (error) {
+    console.error('Error obteniendo lista de productos QR:', error);
+    throw error;
+  }
+};
+
+// Validar código de producto
+export const validarCodigoProducto = async (codigoInterno: string) => {
+    const response = await api.get(`/qr/validar-codigo/${codigoInterno}/`);
+    return response.data;
+};
+
+// Verificar producto existente
+export const verificarProducto = async (data: {
+    nombre: string;
+    marca: string;
+    categoria: string;
+    bodega_id: string;
+}) => {
+    const response = await api.post('/verificar-producto/', data);
+    return response.data;
+};
+
+// Obtener producto por código único
+export const getProductoCodigoUnico = async (codigo: string) => {
+    const response = await api.get(`/producto-codigo-unico/${codigo}/`);
+    return response.data;
+};
+
+// Buscar productos similares
+export const buscarProductosSimilares = async (data: {
+    nombre: string;
+    marca?: string;
+    categoria?: string;
+    bodega_id: string;
+}) => {
+    const response = await api.post('/buscar-productos-similares/', data);
+    return response.data;
 };
 
 export default api;

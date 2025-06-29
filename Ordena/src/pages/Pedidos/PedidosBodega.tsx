@@ -3,7 +3,7 @@ import Layout from "../../components/layout/layout";
 import {
     Select, MenuItem, FormControl, InputLabel, TextField,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
-    Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Box, Typography, Alert, Chip
+    Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Box, Typography, Alert, Chip, Autocomplete, IconButton, Card, CardContent, LinearProgress, Grid, List, ListItem, ListItemText
 } from "@mui/material";
 import MuiAlert from "@mui/material/Alert";
 import ArrowDropUpIcon from '@mui/icons-material/ArrowDropUp';
@@ -14,6 +14,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import DescriptionIcon from '@mui/icons-material/Description';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { generarActaRecepcion } from "../../utils/pdf/generarActaRecepcion";
 import { generarOCI } from "../../utils/pdf/generarOCI";
 import { generarGuiaDespacho } from "../../utils/pdf/generarGuiaDespacho";
@@ -27,6 +28,7 @@ import { useInventariosStore } from "../../store/useProductoStore";
 import { usuarioService } from "../../services/usuarioService";
 import { solicitudesService, pedidosService, personalEntregaService, informesService } from "../../services/api";
 import EstadoBadge from "../../components/EstadoBadge";
+import { buscarProductosSimilares } from '../../services/api';
 
 // Interfaces
 interface Producto {
@@ -34,6 +36,9 @@ interface Producto {
     cantidad: number;
     codigo?: string;
     descripcion?: string;
+    marca: string;
+    categoria: string;
+    stock_actual?: number;
 }
 
 interface Proveedor {
@@ -262,6 +267,46 @@ export default function PedidosBodega() {
     const [loading, setLoading] = useState(false);
     const [pedidosBackend, setPedidosBackend] = useState<any[]>([]);
 
+    const [productos, setProductos] = useState<Producto[]>([]);
+    const [productoActual, setProductoActual] = useState({
+        nombre: '',
+        cantidad: 1,
+        marca: '',
+        categoria: '',
+        modelo: ''
+    });
+
+    // Estados para el sistema de reconocimiento (DEPRECATED - usar modal de validación múltiple)
+    const [productoSeleccionado, setProductoSeleccionado] = useState<any>(null);
+    const [datosFormularioPendiente, setDatosFormularioPendiente] = useState<any>(null);
+    
+    // Estados para el nuevo modal de validación múltiple
+    const [modalValidacionMultiple, setModalValidacionMultiple] = useState(false);
+    const [productosAValidar, setProductosAValidar] = useState<any[]>([]);
+    const [productosValidados, setProductosValidados] = useState<any[]>([]);
+    const [productoActualValidacion, setProductoActualValidacion] = useState<any>(null);
+    const [productosSimilaresActual, setProductosSimilaresActual] = useState<any[]>([]);
+    const [procesandoIngreso, setProcesandoIngreso] = useState(false);
+
+    // Cargar productos similares cuando cambia el producto actual en validación múltiple
+    useEffect(() => {
+        if (modalValidacionMultiple && productoActualValidacion) {
+            buscarProductosSimilaresLocal(productoActualValidacion);
+            setProductoSeleccionado(null); // Resetear selección
+        }
+    }, [productoActualValidacion, modalValidacionMultiple]);
+
+    const agregarProductoRapido = () => {
+        if (productoActual.nombre.trim() && productoActual.cantidad > 0) {
+            setProductos([...productos, { ...productoActual }]);
+            setProductoActual({ nombre: '', cantidad: 1, marca: '', categoria: '', modelo: '' });
+        }
+    };
+
+    const eliminarProducto = (index: number) => {
+        setProductos(productos.filter((_, i) => i !== index));
+    };
+
     const fetchSolicitudesTransferidas = useCallback(async () => {
         if (!usuario?.bodega) return;
         try {
@@ -358,9 +403,9 @@ export default function PedidosBodega() {
                 
             } catch (error) {
                 console.error('Error cargando marcas y categorías:', error);
-                // Establecer valores por defecto
+                // Establecer valores por defecto que coincidan con el backend
                 setMarcas(['Stanley', 'Bosch', 'Makita', 'Dewalt', 'Black+Decker', 'Einhell', 'Truper', 'Irwin', 'Hilti', '3M']);
-                setCategorias(['Herramientas manuales', 'Herramientas eléctricas', 'Materiales de fijación', 'Medición y nivelación', 'Seguridad industrial', 'Accesorios']);
+                setCategorias(['planchas', 'tornillos', 'martillo', 'catg_1', 'herramienta', 'Herramientas', 'Materiales']);
             }
         };
         
@@ -629,6 +674,312 @@ export default function PedidosBodega() {
         // No limpiar los pedidos ya que son registros importantes que deben mantenerse
     };
 
+    // Función para previsualizar el código único
+    const previsualizarCodigo = () => {
+        if (productoActual.nombre && productoActual.marca && productoActual.categoria) {
+            const categoria_prefijo = productoActual.categoria.substring(0, 3).toUpperCase();
+            const marca_prefijo = productoActual.marca.substring(0, 3).toUpperCase();
+            const modelo_prefijo = productoActual.modelo ? productoActual.modelo.substring(0, 3).toUpperCase() : 'GEN';
+            const fecha = new Date().toISOString().slice(0, 7).replace('-', '');
+            
+            return `${categoria_prefijo}-${marca_prefijo}-${modelo_prefijo}-${fecha}-001`;
+        }
+        return "Código se generará automáticamente";
+    };
+
+    // Función para verificar producto existente
+    const verificarProductoExistente = async (producto: any) => {
+        try {
+            const codigo = previsualizarCodigo();
+            if (codigo === "Código se generará automáticamente") return null;
+            
+            const response = await solicitudesService.getProductoCodigoUnico(codigo);
+            return response.data.producto;
+        } catch (error) {
+            return null; // Producto no existe
+        }
+    };
+
+    // Función para buscar productos similares
+    const buscarProductosSimilaresLocal = async (producto: any) => {
+        try {
+            console.log('🔍 DEBUG - Buscando productos similares para:', producto);
+            console.log('🔍 DEBUG - Bodega ID:', usuario?.bodega);
+            
+            const response = await buscarProductosSimilares({
+                nombre: producto.nombre,
+                marca: producto.marca,
+                categoria: producto.categoria,
+                bodega_id: usuario?.bodega
+            });
+            
+            console.log('🔍 DEBUG - Respuesta del backend:', response);
+            
+            if (response.productos_similares && response.productos_similares.length > 0) {
+                console.log('🔍 DEBUG - Productos similares encontrados:', response.productos_similares.length);
+                
+                // Solo actualizar los productos similares actuales para el modal de validación múltiple
+                setProductosSimilaresActual(response.productos_similares);
+                
+                return true; // Hay productos similares
+            }
+            console.log('🔍 DEBUG - No se encontraron productos similares');
+            return false; // No hay productos similares
+        } catch (error) {
+            console.error('❌ ERROR - Error buscando productos similares:', error);
+            return false;
+        }
+    };
+
+    // Función para agregar producto con reconocimiento (DEPRECATED - usar validarTodosLosProductos)
+    const agregarProductoConReconocimiento = async () => {
+        console.log('⚠️ DEPRECATED: usar validarTodosLosProductos en su lugar');
+    };
+
+    // Función para confirmar uso de producto existente (DEPRECATED - usar manejarDecisionProducto)
+    const confirmarProductoExistente = async (productoExistente: any) => {
+        console.log('⚠️ DEPRECATED: usar manejarDecisionProducto en su lugar');
+    };
+
+    // Función para crear nuevo producto (DEPRECATED - usar manejarDecisionProducto)
+    const crearNuevoProducto = async () => {
+        console.log('⚠️ DEPRECATED: usar manejarDecisionProducto en su lugar');
+    };
+
+    // Función para procesar el ingreso con el producto modificado (DEPRECATED - usar procesarIngresoConProductosValidados)
+    const procesarIngresoConProductoModificado = async (productoModificado: any) => {
+        console.log('⚠️ DEPRECATED: usar procesarIngresoConProductosValidados en su lugar');
+    };
+
+    // Función para validar todos los productos del formulario
+    const validarTodosLosProductos = async (productos: any[]) => {
+        console.log('🔍 DEBUG - Validando todos los productos:', productos);
+        
+        const productosConSimilares = [];
+        const productosSinSimilares = [];
+        
+        // Validar cada producto
+        for (const producto of productos) {
+            try {
+                const haySimilares = await buscarProductosSimilaresLocal(producto);
+                if (haySimilares) {
+                    productosConSimilares.push(producto);
+                } else {
+                    productosSinSimilares.push(producto);
+                }
+            } catch (error) {
+                console.error('Error validando producto:', error);
+                productosSinSimilares.push(producto);
+            }
+        }
+        
+        console.log('🔍 DEBUG - Productos con similares:', productosConSimilares.length);
+        console.log('🔍 DEBUG - Productos sin similares:', productosSinSimilares.length);
+        
+        if (productosConSimilares.length > 0) {
+            // Hay productos que necesitan validación
+            setProductosAValidar(productosConSimilares);
+            setProductosValidados(productosSinSimilares);
+            setProductoActualValidacion(productosConSimilares[0]);
+            setModalValidacionMultiple(true);
+            return false; // No continuar con el procesamiento
+        }
+        
+        return true; // Continuar con el procesamiento
+    };
+
+    // Función para manejar la decisión del usuario en el modal de validación múltiple
+    const manejarDecisionProducto = async (decision: 'existente' | 'nuevo', productoExistente?: any) => {
+        if (!productoActualValidacion) return;
+        
+        console.log('🔍 DEBUG - Decisión:', decision, 'para producto:', productoActualValidacion.nombre);
+        console.log('🔍 DEBUG - Producto actual validación:', productoActualValidacion);
+        console.log('🔍 DEBUG - Producto existente seleccionado:', productoExistente);
+        
+        let productoFinal;
+        
+        if (decision === 'existente' && productoExistente) {
+            // Usar producto existente
+            productoFinal = {
+                ...productoExistente,
+                cantidad: productoActualValidacion.cantidad,
+                es_producto_existente: true,
+                id: productoExistente.id
+            };
+            console.log('🔍 DEBUG - Usando producto existente:', productoFinal);
+        } else {
+            // Crear nuevo producto
+            productoFinal = {
+                ...productoActualValidacion,
+                es_producto_existente: false
+            };
+            console.log('🔍 DEBUG - Creando nuevo producto:', productoFinal);
+        }
+        
+        // Agregar a productos validados
+        setProductosValidados(prev => {
+            const nuevosProductosValidados = [...prev, productoFinal];
+            console.log('🔍 DEBUG - Productos validados actualizados:', nuevosProductosValidados);
+            return nuevosProductosValidados;
+        });
+        
+        // Remover TODOS los productos iguales de productos a validar
+        const productosRestantes = productosAValidar.filter(p => 
+            !(p.nombre === productoActualValidacion.nombre && 
+              p.marca === productoActualValidacion.marca && 
+              p.categoria === productoActualValidacion.categoria)
+        );
+        
+        console.log('🔍 DEBUG - Productos restantes:', productosRestantes.length);
+        console.log('🔍 DEBUG - Productos restantes:', productosRestantes);
+        
+        setProductosAValidar(productosRestantes);
+        
+        if (productosRestantes.length > 0) {
+            // Hay más productos para validar
+            setProductoActualValidacion(productosRestantes[0]);
+            setProductosSimilaresActual([]);
+            setProductoSeleccionado(null);
+        } else {
+            // Todos los productos han sido validados
+            console.log('🔍 DEBUG - Todos los productos validados, el useEffect procesará automáticamente');
+            console.log('🔍 DEBUG - Estado final de productosValidados:', productosValidados);
+            // El useEffect detectará que productosAValidar.length === 0 y procesará automáticamente
+        }
+    };
+
+    // Función para procesar el ingreso con todos los productos validados
+    const procesarIngresoConProductosValidados = async () => {
+        try {
+            // Evitar procesamiento múltiple
+            if (!modalValidacionMultiple) {
+                console.log('🔍 DEBUG - Modal cerrado, no procesando');
+                return;
+            }
+            
+            // Obtener el estado actual de productos validados
+            const productosFinales = [...productosValidados];
+            console.log('🔍 DEBUG - Procesando ingreso con productos validados:', productosFinales);
+            console.log('🔍 DEBUG - Longitud de productosFinales:', productosFinales.length);
+            console.log('🔍 DEBUG - Estado actual de productosValidados:', productosValidados);
+            
+            // Validar que haya productos
+            if (!productosFinales || productosFinales.length === 0) {
+                throw new Error('No hay productos para procesar. El array de productos está vacío.');
+            }
+            
+            const bodegaId = usuario?.bodega;
+            if (!bodegaId) {
+                throw new Error('No se pudo obtener el ID de la bodega del usuario');
+            }
+
+            const datosFormulario = datosFormularioPendiente;
+            if (!datosFormulario) {
+                throw new Error('No se encontraron los datos del formulario');
+            }
+
+            const datosFinales = {
+                ...datosFormulario,
+                productos: productosFinales,
+                bodega_id: bodegaId
+            };
+
+            console.log('🔍 DEBUG - Datos finales a enviar:', datosFinales);
+            console.log('🔍 DEBUG - Productos en datosFinales:', datosFinales.productos);
+            console.log('🔍 DEBUG - Longitud de productos en datosFinales:', datosFinales.productos.length);
+
+            // Crear el ingreso en el backend
+            const resultado = await pedidosService.crearIngresoBodega(datosFinales);
+
+            console.log('✅ Ingreso creado exitosamente:', resultado);
+
+            // Obtener el ID real del pedido creado
+            const pedidoIdReal = resultado.pedido_id;
+            if (!pedidoIdReal) throw new Error('No se pudo obtener el ID real del pedido creado');
+
+            // Agregar el ingreso al historial del proveedor
+            await addIngresoProveedor(datosFormulario.proveedor, {
+                fecha: datosFormulario.fecha,
+                productos: productosFinales,
+                documentos: {
+                    numRem: datosFormulario.numRem || '',
+                    numGuiaDespacho: datosFormulario.numGuiaDespacho || '',
+                    archivoGuia: datosFormulario.nombreArchivo || ''
+                },
+                observaciones: datosFormulario.observacionesRecepcion || ''
+            });
+
+            // Recargar productos para mostrar el stock actualizado
+            await fetchProductos(bodegaId);
+
+            setSnackbarMessage(`Ingreso creado exitosamente. ${resultado.productos_agregados?.length || 0} productos agregados al inventario.`);
+            setSnackbarSeverity("success");
+            setShowSnackbar(true);
+
+            // Crear informe
+            try {
+                const contenidoInforme = {
+                    ingreso_id: pedidoIdReal,
+                    fecha: datosFormulario.fecha,
+                    proveedor: {
+                        nombre: datosFormulario.proveedor.nombre,
+                        rut: datosFormulario.proveedor.rut,
+                        contacto: datosFormulario.proveedor.contacto
+                    },
+                    productos: productosFinales.map((prod: any) => ({
+                        nombre: prod.nombre,
+                        marca: prod.marca,
+                        categoria: prod.categoria,
+                        cantidad: prod.cantidad
+                    })),
+                    documentos: {
+                        num_rem: datosFormulario.numRem || '',
+                        num_guia_despacho: datosFormulario.numGuiaDespacho || '',
+                        archivo_guia: datosFormulario.nombreArchivo || ''
+                    },
+                    observaciones: datosFormulario.observacionesRecepcion || '',
+                    responsable: usuario?.nombre || '',
+                    bodega: {
+                        nombre: "Bodega Central",
+                        direccion: "Camino a Penco 2500, Concepción"
+                    }
+                };
+
+                await informesService.crearInforme(contenidoInforme);
+                console.log('✅ Informe creado exitosamente');
+
+            } catch (error) {
+                console.error('Error creando informe:', error);
+            }
+
+            // Limpiar estados
+            setDatosFormularioPendiente(null);
+            setModalValidacionMultiple(false);
+            setProductosAValidar([]);
+            setProductosValidados([]);
+            setProductoActualValidacion(null);
+            setProductosSimilaresActual([]);
+            setProcesandoIngreso(false);
+
+        } catch (error) {
+            console.error('Error procesando ingreso:', error);
+            setSnackbarMessage('Error al procesar el ingreso');
+            setSnackbarSeverity("error");
+            setShowSnackbar(true);
+            setProcesandoIngreso(false);
+        }
+    };
+
+    // Efecto para procesar automáticamente cuando todos los productos han sido validados
+    useEffect(() => {
+        if (productosAValidar.length === 0 && productosValidados.length > 0 && modalValidacionMultiple && !procesandoIngreso) {
+            console.log('🔍 DEBUG - Efecto detectó que todos los productos han sido validados');
+            console.log('🔍 DEBUG - Productos validados en el efecto:', productosValidados);
+            setProcesandoIngreso(true);
+            procesarIngresoConProductosValidados();
+        }
+    }, [productosAValidar.length, productosValidados.length, modalValidacionMultiple, procesandoIngreso]);
+
     return (
         <Layout>
             <Snackbar
@@ -678,6 +1029,15 @@ export default function PedidosBodega() {
                         marcas={marcas}
                         categorias={categorias}
                         onSubmit={async data => {
+                            // Validar todos los productos del formulario antes de procesar
+                            const productosValidados = await validarTodosLosProductos(data.productos);
+                            if (!productosValidados) {
+                                // Guardar los datos del formulario para usarlos después
+                                setDatosFormularioPendiente(data);
+                                return; // El modal de validación múltiple se abrirá
+                            }
+
+                            // Si llegamos aquí, todos los productos están validados
                             // Crear el pedido en la base de datos y agregar productos al inventario
                             const crearIngresoEnBD = async () => {
                                 try {
@@ -703,7 +1063,8 @@ export default function PedidosBodega() {
                                             nombre: prod.nombre,
                                             cantidad: prod.cantidad,
                                             marca: prod.marca,
-                                            categoria: prod.categoria
+                                            categoria: prod.categoria,
+                                            modelo: prod.modelo
                                         })),
                                         proveedor: {
                                             nombre: data.proveedor.nombre,
@@ -1626,6 +1987,133 @@ export default function PedidosBodega() {
                             Cerrar
                         </Button>
                     </DialogActions>
+                </Dialog>
+
+                {/* Modal de Reconocimiento de Productos - ELIMINADO */}
+                {/* Modal de Validación Múltiple de Productos */}
+                <Dialog 
+                    open={modalValidacionMultiple} 
+                    onClose={() => setModalValidacionMultiple(false)}
+                    maxWidth="md"
+                    fullWidth
+                >
+                    <DialogTitle sx={{ 
+                        backgroundColor: '#1976d2', 
+                        color: 'white',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                            Validación de Productos - Progreso
+                        </Typography>
+                        <Typography variant="body2">
+                            {productosValidados.length + 1} de {productosValidados.length + productosAValidar.length + 1}
+                        </Typography>
+                    </DialogTitle>
+                    
+                    <DialogContent sx={{ mt: 2 }}>
+                        {productoActualValidacion && (
+                            <Box>
+                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                    Producto: {productoActualValidacion.nombre}
+                                </Typography>
+                                
+                                <Grid container spacing={2} sx={{ mb: 3 }}>
+                                    <Grid xs={6}>
+                                        <Typography variant="body2" color="textSecondary">
+                                            <strong>Marca:</strong> {productoActualValidacion.marca}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid xs={6}>
+                                        <Typography variant="body2" color="textSecondary">
+                                            <strong>Categoría:</strong> {productoActualValidacion.categoria}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid xs={6}>
+                                        <Typography variant="body2" color="textSecondary">
+                                            <strong>Cantidad:</strong> {productoActualValidacion.cantidad}
+                                        </Typography>
+                                    </Grid>
+                                </Grid>
+
+                                {productosSimilaresActual.length > 0 ? (
+                                    <Box>
+                                        <Typography variant="subtitle1" gutterBottom>
+                                            Se encontraron productos similares. ¿Qué deseas hacer?
+                                        </Typography>
+                                        
+                                        <Box sx={{ mb: 2 }}>
+                                            <Typography variant="body2" color="textSecondary" gutterBottom>
+                                                Productos similares encontrados:
+                                            </Typography>
+                                            <List dense>
+                                                {productosSimilaresActual.map((producto, index) => (
+                                                    <ListItem 
+                                                        key={index}
+                                                        selected={productoSeleccionado?.id === producto.id}
+                                                        onClick={() => setProductoSeleccionado(producto)}
+                                                        sx={{
+                                                            border: '1px solid #e0e0e0',
+                                                            borderRadius: 1,
+                                                            mb: 1,
+                                                            cursor: 'pointer',
+                                                            '&.Mui-selected': {
+                                                                backgroundColor: '#e3f2fd',
+                                                                borderColor: '#1976d2'
+                                                            },
+                                                            '&:hover': {
+                                                                backgroundColor: '#f5f5f5'
+                                                            }
+                                                        }}
+                                                    >
+                                                        <ListItemText
+                                                            primary={producto.nombre}
+                                                            secondary={`Marca: ${producto.marca} | Categoría: ${producto.categoria} | Stock: ${producto.stock_actual || 0}`}
+                                                        />
+                                                    </ListItem>
+                                                ))}
+                                            </List>
+                                        </Box>
+                                        
+                                        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                                            <Button 
+                                                onClick={() => manejarDecisionProducto('nuevo')}
+                                                variant="outlined"
+                                                sx={{ borderColor: '#4CAF50', color: '#4CAF50' }}
+                                            >
+                                                Crear Nuevo Producto
+                                            </Button>
+                                            <Button 
+                                                onClick={() => manejarDecisionProducto('existente', productoSeleccionado)}
+                                                variant="contained"
+                                                disabled={!productoSeleccionado}
+                                                sx={{ backgroundColor: '#1976d2' }}
+                                            >
+                                                Usar Producto Existente
+                                            </Button>
+                                        </Box>
+                                    </Box>
+                                ) : (
+                                    <Box>
+                                        <Typography variant="subtitle1" gutterBottom>
+                                            No se encontraron productos similares. Se creará un nuevo producto.
+                                        </Typography>
+                                        
+                                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                                            <Button 
+                                                onClick={() => manejarDecisionProducto('nuevo')}
+                                                variant="contained"
+                                                sx={{ backgroundColor: '#4CAF50' }}
+                                            >
+                                                Continuar
+                                            </Button>
+                                        </Box>
+                                    </Box>
+                                )}
+                            </Box>
+                        )}
+                    </DialogContent>
                 </Dialog>
             </div>
         </Layout>

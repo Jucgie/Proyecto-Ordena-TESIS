@@ -22,6 +22,29 @@ export const productoService = {
         return response.data;
     },
 
+    // Nueva función para obtener solo productos activos
+    getProductosActivos: async (ubicacionId?: string) => {
+        console.log("🔍 DEBUG - Service - getProductosActivos llamado con ubicacionId:", ubicacionId);
+        const params = new URLSearchParams();
+        
+        // Agregar parámetro para filtrar solo productos activos
+        params.append('activo', 'true');
+        
+        // Si el ubicacionId es "bodega_central", filtrar por bodega
+        if (ubicacionId === "bodega_central") {
+            params.append('bodega_id', '2');
+            console.log("🔍 DEBUG - Service - Filtrando por bodega_id: 2");
+        } else if (ubicacionId) {
+            params.append('sucursal_id', ubicacionId);
+            console.log("🔍 DEBUG - Service - Filtrando por sucursal_id:", ubicacionId);
+        }
+        
+        console.log("🔍 DEBUG - Service - Parámetros finales:", params.toString());
+        const response = await api.get('/productos/', { params });
+        console.log("🔍 DEBUG - Service - Respuesta del backend:", response.data);
+        return response.data;
+    },
+
     createProducto: async (producto: ProductInt, ubicacionId?: string) => {
         
         // Buscar los IDs de marca y categoría por nombre
@@ -43,6 +66,8 @@ export const productoService = {
             marca_fk: marcaObj.id_mprod,
             categoria_fk: categoriaObj.id,
             stock_write: producto.stock || 0,
+            stock_minimo_write: producto.stock_minimo || 5,
+            stock_maximo_write: producto.stock_maximo || 100,
         };
 
         // Si el ubicacionId es "bodega_central", usar bodega_fk, sino sucursal_fk
@@ -71,11 +96,13 @@ export const productoService = {
     
         const data: any = {
             nombre_prodc: producto.name,
-            descripcion_prodc: producto.description,
             codigo_interno: producto.code,
+            descripcion_prodc: producto.description,
             marca_fk: marcaObj.id_mprod,
             categoria_fk: categoriaObj.id,
             stock_write: producto.stock,
+            stock_minimo_write: producto.stock_minimo,
+            stock_maximo_write: producto.stock_maximo,
         };
     
         // Si el ubicacionId es "bodega_central", usar bodega_fk, sino sucursal_fk
@@ -92,8 +119,16 @@ export const productoService = {
         return response.data;
     },
 
-    deleteProducto: async (id: string) => {
+    // Cambio de eliminar a desactivar
+    desactivarProducto: async (id: string) => {
+        // Ahora usamos el endpoint DELETE que en el backend desactiva el producto
         await api.delete(`/productos/${id}/`);
+    },
+
+    // Función para reactivar un producto (si es necesario en el futuro)
+    reactivarProducto: async (id: string) => {
+        const response = await api.patch(`/productos/${id}/`, { activo: true });
+        return response.data;
     },
 
     // Marcas

@@ -4,7 +4,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import ( 
     login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, 
     SolicitudesViewSet, UsuarioViewSet, InformeViewSet, PedidosViewSet, 
-    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF
+    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,
+    generar_qr_producto_view, producto_por_codigo, actualizar_stock_por_codigo, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint
 )
 
 router = DefaultRouter()
@@ -33,5 +34,15 @@ urlpatterns = [
     path('productos/agregar-categoria/', CategoriaViewSet.as_view({'post': 'agregar_categoria'}), name='agregar_categoria'),
     path('extraer-productos-pdf/', ExtraerProductosPDF.as_view(), name='extraer_productos_pdf'),
     path('pedidos/', PedidosViewSet.as_view({'get':'pedidos'}),name='pedidos'),
+    
+    # URLs para códigos QR
+    path('qr/producto/<int:producto_id>/', generar_qr_producto_view, name='generar_qr_producto'),
+    path('qr/producto-codigo/<str:codigo_interno>/', producto_por_codigo, name='producto_por_codigo'),
+    path('qr/validar-codigo/<str:codigo_interno>/', validar_codigo_producto, name='validar_codigo_producto'),
+    path('qr/actualizar-stock/', actualizar_stock_por_codigo, name='actualizar_stock_por_codigo'),
+    path('qr/lista-productos/', lista_productos_qr, name='lista_productos_qr'),
+    path('verificar-producto/', verificar_producto_existente, name='verificar_producto_existente'),
+    path('producto-codigo-unico/<str:codigo_interno>/', producto_por_codigo_unico, name='producto_por_codigo_unico'),
+    path('buscar-productos-similares/', buscar_productos_similares_endpoint, name='buscar_productos_similares_endpoint'),
 ]
 
