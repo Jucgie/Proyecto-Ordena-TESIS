@@ -5,6 +5,9 @@ import { Grafics_b } from "../graficos/Grafics_bar";
 import { Grafics_Pie } from "../graficos/Grafics_pie";
 {/* Fin importaciones de componentes graficos */}
 
+import ordena from "../../assets/ordena.svg";
+
+
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -44,7 +47,7 @@ export function CountElementSucursal() {
 
     //Definición de constante para obtener datos 
 
-    const {pedidos,fetchPedidos} = useHistorialStore();
+    const {pedidos,fetchPedidos, loading:loadingPedidos} = useHistorialStore();
     const {solicitudes, fetchSolicitudes} = useBodegaStore();
     const {usuarios,fetchUsuarios} = useUsuariosStore();
    // const prodct = useInventariosStore(state=>state.inventarios)
@@ -162,6 +165,18 @@ export function CountElementSucursal() {
 
     //se obtiene el total de productos
     //const totalProducts = inventarioMostrados.length;
+   if (loadingPedidos) {
+        return (
+                <Loader>
+                    <>
+                        <img src={ordena} alt="Ordena_logo" />
+                        <p>Ordena</p>
+                        <div>Cargando Dashboard...</div>
+                    </>
+                </Loader>
+        );
+    }
+
     return (
         <Contenedor_Dashboard>
             <h1 className="titulo_bn">Bienvenido, {usuario?.nombre || 'usuario'} </h1>
@@ -473,7 +488,7 @@ const Container = styled.div`
         width: 60%;
         display: grid;
         justify-content: center;
-        align-items: center;
+        align-content: start;
         border: 1px solid rgb(36, 34, 34);
         background-color: rgb(20, 20, 20);
         padding: 10px;
@@ -527,3 +542,47 @@ const Contenedor_Dashboard = styled.div`
         }
     }
 `;
+const Loader = styled.div`
+    display:flex;
+    position:fixed;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    background: rgba(0, 0, 0, 0.52);
+    z-index: 1000;
+    right:0;
+    top: 0;
+    width: 85.5%;
+    height: 100%;
+
+    img{
+        width: 150px;
+        height: 150px;
+
+        animation: animate 2s infinite ease-in-out;
+    
+    }
+    p{
+        text-align:center;
+        font-size:30px;
+        font-weight:bold;
+        animation: animate 2s infinite ease-in-out;
+
+    }
+
+    @Keyframes animate{
+      0% {
+        transform: scale(1);
+        opacity:60%;
+  }
+  50% {
+    transform: scale(1.1); /* Aumenta el tamaño al 110% */
+        opacity:100%;
+  }
+  100% {
+    transform: scale(1);
+    opacity:60%;
+  }
+    }
+        
+ `

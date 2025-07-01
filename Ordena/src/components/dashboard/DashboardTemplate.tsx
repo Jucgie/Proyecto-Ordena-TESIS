@@ -14,11 +14,14 @@ import TableRow from '@mui/material/TableRow';
 import Paper from '@mui/material/Paper';
 import { Chip } from "@mui/material";
 
+import ordena from "../../assets/ordena.svg";
+
 
 //Obtención de datos de la api por medio del archivo store
 import { useHistorialStore } from "../../store/useHistorialStore";
 import { useHistProductStore } from "../../store/useHistorialStore";
 import { useInventariosStore } from "../../store/useProductoStore";
+import { useProveedoresStore } from "../../store/useProveedorStore";
 
 
 import { useUsuariosStore } from "../../store/useUsuarioStore";
@@ -27,7 +30,7 @@ import { useUsuariosStore } from "../../store/useUsuarioStore";
 import { useAuthStore } from "../../store/useAuthStore";
 
 import stockImage  from '../../assets/en-stock.png';
-import { useEffect, useMemo } from "react";
+import { use, useEffect, useMemo } from "react";
 
 //import { useEffect } from "react";
 
@@ -42,10 +45,14 @@ export function CountElement() {
 
     //Definición de constante para obtener datos 
 
-    const {pedidos,fetchPedidos} = useHistorialStore();
-    const {productos, fetchProducts} = useHistProductStore();
-    const {usuarios,fetchUsuarios} = useUsuariosStore();
-    
+    const {pedidos,fetchPedidos, loading:loadingPedidos} = useHistorialStore();
+    const {productos, fetchProducts,loading:loadingProducto} = useHistProductStore();
+    const {usuarios,fetchUsuarios, loading:loadingUsuarios} = useUsuariosStore();
+    const {proveedores,fetchProveedores,loading:loadingProveedor} = useProveedoresStore();
+
+    const isLoading = loadingPedidos || loadingProducto || loadingProveedor || loadingUsuarios;
+
+
    // const prodct = useInventariosStore(state=>state.inventarios)
   //  const prodcts = Object.values(prodct).flat();
   // Cargar los datos cuando el componente se monta
@@ -53,10 +60,12 @@ export function CountElement() {
         fetchPedidos();
         fetchProducts();
         fetchUsuarios();
+        fetchProveedores();
 
-    }, [fetchPedidos, fetchProducts,fetchUsuarios]);   
+    }, [fetchPedidos, fetchProducts,fetchUsuarios,fetchProveedores]);   
 
 
+ 
     //almacenar datos
     //let pedidosMostrados = pedidos;
     //let inventarioMostrados = productos;
@@ -128,7 +137,17 @@ export function CountElement() {
         }
     };
 
-
+   if (isLoading) {
+        return (
+                <Loader>
+                    <>
+                        <img src={ordena} alt="Ordena_logo" />
+                        <p>Ordena</p>
+                        <div>Cargando Dashboard...</div>
+                    </>
+                </Loader>
+        );
+    }
     return (
         <Contenedor_Dashboard>
             <h1 className="titulo_bn">Bienvenido, {usuario?.nombre || 'usuario'} </h1>
@@ -266,7 +285,7 @@ export function CountElement() {
                         }} >
                                 <TableRow>
                                     <TableCell>Id</TableCell>
-                                    <TableCell>Sucursal</TableCell>
+                                    <TableCell>Origen/Destino</TableCell>
                                     <TableCell>Productos</TableCell>
                                     <TableCell>Fecha Entrega</TableCell>
                                     <TableCell>Estado</TableCell>
@@ -282,9 +301,11 @@ export function CountElement() {
                                         <TableCell component="th" scope="row">
                                             {pedidos.id_p} </TableCell>
                                         <TableCell component="th" scope="row">
-                                            {SUCURSALES.find(s => s.id === pedidos.sucursal_fk)?.nombre ?? 'N/A'}
+                                            {(pedidos.sucursal_fk
+                                                ? SUCURSALES.find(s => s.id == pedidos.sucursal_fk)?.nombre
+                                                : (proveedores.find(p => p.id_provd == pedidos.proveedor_fk)?.nombres_provd)??'N/A')}
                                         </TableCell>
-                                        <TableCell>{pedidos.solicitud_fk?.productos?.length ?? 0}</TableCell>
+                                        <TableCell>{pedidos.detalles_pedido?.length || 0}</TableCell>
                                         <TableCell>{pedidos.fecha_entrega.split('T')[0] ?? 'N/A'}</TableCell>
                                         <TableCell>{getEstadoPedido(pedidos.estado_pedido_fk)}</TableCell>
 
@@ -499,3 +520,48 @@ const Contenedor_Dashboard = styled.div`
         }
     }
 `;
+
+const Loader = styled.div`
+    display:flex;
+    position:fixed;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    background: rgba(0, 0, 0, 0.52);
+    z-index: 1000;
+    right:0;
+    top: 0;
+    width: 85.5%;
+    height: 100%;
+
+    img{
+        width: 150px;
+        height: 150px;
+
+        animation: animate 2s infinite ease-in-out;
+    
+    }
+    p{
+        text-align:center;
+        font-size:30px;
+        font-weight:bold;
+        animation: animate 2s infinite ease-in-out;
+
+    }
+
+    @Keyframes animate{
+      0% {
+        transform: scale(1);
+        opacity:60%;
+  }
+  50% {
+    transform: scale(1.1); /* Aumenta el tamaño al 110% */
+        opacity:100%;
+  }
+  100% {
+    transform: scale(1);
+    opacity:60%;
+  }
+    }
+        
+ `

@@ -12,6 +12,7 @@ import { HistProductService } from "../services/historialService";
 
 //Definición de interfaces
 
+
 export interface ProductoSolicitud {
   id_solc_prod: number;
   cantidad: string;
@@ -20,12 +21,22 @@ export interface ProductoSolicitud {
   producto_codigo: string;
 }
 
+
 interface Solicitud {
   id_solc: number;
   fecha_creacion: string;
   observacion: string; 
   productos:ProductoSolicitud[];
   usuario_nombre: string;
+}
+
+export interface DetallePedido {
+  id: number;
+  cantidad: string;
+  descripcion: string;
+  productos_pedido_fk: number;
+  producto_nombre: string;
+  producto_codigo: string;
 }
 
 interface Bodega {
@@ -63,6 +74,7 @@ export interface Pedidos{
     solicitud_fk?: Solicitud;
     bodega_fk: Bodega;
     proveedor_fk?: number;
+detalles_pedido?:DetallePedido[];
 
 }
 

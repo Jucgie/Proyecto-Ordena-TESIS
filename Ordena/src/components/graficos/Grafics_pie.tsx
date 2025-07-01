@@ -55,15 +55,15 @@ export function Grafics_Pie() {
       label: 'Pedidos',
       data: counts,
       backgroundColor: [
-                  'rgba(255, 99, 132, 0.5)', // Morado para Aprobadas
-                'rgba(54, 162, 235, 0.5)',   // Azul para En Camino
-                'rgba(75, 192, 192, 0.5)',   // Verde para Completados
+                  '#FF9800', // pendiente
+                '#2196F3',   // En Camino
+                '#4CAF50',   // Completado
  
       ],
       borderColor: [
-                'rgba(255, 99, 132, 1)',
-                'rgb(75, 192, 110)',
-                'rgba(54, 162, 235, 1)',
+                'rgb(255, 232, 99)',
+                'rgb(75, 151, 192)',
+                'rgb(69, 235, 54)',
       ],
       borderWidth: 1,
     },
