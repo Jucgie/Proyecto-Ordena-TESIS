@@ -345,4 +345,13 @@ export const buscarProductosSimilares = async (data: {
     return response.data;
 };
 
+export async function getPedidosRecientes({ tipo, limit = 10, offset = 0 }: { tipo?: string, limit?: number, offset?: number }) {
+    const params = new URLSearchParams();
+    if (tipo) params.append('tipo', tipo);
+    params.append('limit', String(limit));
+    params.append('offset', String(offset));
+    const response = await api.get(`/pedidos/recientes/?${params.toString()}`);
+    return response.data;
+}
+
 export default api;

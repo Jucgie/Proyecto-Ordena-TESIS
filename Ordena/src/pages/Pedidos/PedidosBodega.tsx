@@ -3,7 +3,7 @@ import Layout from "../../components/layout/layout";
 import {
     Select, MenuItem, FormControl, InputLabel, TextField,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
-    Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Box, Typography, Alert, Chip, Autocomplete, IconButton, Card, CardContent, LinearProgress, Grid, List, ListItem, ListItemText
+    Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Box, Typography, Alert, Chip, Autocomplete, IconButton, Card, CardContent, LinearProgress, Grid, List, ListItem, ListItemText, Tooltip
 } from "@mui/material";
 import MuiAlert from "@mui/material/Alert";
 import ArrowDropUpIcon from '@mui/icons-material/ArrowDropUp';
@@ -29,6 +29,7 @@ import { usuarioService } from "../../services/usuarioService";
 import { solicitudesService, pedidosService, personalEntregaService, informesService } from "../../services/api";
 import EstadoBadge from "../../components/EstadoBadge";
 import { buscarProductosSimilares } from '../../services/api';
+import { getPedidosRecientes } from '../../services/api';
 
 // Interfaces
 interface Producto {
@@ -674,17 +675,36 @@ export default function PedidosBodega() {
         // No limpiar los pedidos ya que son registros importantes que deben mantenerse
     };
 
-    // Función para previsualizar el código único
-    const previsualizarCodigo = () => {
-        if (productoActual.nombre && productoActual.marca && productoActual.categoria) {
-            const categoria_prefijo = productoActual.categoria.substring(0, 3).toUpperCase();
-            const marca_prefijo = productoActual.marca.substring(0, 3).toUpperCase();
-            const modelo_prefijo = productoActual.modelo ? productoActual.modelo.substring(0, 3).toUpperCase() : 'GEN';
+    // Función para extraer modelo/variante desde el nombre (igual que backend)
+    const extraerModeloDesdeNombre = (nombre: string) => {
+        // Buscar patrones numéricos con unidades (10m, 500ml, 2L, etc.)
+        const match = nombre.match(/(\d+\s?(m|ml|l|kg|g|cm|mm|pcs|un|lt|mts|mt|x\d+))/i);
+        if (match) {
+            return match[0].replace(' ', '').toUpperCase();
+        }
+        // Buscar palabras relevantes (color, tamaño, etc.)
+        const match2 = nombre.match(/(rojo|azul|verde|negro|blanco|grande|pequeño|mediano|extra)/i);
+        if (match2) {
+            return match2[0].toUpperCase();
+        }
+        return 'GEN';
+    };
+
+    // Función para previsualizar el código interno generado (igual que backend)
+    const previsualizarCodigo = (producto: any) => {
+        if (producto?.nombre && producto?.marca && producto?.categoria) {
+            const categoria_prefijo = producto.categoria.substring(0, 4).toUpperCase();
+            const marca_prefijo = producto.marca.substring(0, 4).toUpperCase();
+            let modelo_prefijo = 'GEN';
+            if (producto.modelo && producto.modelo.trim() !== '') {
+                modelo_prefijo = producto.modelo.substring(0, 4).toUpperCase();
+            } else {
+                modelo_prefijo = extraerModeloDesdeNombre(producto.nombre);
+            }
             const fecha = new Date().toISOString().slice(0, 7).replace('-', '');
-            
             return `${categoria_prefijo}-${marca_prefijo}-${modelo_prefijo}-${fecha}-001`;
         }
-        return "Código se generará automáticamente";
+        return "Se generará automáticamente";
     };
 
     // Función para verificar producto existente
@@ -706,11 +726,14 @@ export default function PedidosBodega() {
             console.log('🔍 DEBUG - Buscando productos similares para:', producto);
             console.log('🔍 DEBUG - Bodega ID:', usuario?.bodega);
             
+            // Enviar también el código interno si está disponible
+            const codigo_interno = producto.codigo_interno || producto.codigo || undefined;
             const response = await buscarProductosSimilares({
                 nombre: producto.nombre,
                 marca: producto.marca,
                 categoria: producto.categoria,
-                bodega_id: usuario?.bodega
+                bodega_id: usuario?.bodega,
+                ...(codigo_interno ? { codigo_interno } : {})
             });
             
             console.log('🔍 DEBUG - Respuesta del backend:', response);
@@ -979,6 +1002,31 @@ export default function PedidosBodega() {
             procesarIngresoConProductosValidados();
         }
     }, [productosAValidar.length, productosValidados.length, modalValidacionMultiple, procesandoIngreso]);
+
+    // Nuevo estado para la pestaña activa y pedidos paginados
+    const [pestanaActiva, setPestanaActiva] = useState<'ingresos' | 'salidas'>('ingresos');
+    const [pedidosMostrados, setPedidosMostrados] = useState<any[]>([]);
+    const [loadingPedidos, setLoadingPedidos] = useState(false);
+    const PEDIDOS_POR_PAGINA = 10;
+
+    // Función para cargar solo los pedidos más recientes de la pestaña activa
+    const cargarPedidosRecientes = async () => {
+        setLoadingPedidos(true);
+        try {
+            const tipo = pestanaActiva === 'ingresos' ? 'ingreso' : 'salida';
+            const data = await getPedidosRecientes({ tipo, limit: PEDIDOS_POR_PAGINA, offset: 0 });
+            setPedidosMostrados(data.pedidos || []);
+        } catch (error) {
+            setPedidosMostrados([]);
+        }
+        setLoadingPedidos(false);
+    };
+
+    // Cargar pedidos cuando cambia la pestaña activa o el array de pedidos
+    useEffect(() => {
+        cargarPedidosRecientes();
+        // eslint-disable-next-line
+    }, [pestanaActiva, pedidosArray]);
 
     return (
         <Layout>
@@ -1996,124 +2044,152 @@ export default function PedidosBodega() {
                     onClose={() => setModalValidacionMultiple(false)}
                     maxWidth="md"
                     fullWidth
+                    PaperProps={{
+                        sx: {
+                            bgcolor: '#1a1a1a',
+                            color: '#fff',
+                            borderRadius: 3,
+                            // border: '2px solid #FFD700', // QUITAR BORDE AMARILLO
+                            boxShadow: 24,
+                            p: 0,
+                        }
+                    }}
                 >
                     <DialogTitle sx={{ 
-                        backgroundColor: '#1976d2', 
-                        color: 'white',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
+                        bgcolor: '#232323', 
+                        color: '#FFD700', 
+                        fontWeight: 700, 
+                        fontSize: 22, 
+                        borderBottom: '1px solid #333',
+                        display: 'flex', 
+                        alignItems: 'center',
+                        gap: 2
                     }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                            Validación de Productos - Progreso
-                        </Typography>
-                        <Typography variant="body2">
-                            {productosValidados.length + 1} de {productosValidados.length + productosAValidar.length + 1}
-                        </Typography>
+                        <span style={{fontSize: 28}}>🔎</span> ¿Qué hacer con este producto?
                     </DialogTitle>
-                    
-                    <DialogContent sx={{ mt: 2 }}>
+                    <DialogContent sx={{ bgcolor: '#1a1a1a', p: 3 }}>
                         {productoActualValidacion && (
                             <Box>
-                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-                                    Producto: {productoActualValidacion.nombre}
+                                <Typography variant="h6" sx={{ color: '#FFD700', fontWeight: 700, mb: 1 }}>
+                                    Ya existe un producto similar en el inventario
                                 </Typography>
-                                
-                                <Grid container spacing={2} sx={{ mb: 3 }}>
-                                    <Grid xs={6}>
-                                        <Typography variant="body2" color="textSecondary">
-                                            <strong>Marca:</strong> {productoActualValidacion.marca}
-                                        </Typography>
+                                <Typography variant="body1" sx={{ color: '#ccc', mb: 3 }}>
+                                    Puedes <b>sumar la cantidad</b> al stock existente o <b>registrar como producto nuevo</b> si es diferente.<br/>
+                                    <span style={{ color: '#FF9800', fontWeight: 500 }}>Revisa bien los datos antes de decidir.</span>
+                                </Typography>
+                                <Grid container spacing={2} alignItems="flex-start" sx={{ mb: 2 }}>
+                                    <Grid item xs={12} md={6}>
+                                        {/* Producto a ingresar */}
+                                        <Box sx={{
+                                            bgcolor: '#232323',
+                                            borderRadius: 2,
+                                            p: 2,
+                                            mb: 2,
+                                            boxShadow: 2,
+                                        }}>
+                                            <Typography variant="h6" sx={{ mb: 1, color: '#fff' }}>Producto a ingresar</Typography>
+                                            <Typography variant="body1" sx={{ color: '#bbb' }}>
+                                                <b>Nombre:</b> {productoActualValidacion.nombre}
+                                            </Typography>
+                                            <Typography variant="body1" sx={{ color: '#bbb' }}>
+                                                <b>Marca:</b> {productoActualValidacion.marca}
+                                            </Typography>
+                                            <Typography variant="body1" sx={{ color: '#bbb' }}>
+                                                <b>Categoría:</b> {productoActualValidacion.categoria}
+                                            </Typography>
+                                            <Typography variant="body1" sx={{ color: '#bbb' }}>
+                                                <b>Cantidad:</b> {productoActualValidacion.cantidad}
+                                            </Typography>
+                                            <Typography variant="body1" sx={{ color: '#bbb' }}>
+                                                <b>Código:</b> {previsualizarCodigo(productoActualValidacion)}
+                                            </Typography>
+                                        </Box>
                                     </Grid>
-                                    <Grid xs={6}>
-                                        <Typography variant="body2" color="textSecondary">
-                                            <strong>Categoría:</strong> {productoActualValidacion.categoria}
-                                        </Typography>
-                                    </Grid>
-                                    <Grid xs={6}>
-                                        <Typography variant="body2" color="textSecondary">
-                                            <strong>Cantidad:</strong> {productoActualValidacion.cantidad}
-                                        </Typography>
+                                    <Grid item xs={12} md={6}>
+                                        <Box sx={{ bgcolor: '#232323', borderRadius: 2, border: '1px solid #444', p: 2 }}>
+                                            <Typography variant="subtitle2" sx={{ color: '#FFD700', fontWeight: 600, mb: 1 }}>
+                                                Productos similares en inventario
+                                            </Typography>
+                                            {productosSimilaresActual.length > 0 ? (
+                                                <List dense>
+                                                    {productosSimilaresActual.map((producto, index) => (
+                                                        <ListItem 
+                                                            key={index}
+                                                            selected={productoSeleccionado?.id === producto.id}
+                                                            onClick={() => setProductoSeleccionado(producto)}
+                                                            sx={{
+                                                                border: productoSeleccionado?.id === producto.id ? '2px solid #FFD700' : '1px solid #444',
+                                                                borderRadius: 1,
+                                                                mb: 1,
+                                                                cursor: 'pointer',
+                                                                bgcolor: productoSeleccionado?.id === producto.id ? '#FFD70022' : '#232323',
+                                                                '&:hover': { bgcolor: '#FFD70011' }
+                                                            }}
+                                                        >
+                                                            <ListItemText
+                                                                primary={<span style={{ color: '#FFD700', fontWeight: 600 }}>
+                                                                    {producto.nombre === productoActualValidacion.nombre ? <b>{producto.nombre}</b> : producto.nombre}
+                                                                </span>}
+                                                                secondary={<>
+                                                                    <span style={{ color: '#ccc' }}>
+                                                                        Marca: {producto.marca === productoActualValidacion.marca ? <b>{producto.marca}</b> : producto.marca} |
+                                                                        Categoría: {producto.categoria === productoActualValidacion.categoria ? <b>{producto.categoria}</b> : producto.categoria} |
+                                                                        <b>Stock actual:</b> <span style={{ color: producto.stock_actual > 0 ? '#4CAF50' : '#F44336', fontWeight: 600 }}>{producto.stock_actual || 0}</span><br/>
+                                                                        <b>Código:</b> {producto.codigo_interno || '—'}
+                                                                    </span>
+                                                                </>}
+                                                            />
+                                                        </ListItem>
+                                                    ))}
+                                                </List>
+                                            ) : (
+                                                <Typography variant="body2" sx={{ color: '#ccc' }}>
+                                                    No se encontraron productos similares. Se creará como nuevo producto.
+                                                </Typography>
+                                            )}
+                                        </Box>
                                     </Grid>
                                 </Grid>
-
-                                {productosSimilaresActual.length > 0 ? (
-                                    <Box>
-                                        <Typography variant="subtitle1" gutterBottom>
-                                            Se encontraron productos similares. ¿Qué deseas hacer?
-                                        </Typography>
-                                        
-                                        <Box sx={{ mb: 2 }}>
-                                            <Typography variant="body2" color="textSecondary" gutterBottom>
-                                                Productos similares encontrados:
-                                            </Typography>
-                                            <List dense>
-                                                {productosSimilaresActual.map((producto, index) => (
-                                                    <ListItem 
-                                                        key={index}
-                                                        selected={productoSeleccionado?.id === producto.id}
-                                                        onClick={() => setProductoSeleccionado(producto)}
-                                                        sx={{
-                                                            border: '1px solid #e0e0e0',
-                                                            borderRadius: 1,
-                                                            mb: 1,
-                                                            cursor: 'pointer',
-                                                            '&.Mui-selected': {
-                                                                backgroundColor: '#e3f2fd',
-                                                                borderColor: '#1976d2'
-                                                            },
-                                                            '&:hover': {
-                                                                backgroundColor: '#f5f5f5'
-                                                            }
-                                                        }}
-                                                    >
-                                                        <ListItemText
-                                                            primary={producto.nombre}
-                                                            secondary={`Marca: ${producto.marca} | Categoría: ${producto.categoria} | Stock: ${producto.stock_actual || 0}`}
-                                                        />
-                                                    </ListItem>
-                                                ))}
-                                            </List>
-                                        </Box>
-                                        
-                                        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-                                            <Button 
-                                                onClick={() => manejarDecisionProducto('nuevo')}
-                                                variant="outlined"
-                                                sx={{ borderColor: '#4CAF50', color: '#4CAF50' }}
-                                            >
-                                                Crear Nuevo Producto
-                                            </Button>
+                                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mt: 3 }}>
+                                    <Tooltip title="Registrar como producto nuevo, aunque sea similar.">
+                                        <Button 
+                                            onClick={() => manejarDecisionProducto('nuevo')}
+                                            variant="contained"
+                                            sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, borderRadius: 2, px: 4, boxShadow: 2, '&:hover': { bgcolor: '#FFC700' } }}
+                                        >
+                                            Crear como producto nuevo
+                                        </Button>
+                                    </Tooltip>
+                                    <Tooltip title="Sumar la cantidad al stock del producto seleccionado.">
+                                        <span>
                                             <Button 
                                                 onClick={() => manejarDecisionProducto('existente', productoSeleccionado)}
                                                 variant="contained"
                                                 disabled={!productoSeleccionado}
-                                                sx={{ backgroundColor: '#1976d2' }}
+                                                sx={{ bgcolor: '#4CAF50', color: '#fff', fontWeight: 700, borderRadius: 2, px: 4, boxShadow: 2, '&:hover': { bgcolor: '#43a047' }, '&:disabled': { bgcolor: '#666', color: '#ccc' } }}
                                             >
-                                                Usar Producto Existente
+                                                Sumar al stock existente
                                             </Button>
-                                        </Box>
-                                    </Box>
-                                ) : (
-                                    <Box>
-                                        <Typography variant="subtitle1" gutterBottom>
-                                            No se encontraron productos similares. Se creará un nuevo producto.
-                                        </Typography>
-                                        
-                                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                                            <Button 
-                                                onClick={() => manejarDecisionProducto('nuevo')}
-                                                variant="contained"
-                                                sx={{ backgroundColor: '#4CAF50' }}
-                                            >
-                                                Continuar
-                                            </Button>
-                                        </Box>
-                                    </Box>
-                                )}
+                                        </span>
+                                    </Tooltip>
+                                </Box>
+                                <Box sx={{ mt: 4, textAlign: 'center' }}>
+                                    <Typography variant="caption" sx={{ color: '#888' }}>
+                                        Si tienes dudas, consulta con tu supervisor o revisa la documentación interna.
+                                    </Typography>
+                                </Box>
                             </Box>
                         )}
                     </DialogContent>
+                    <DialogActions sx={{ bgcolor: '#1a1a1a', borderTop: '1px solid #333', p: 2 }}>
+                        <Button 
+                            onClick={() => setModalValidacionMultiple(false)} 
+                            sx={{ color: '#FFD700', borderColor: '#FFD700', fontWeight: 600, borderRadius: 2, '&:hover': { bgcolor: 'rgba(255, 215, 0, 0.1)' } }}
+                            variant="outlined"
+                        >
+                            Cancelar
+                        </Button>
+                    </DialogActions>
                 </Dialog>
             </div>
         </Layout>

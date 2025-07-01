@@ -3,7 +3,7 @@ import Layout from "../../components/layout/layout";
 import {
     Paper, Typography, Box, Button, TextField, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
     Card, CardContent, CardMedia, CardActionArea, Checkbox, FormControl, InputLabel, Select, IconButton,
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Alert
 } from "@mui/material";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -22,6 +22,9 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { BODEGA_CENTRAL } from "../../constants/ubicaciones";
 import { useCallback } from "react";
 import CloseIcon from '@mui/icons-material/Close';
+import Snackbar from '@mui/material/Snackbar';
+import MuiAlert from '@mui/material/Alert';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
 async function fetchImagenUnsplash(nombre: string): Promise<string> {
     const accessKey = "rz2WkwQyM7en1zvTElwVpAbqGaOroIHqoNCllxW1qlg";
@@ -202,10 +205,47 @@ export default function Inventario() {
     // --- Mejorar función de filtro para alertas ---
     const [alertaFiltro, setAlertaFiltro] = useState<null | 'bajo' | 'alto'>(null);
 
+  
+    // Modal de error personalizado
+    const [showErrorModal, setShowErrorModal] = useState(false);
+    const [errorModalMessage, setErrorModalMessage] = useState<string | string[]>(""); // <-- así
+    
+
     // Handlers CRUD
-    const handleAddProduct = (p: ProductInt) => {
-        addProducto(ubicacionId, p);
-        setModalAddOpen(false);
+    const handleAddProduct = async (p: ProductInt) => {
+        try {
+            await addProducto(ubicacionId, p);
+            setModalAddOpen(false);
+        } catch (error: any) {
+            setModalAddOpen(false);
+            let msg: string | string[] = "Error desconocido";
+            let errorObj = error;
+    
+            // Si el error viene anidado en error.error
+            if (error && typeof error === "object" && error.error) {
+                errorObj = error.error;
+            }
+    
+            if (errorObj && typeof errorObj === "object" && errorObj !== null) {
+                // Extraer todos los mensajes de los arrays del objeto
+                const mensajes = Object.values(errorObj)
+                    .flat()
+                    .filter((m: any) => typeof m === "string");
+                if (mensajes.length === 1) {
+                    msg = mensajes[0];
+                } else if (mensajes.length > 1) {
+                    msg = mensajes;
+                } else {
+                    msg = JSON.stringify(errorObj);
+                }
+            } else if (typeof errorObj === "string") {
+                msg = errorObj;
+            } else if (errorObj?.detail) {
+                msg = errorObj.detail;
+            }
+            setErrorModalMessage(msg as string); // <-- aquí está el error de tipos
+            setShowErrorModal(true);
+        }
     };
 
     const handleUpdateProduct = (updatedProduct: ProductInt) => {
@@ -252,6 +292,7 @@ export default function Inventario() {
             typeof initial?.im === "string" && initial.im ? initial.im : sin_imagen
         );
         const [isLoadingImg, setIsLoadingImg] = useState(false);
+        const [generalError, setGeneralError] = useState<string>("");
 
         // Buscar imagen sugerida de Unsplash cuando cambia el nombre y no hay imagen subida
         useEffect(() => {
@@ -290,6 +331,7 @@ export default function Inventario() {
 
         const handleSubmit = async (e: React.FormEvent) => {
             e.preventDefault();
+            setGeneralError("");
             const newErrors: { [key: string]: string } = {};
             if (!form.name.trim()) newErrors.name = "Campo obligatorio";
             if (!form.code.trim()) newErrors.code = "Campo obligatorio";
@@ -306,13 +348,26 @@ export default function Inventario() {
             if (Object.keys(newErrors).length > 0) return;
 
             let imagenFinal = form.im;
-            // Si no hay imagen subida, busca una en Unsplash
             if (!imagenFinal) {
                 const url = await fetchImagenUnsplash(form.name);
-                if (url) imagenFinal = url;
-                else imagenFinal = sin_imagen;
+                imagenFinal = url || sin_imagen;
             }
-            onSave({ ...form, im: imagenFinal });
+            try {
+                await onSave({ ...form, im: imagenFinal });
+            } catch (apiErrors: any) {
+                const backendErrors: { [key: string]: string } = {};
+                let general = "";
+                if (apiErrors.nombre_prodc) {
+                    backendErrors.name = apiErrors.nombre_prodc[0];
+                    general = apiErrors.nombre_prodc[0];
+                }
+                if (apiErrors.codigo_interno) {
+                    backendErrors.code = apiErrors.codigo_interno[0];
+                    general = apiErrors.codigo_interno[0];
+                }
+                setErrors(backendErrors);
+                setGeneralError(general);
+            }
         };
 
         return (
@@ -325,6 +380,11 @@ export default function Inventario() {
                     gap: 3
                 }}
             >
+                {generalError && (
+                    <Box sx={{ mb: 1 }}>
+                        <Alert severity="error" variant="filled">{generalError}</Alert>
+                    </Box>
+                )}
                 {/* Previsualización de imagen */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 1 }}>
                     <Box sx={{ position: 'relative', width: 110, height: 110 }}>
@@ -1643,6 +1703,42 @@ export default function Inventario() {
                 open={modalGestionOpen}
                 onClose={() => setModalGestionOpen(false)}
             />
+            {/* Modal de error personalizado */}
+            <Dialog
+                open={showErrorModal}
+                onClose={() => setShowErrorModal(false)}
+                maxWidth="xs"
+                PaperProps={{
+                    sx: {
+                        borderRadius: 4,
+                        bgcolor: '#fff',
+                        boxShadow: 24,
+                        p: 2,
+                        minWidth: 320,
+                        maxWidth: 360,
+                        textAlign: 'center',
+                    }
+                }}
+            >
+                <DialogTitle sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 2 }}>
+                    <ErrorOutlineIcon sx={{ fontSize: 60, color: '#B71C1C', mb: 1 }} />
+                    <span style={{ color: '#B71C1C', fontWeight: 700, fontSize: 22 }}>¡Error al crear producto!</span>
+                </DialogTitle>
+                <DialogContent sx={{ color: '#B71C1C', fontWeight: 500, fontSize: 18, pb: 0 }}>
+                    {Array.isArray(errorModalMessage)
+                        ? (
+                            <ul style={{ paddingLeft: 20, textAlign: 'left' }}>
+                                {errorModalMessage.map((m, i) => <li key={i}>{m}</li>)}
+                            </ul>
+                        )
+                        : errorModalMessage}
+                </DialogContent>
+                <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+                    <Button onClick={() => setShowErrorModal(false)} variant="contained" sx={{ bgcolor: '#B71C1C', color: '#fff', fontWeight: 700, borderRadius: 2, px: 4 }}>
+                        Cerrar
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Layout>
     );
 }

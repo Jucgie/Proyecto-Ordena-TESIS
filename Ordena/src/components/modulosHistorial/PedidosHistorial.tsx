@@ -1,276 +1,570 @@
+import React, { useEffect, useState, useMemo } from "react";
 import styled from "styled-components";
-
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Paper from '@mui/material/Paper';
-import { Select, MenuItem } from "@mui/material";
-
+import {
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+    Select, MenuItem, TextField, Button, Box, Typography, Grid, IconButton, Tooltip, Alert, CircularProgress, Dialog, DialogTitle, DialogContent, Tabs, Tab
+} from "@mui/material";
+import {
+    FilterAlt as FilterIcon,
+    TrendingUp as TrendingUpIcon,
+    Refresh as RefreshIcon,
+    FileDownload as ExportIcon,
+    Search as SearchIcon
+} from "@mui/icons-material";
 import { BtnAct } from "../button/ButtonHist";
-
+import ordena from "../../assets/ordena.svg";
+import { useHistorialStore } from "../../store/useHistorialStore";
 import { PedidoDetalle } from "./DetallePedido";
 import { DespachoDetalle } from "./DetalleDespacho";
-import { useEffect, useState, useMemo } from "react";
-
-import ordena from "../../assets/ordena.svg";
-
-//Obtención de datos de la api por medio del archivo store
-import { useHistorialStore } from "../../store/useHistorialStore";
-
-
-//import ReplayIcon from '@mui/icons-material/Replay';
-
-
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Props {
     setPedido: () => void;
 }
 
-export function PedidoHistorial({ setPedido }: Props) {
+// Estilos
+const EstadisticasCard = styled.div`
+  background: #2E2E2E;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #444;
+`;
 
+const ToolbarContainer = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #2E2E2E;
+  border-radius: 8px;
+  border: 1px solid #444;
+`;
+
+const FiltrosCard = styled.div`
+  background: #2E2E2E;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #444;
+`;
+
+export function PedidoHistorial({ setPedido }: Props) {
     const [busqueda, setBusqueda] = useState("");
     const [detalle, setDetalle] = useState(false);
-    const [despacho, setDespacho] = useState(false);
     const [pedidoSeleccionado, setPedidoSeleccionado] = useState<number | null>(null);
-
     const { pedidos, fetchPedidos, loading, error } = useHistorialStore();
-
     const [sucursalSeleccionada, setSucursalSeleccionada] = useState("");
     const [usuarioSeleccionada, setUsuarioSeleccionada] = useState("");
+    const [showFiltros, setShowFiltros] = useState(false);
+    const [showEstadisticas, setShowEstadisticas] = useState(true);
+    const [showDetalle, setShowDetalle] = useState(false);
+    const [tab, setTab] = useState<'ingresos' | 'salidas'>('salidas');
 
     useEffect(() => {
         fetchPedidos();
     }, [fetchPedidos]);
+
+    // Estadísticas simples
+    const totalPedidos = pedidos.length;
+    const totalEntregados = pedidos.filter(p => p.estado_pedido_fk === 2).length; // Ajusta el valor según tu sistema
+    const totalPendientes = pedidos.filter(p => p.estado_pedido_fk === 1).length;
+    const totalProductos = pedidos.reduce((acc, p) => acc + (p.solicitud_fk?.productos?.reduce((a, prod) => a + Number(prod.cantidad), 0) || 0), 0);
     
     const sucursalesBusqueda = useMemo(() => {
         const nombres = pedidos.map(p => p.sucursal_fk?.nombre_sucursal).filter(Boolean);
         return [...new Set(nombres)];
-    },[pedidos]);
+    }, [pedidos]);
 
     const usuariosBusqueda = useMemo(() => {
         const nombresUs = pedidos.map(p => p.solicitud_fk?.usuario_nombre).filter(Boolean);
         return [...new Set(nombresUs)];
-    },[pedidos]);
+    }, [pedidos]);
 
-    // sección para definir los datos para la busqueda
-    const pedidosFiltros = useMemo(()=>{
+    const pedidosFiltros = useMemo(() => {
         return pedidos.filter(pedido => {
-            //filtro para sucursal
             const filtroSucursal = sucursalSeleccionada
             ? pedido.sucursal_fk?.nombre_sucursal === sucursalSeleccionada
             : true;
-
-            //filtro para usuario
             const filtroUsuario = usuarioSeleccionada
             ? pedido.solicitud_fk?.usuario_nombre === usuarioSeleccionada
             : true;
-
-            //filtro para la barra de busqueda
             const busquedaLower = busqueda.toLowerCase();
             const filtroBusqueda = busquedaLower === ""
             ? true
             : (
-                (pedido.sucursal_fk?.nombre_sucursal || "").toLowerCase().includes(busquedaLower) ||
+                (pedido.sucursal_fk?.nombre_sucursal || pedido.sucursal_nombre || "").toLowerCase().includes(busquedaLower) ||
                 (pedido.fecha_entrega || "").toLowerCase().includes(busquedaLower) ||
-                (pedido.personal_entrega_fk?.nombre_psn || "").toLowerCase().includes(busquedaLower) ||
-                (pedido.solicitud_fk?.usuario_nombre || "").toLowerCase().includes(busquedaLower) ||
-                String(pedido.solicitud_fk?.productos.length || 0).includes(busquedaLower)
+                (pedido.personal_entrega_fk?.nombre_psn || pedido.personal_entrega_nombre || "").toLowerCase().includes(busquedaLower) ||
+                (pedido.solicitud_fk?.usuario_nombre || pedido.usuario_nombre || "").toLowerCase().includes(busquedaLower) ||
+                (Array.isArray(pedido.solicitud_fk?.productos) ? String(pedido.solicitud_fk.productos.length) : "0").includes(busquedaLower)
             );
             return filtroSucursal && filtroBusqueda && filtroUsuario;
-            
         });
-    },[sucursalSeleccionada, pedidos,busqueda, usuarioSeleccionada])
-    
-    
-    //Configuracion en caso de carga
-        if (loading) return (
-            <Loader>
-                <>
-                <img src={ordena} alt="Ordena_logo" />
-                <p>Ordena</p>
-                {/* <div>Cargando...</div> */}
-                </>
-            </Loader>)
-        if (error) return <div>Error: {error}</div>;
+    }, [sucursalSeleccionada, pedidos, busqueda, usuarioSeleccionada]);
+
+    // Separar ingresos y salidas
+    const ingresos = pedidosFiltros.filter(p => !!p.proveedor_fk || !!p.proveedor_nombre);
+    const salidas = pedidosFiltros.filter(p => !!p.sucursal_fk || !!p.sucursal_nombre);
+
+    // Función de exportación Excel profesional
+    const handleExportExcel = () => {
+        const wb = XLSX.utils.book_new();
+        // Salidas
+        const salidasData = salidas.map(pedido => {
+            const detalles = pedido.detalles_pedido || [];
+            const cantidadTotal = detalles.reduce((a, d) => a + Number(d.cantidad || 0), 0);
+            return {
+                ID: pedido.id_p,
+                Fecha: pedido.fecha_entrega?.split('T')[0] || '',
+                Sucursal: pedido.sucursal_nombre || '',
+                Usuario: pedido.usuario_nombre || '',
+                'Cantidad (total)': cantidadTotal,
+                Transportista: pedido.personal_entrega_nombre || '',
+            };
+        });
+        const wsSalidas = XLSX.utils.json_to_sheet(salidasData);
+        // Cabeceras doradas y negrita
+        const salidasHeader = ["ID", "Fecha", "Sucursal", "Usuario", "Cantidad (total)", "Transportista"];
+        XLSX.utils.sheet_add_aoa(wsSalidas, [salidasHeader], { origin: "A1" });
+        // Ajuste de ancho
+        wsSalidas['!cols'] = [
+            { wch: 6 }, { wch: 12 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 22 }
+        ];
+        // Totales
+        XLSX.utils.sheet_add_aoa(wsSalidas, [["", "", "", "Total", salidasData.reduce((a, d) => a + Number(d["Cantidad (total)"] || 0), 0), ""]], { origin: -1 });
+        XLSX.utils.book_append_sheet(wb, wsSalidas, 'Salidas');
+        // Ingresos
+        const ingresosData = ingresos.map(pedido => {
+            const detalles = pedido.detalles_pedido || [];
+            const cantidadTotal = detalles.reduce((a, d) => a + Number(d.cantidad || 0), 0);
+            return {
+                ID: pedido.id_p,
+                Fecha: pedido.fecha_entrega?.split('T')[0] || '',
+                Proveedor: pedido.proveedor_nombre || '',
+                Usuario: pedido.usuario_nombre || '',
+                'Cantidad (total)': cantidadTotal,
+            };
+        });
+        const wsIngresos = XLSX.utils.json_to_sheet(ingresosData);
+        const ingresosHeader = ["ID", "Fecha", "Proveedor", "Usuario", "Cantidad (total)"];
+        XLSX.utils.sheet_add_aoa(wsIngresos, [ingresosHeader], { origin: "A1" });
+        wsIngresos['!cols'] = [
+            { wch: 6 }, { wch: 12 }, { wch: 22 }, { wch: 22 }, { wch: 16 }
+        ];
+        XLSX.utils.sheet_add_aoa(wsIngresos, [["", "", "Total", "", ingresosData.reduce((a, d) => a + Number(d["Cantidad (total)"] || 0), 0)]], { origin: -1 });
+        XLSX.utils.book_append_sheet(wb, wsIngresos, 'Ingresos');
+        XLSX.writeFile(wb, 'historial_pedidos_profesional.xlsx');
+    };
+
+    // Función de exportación PDF profesional
+    const handleExportPDF = () => {
+        const doc = new jsPDF('l');
+        doc.setFontSize(18);
+        doc.text('Historial de Pedidos - Salidas', 14, 16);
+        // Salidas
+        autoTable(doc, {
+            startY: 22,
+            head: [["ID", "Fecha", "Sucursal", "Usuario", "Cantidad (total)", "Transportista"]],
+            body: salidas.map(pedido => {
+                const detalles = pedido.detalles_pedido || [];
+                const cantidadTotal = detalles.reduce((a, d) => a + Number(d.cantidad || 0), 0);
+                return [
+                    pedido.id_p,
+                    pedido.fecha_entrega?.split('T')[0] || '',
+                    pedido.sucursal_nombre || '',
+                    pedido.usuario_nombre || '',
+                    cantidadTotal,
+                    pedido.personal_entrega_nombre || ''
+                ];
+            }),
+            headStyles: { fillColor: [255, 215, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
+            styles: { fontSize: 10 },
+            foot: [["", "", "Total", "", salidas.reduce((a, p) => a + (p.detalles_pedido || []).reduce((b, d) => b + Number(d.cantidad || 0), 0), 0), ""]],
+            footStyles: { fillColor: [245, 245, 245], textColor: [0, 0, 0], fontStyle: 'bold' },
+        });
+        // Ingresos
+        let y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 12 : 40;
+        doc.setFontSize(18);
+        doc.text('Historial de Pedidos - Ingresos', 14, y);
+        autoTable(doc, {
+            startY: y + 6,
+            head: [["ID", "Fecha", "Proveedor", "Usuario", "Cantidad (total)"]],
+            body: ingresos.map(pedido => {
+                const detalles = pedido.detalles_pedido || [];
+                const cantidadTotal = detalles.reduce((a, d) => a + Number(d.cantidad || 0), 0);
+                return [
+                    pedido.id_p,
+                    pedido.fecha_entrega?.split('T')[0] || '',
+                    pedido.proveedor_nombre || '',
+                    pedido.usuario_nombre || '',
+                    cantidadTotal
+                ];
+            }),
+            headStyles: { fillColor: [255, 215, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
+            styles: { fontSize: 10 },
+            foot: [["", "Total", "", "", ingresos.reduce((a, p) => a + (p.detalles_pedido || []).reduce((b, d) => b + Number(d.cantidad || 0), 0), 0)]],
+            footStyles: { fillColor: [245, 245, 245], textColor: [0, 0, 0], fontStyle: 'bold' },
+        });
+        doc.save('historial_pedidos_profesional.pdf');
+    };
 
     return (
-        <Container>
-            <div className="cerr">
-                <span onClick={setPedido} className="vol"> 🠔 Volver</span>
-            </div>
-            <div>
-                <h2>Historial Pedidos</h2>
-            </div>
-            <section className="Botones">
-                <div className="Boton-start">
-                    <input type="text" placeholder="Buscar..."
+        <Dialog
+            open={true}
+            onClose={setPedido}
+            maxWidth="xl"
+            fullWidth
+            PaperProps={{
+                sx: {
+                    background: '#1E1E1E',
+                    borderRadius: 3,
+                    minHeight: '80vh',
+                    maxHeight: '95vh',
+                    boxShadow: 24,
+                    p: 0,
+                    overflow: 'hidden',
+                }
+            }}
+        >
+            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: '#232323', color: '#FFD700', fontWeight: 700, fontSize: 24 }}>
+                📦 Historial de Pedidos
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Button onClick={handleExportExcel} variant="contained" sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}>
+                        Exportar Excel
+                    </Button>
+                    <Button onClick={handleExportPDF} variant="contained" sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}>
+                        Exportar PDF
+                    </Button>
+                    <Button onClick={setPedido} variant="outlined" sx={{ color: "#FFD700", borderColor: "#FFD700" }}>
+                        🠔 Volver
+                    </Button>
+                </Box>
+            </DialogTitle>
+            <DialogContent sx={{ p: 0, bgcolor: '#1E1E1E', overflow: 'auto' }}>
+                <Box sx={{ p: 3 }}>
+                    {/* Estadísticas */}
+                    {showEstadisticas && (
+                        <EstadisticasCard>
+                            <Grid container spacing={2}>
+                                <Grid item xs={12} md={3}>
+                                    <StatCard color="#FFD700" icon="📦" title="Total Pedidos" valor={totalPedidos} subtitulo="" />
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <StatCard color="#4CAF50" icon="✅" title="Entregados" valor={totalEntregados} subtitulo="" />
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <StatCard color="#FF9800" icon="⏳" title="Pendientes" valor={totalPendientes} subtitulo="" />
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <StatCard color="#2196F3" icon="🛒" title="Productos pedidos" valor={totalProductos} subtitulo="" />
+                                </Grid>
+                            </Grid>
+                        </EstadisticasCard>
+                    )}
+
+                    {/* Barra de herramientas */}
+                    <ToolbarContainer>
+                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flex: 1 }}>
+                            <TextField
+                                placeholder="Buscar por sucursal, usuario, transportista..."
                         value={busqueda}
                         onChange={e => setBusqueda(e.target.value)}
-                    />
-                </div>
-                <div className="Boton_center">
-                        <Select
+                                size="small"
+                                sx={{ minWidth: 300 }}
+                                InputProps={{
+                                    startAdornment: <SearchIcon sx={{ color: '#666', mr: 1 }} />
+                                }}
+                            />
+                            <Button
+                                variant="outlined"
+                                startIcon={<FilterIcon />}
+                                onClick={() => setShowFiltros(!showFiltros)}
+                                sx={{ color: "#FFD700", borderColor: "#FFD700" }}
+                            >
+                                Filtros
+                            </Button>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Tooltip title="Recargar">
+                                <IconButton onClick={fetchPedidos} sx={{ color: "#FFD700" }}>
+                                    <RefreshIcon />
+                                </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Mostrar/Ocultar Estadísticas">
+                                <IconButton onClick={() => setShowEstadisticas(!showEstadisticas)} sx={{ color: "#FFD700" }}>
+                                    <TrendingUpIcon />
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
+                    </ToolbarContainer>
+
+                    {/* Filtros avanzados */}
+                    {showFiltros && (
+                        <FiltrosCard>
+                            <Grid container spacing={2} alignItems="center">
+                                <Grid item xs={12} md={3}>
+                                    <TextField
+                                        select
+                                        label="Sucursal"
                             value={sucursalSeleccionada}
                             onChange={(e) => setSucursalSeleccionada(e.target.value)}
-                            displayEmpty
-                            style={{ width:'10vw', height:40,background: "#2E2E2E", color: "white", borderRadius: "5px" }}
-                          >
-                            <MenuItem value=""><em>Sucursales (Todos)
-                                </em></MenuItem>
-                            {sucursalesBusqueda.map((sucursal)=>(
-
-                            <MenuItem 
-                            key={sucursal}
-                            value={sucursal}>{sucursal}</MenuItem>
-                            ))}
-
-                          </Select>
-
-                             <Select
+                                        size="small"
+                                        fullWidth
+                                    >
+                                        <MenuItem value=""><em>Todas</em></MenuItem>
+                                        {sucursalesBusqueda.map((sucursal) => (
+                                            <MenuItem key={sucursal} value={sucursal}>{sucursal}</MenuItem>
+                                        ))}
+                                    </TextField>
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <TextField
+                                        select
+                                        label="Usuario"
                             value={usuarioSeleccionada}
                             onChange={(e) => setUsuarioSeleccionada(e.target.value)}
-                            displayEmpty
-                            style={{ width: '10vw', height:40,background: "#2E2E2E", color: "white", borderRadius: "5px" }}
+                                        size="small"
+                                        fullWidth
                           >
-                            <MenuItem value="">Usuarios (Todos)</MenuItem>
-                            {usuariosBusqueda.map((usuario)=>  (
-
+                                        <MenuItem value=""><em>Todos</em></MenuItem>
+                                        {usuariosBusqueda.map((usuario) => (
                                 <MenuItem key={usuario} value={usuario}>{usuario}</MenuItem>
                             ))}
-                          </Select>
- 
-                </div> 
-                <div className="Boton-end">
-                    <BtnAct titulo="Recargar"
-                         background="#1E1E1E" 
-                         funcion={fetchPedidos}/>
-                    <BtnAct titulo="Exportar" background="#1E1E1E" />
-                </div>
-            </section>
-            {/*Tabla central */}
-            <div className="table-container">
+                                    </TextField>
+                                </Grid>
+                                {/* Puedes agregar más filtros aquí si lo deseas */}
+                            </Grid>
+                        </FiltrosCard>
+                    )}
 
-                <TableContainer component={Paper}
-                    sx={{
-                        maxHeight: '30vw', width: "60vw",
-                        minHeight:'30vw',background:"#232323",
-                        '& .MuiTableCell-root': {
-                            color: 'white', textAlign: 'center'
-                        },
-                        '@media (max-width: 768px)': {
-                            width: '100%', // o el valor que prefieras
-                            minWidth: 0,
-                            maxWidth: '70vw',
-                            maxHeight: '40vw',
-                        }
-                    }}
-                >
-                    
-                    <Table sx={{ minWidth: 650 }} aria-label="simple table" stickyHeader>
-                        <TableHead sx={{
-                            '& .MuiTableCell-root': {
-                                backgroundColor: '#232323',
-                                color: 'white'
-                            }
-                        }} >
+                    {/* Tabs para ingresos/salidas */}
+                    <Tabs
+                        value={tab}
+                        onChange={(_, v) => setTab(v)}
+                        TabIndicatorProps={{ style: { backgroundColor: '#FFD700', height: 4, borderRadius: 2 } }}
+                        sx={{ mb: 3, 
+                            '& .MuiTab-root': { color: '#fff', fontWeight: 400 },
+                            '& .Mui-selected': { color: '#FFD700 !important', fontWeight: 700 },
+                        }}
+                    >
+                        <Tab value="salidas" label="Salidas a sucursal" />
+                        <Tab value="ingresos" label="Ingresos de proveedor" />
+                    </Tabs>
 
+                    {/* Tabla de salidas */}
+                    {tab === 'salidas' && (
+                        <TableContainer component={Paper} sx={{ bgcolor: '#232323', borderRadius: 2, maxHeight: '50vh' }}>
+                            <Table stickyHeader>
+                                <TableHead>
                             <TableRow>
-                                <TableCell>ID</TableCell>
-                                <TableCell>Fecha Inicio</TableCell>
-                                <TableCell align="right">Fecha Entrega</TableCell>
-                                <TableCell align="right">Sucursal</TableCell>
-                                <TableCell align="right">Usuario</TableCell>
-                                <TableCell align="right">Cantidad(total)</TableCell>
-                                <TableCell align="right">Productos</TableCell>
-                                <TableCell align="right">
-                                    Transportista
-                                </TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>ID</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Sucursal</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Usuario</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Cantidad (total)</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Transportista</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Acciones</TableCell>
                             </TableRow>
                         </TableHead>
-                        <TableBody
-                            sx={{ background: "#232323" }}
-                        >
-                        {/*Recorrido de los datos utilizando la constante de filtro de busqueda */}    
-                            {pedidosFiltros.map((pedido) => (
-                                <TableRow
-                                    key={pedido.id_p}
-                                    sx={{ 
-                                        '&:last-child td, &:last-child th': { border: 0 },
-                                        backgroundColor: pedido.id_p === pedidoSeleccionado ? 'rgba(243, 210, 22, 0.7)' : 'transparent',
-                                        '&:hover': {
-                                            backgroundColor: 'rgba(255, 255, 255, 0.08)'
-                                        }
-                                    }}
-                                >
-                                    <TableCell component="th" scope="row">
-                                        {pedido.id_p}
+                                <TableBody>
+                                    {salidas.map((pedido) => {
+                                        const detalles = pedido.detalles_pedido || [];
+                                        const cantidadTotal = detalles.reduce((a: number, d: any) => a + Number(d.cantidad || 0), 0);
+                                        return (
+                                            <TableRow key={pedido.id_p} hover>
+                                                <TableCell sx={{ color: '#fff' }}>{pedido.id_p}</TableCell>
+                                                <TableCell sx={{ color: '#fff' }}>{pedido.fecha_entrega?.split('T')[0] || '—'}</TableCell>
+                                                <TableCell sx={{ color: '#fff' }}>{pedido.sucursal_nombre || '—'}</TableCell>
+                                                <TableCell sx={{ color: '#fff' }}>{pedido.usuario_nombre || '—'}</TableCell>
+                                                <TableCell sx={{ color: '#FFD700', fontWeight: 700 }}>{cantidadTotal || '—'}</TableCell>
+                                                <TableCell sx={{ color: '#fff' }}>{pedido.personal_entrega_nombre || '—'}</TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        variant="outlined"
+                                                        size="small"
+                                                        sx={{ color: "#FFD700", borderColor: "#FFD700" }}
+                                                        onClick={() => {
+                                                            setPedidoSeleccionado(pedido.id_p);
+                                                            setShowDetalle(true);
+                                                        }}
+                                                    >
+                                                        Ver Detalle
+                                                    </Button>
                                     </TableCell>
-                                    <TableCell component="th" scope="row">
-                                        {pedido.solicitud_fk?.fecha_creacion ? pedido.solicitud_fk.fecha_creacion.split('T')[0] : ''}-
-                                        {pedido.solicitud_fk?.fecha_creacion ? (pedido.solicitud_fk.fecha_creacion.split('T')[1]?.split('.')[0] ?? '') : ''}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        {pedido.fecha_entrega ? pedido.fecha_entrega.split('T')[0] : ''}-
-                                        {pedido.fecha_entrega ? (pedido.fecha_entrega.split('T')[1]?.split('.')[0] ?? '') : ''}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        {pedido.sucursal_fk?.nombre_sucursal}</TableCell>
-                                    <TableCell align="right">
-                                        {pedido.solicitud_fk?.usuario_nombre}</TableCell>
-                                    <TableCell align="right">
-                                        <p>
-                                            {Array.isArray(pedido.solicitud_fk?.productos) ? pedido.solicitud_fk.productos.length : 0}
-                                        </p>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
 
-                                    </TableCell>
-
-                                    {/*sección de botónes para ver detalles de productos y del transportista */}
-                                    <TableCell
-                                        align="right"
-                                    ><button onClick={() => {
-                                        setPedidoSeleccionado(pedido.id_p);
-                                        setDetalle(true);
-                                    }} className="button_det">Ver</button></TableCell>
-                                    <TableCell align="right">
-                                        <button
+                    {/* Tabla de ingresos */}
+                    {tab === 'ingresos' && (
+                        <TableContainer component={Paper} sx={{ bgcolor: '#232323', borderRadius: 2, maxHeight: '50vh' }}>
+                            <Table stickyHeader>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>ID</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Proveedor</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Usuario</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Cantidad (total)</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Acciones</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {ingresos.map((pedido) => {
+                                        const detalles = pedido.detalles_pedido || [];
+                                        const cantidadTotal = detalles.reduce((a: number, d: any) => a + Number(d.cantidad || 0), 0);
+                                        return (
+                                            <TableRow key={pedido.id_p} hover>
+                                                <TableCell sx={{ color: '#fff' }}>{pedido.id_p}</TableCell>
+                                                <TableCell sx={{ color: '#fff' }}>{pedido.fecha_entrega?.split('T')[0] || '—'}</TableCell>
+                                                <TableCell sx={{ color: '#fff' }}>{pedido.proveedor_nombre || '—'}</TableCell>
+                                                <TableCell sx={{ color: '#fff' }}>{pedido.usuario_nombre || '—'}</TableCell>
+                                                <TableCell sx={{ color: '#FFD700', fontWeight: 700 }}>{cantidadTotal || '—'}</TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        variant="outlined"
+                                                        size="small"
+                                                        sx={{ color: "#FFD700", borderColor: "#FFD700" }}
                                             onClick={() => {
                                                 setPedidoSeleccionado(pedido.id_p);
-                                                setDespacho(true);
+                                                            setShowDetalle(true);
                                             }}
-                                            className="buttton_des"
                                         >
-                                            Ver
-                                        </button>
+                                                        Ver Detalle
+                                                    </Button>
                                     </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+
+                    {/* Modal de detalle de pedido */}
+                    <Dialog
+                        open={showDetalle}
+                        onClose={() => setShowDetalle(false)}
+                        maxWidth="md"
+                        fullWidth
+                        PaperProps={{ sx: { borderRadius: 3, bgcolor: '#181818' } }}
+                    >
+                        <DialogTitle sx={{ color: '#FFD700', fontWeight: 700, fontSize: 22 }}>
+                            Detalle del Pedido
+                        </DialogTitle>
+                        <DialogContent>
+                            {(() => {
+                                const pedido = pedidos.find((p) => p.id_p === pedidoSeleccionado);
+                                if (!pedido) return <Typography>No se encontró el pedido.</Typography>;
+                                const detalles = pedido.detalles_pedido || [];
+                                // Detectar tipo de pedido
+                                const esIngreso = !!pedido.proveedor_fk || !!pedido.proveedor_nombre;
+                                const esSalida = !!pedido.sucursal_fk || !!pedido.sucursal_nombre;
+                                return (
+                                    <Box>
+                                        {/* Info general */}
+                                        <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                                            <Box>
+                                                <Typography variant="subtitle2" sx={{ color: '#FFD700' }}>ID:</Typography>
+                                                <Typography sx={{ color: '#fff' }}>{pedido.id_p}</Typography>
+                                            </Box>
+                                            {esIngreso && (
+                                                <Box>
+                                                    <Typography variant="subtitle2" sx={{ color: '#FFD700' }}>Proveedor:</Typography>
+                                                    <Typography sx={{ color: '#fff' }}>{pedido.proveedor_nombre || 'No aplica'}</Typography>
+                                                </Box>
+                                            )}
+                                            {esSalida && (
+                                                <Box>
+                                                    <Typography variant="subtitle2" sx={{ color: '#FFD700' }}>Sucursal:</Typography>
+                                                    <Typography sx={{ color: '#fff' }}>{pedido.sucursal_nombre || 'No aplica'}</Typography>
+                                                </Box>
+                                            )}
+                                            <Box>
+                                                <Typography variant="subtitle2" sx={{ color: '#FFD700' }}>Usuario:</Typography>
+                                                <Typography sx={{ color: '#fff' }}>{pedido.usuario_nombre || '—'}</Typography>
+                                            </Box>
+                                            {esSalida && (
+                                                <Box>
+                                                    <Typography variant="subtitle2" sx={{ color: '#FFD700' }}>Transportista:</Typography>
+                                                    <Typography sx={{ color: '#fff' }}>{pedido.personal_entrega_nombre || 'No aplica'}</Typography>
+                                                </Box>
+                                            )}
+                                            <Box>
+                                                <Typography variant="subtitle2" sx={{ color: '#FFD700' }}>Fecha Entrega:</Typography>
+                                                <Typography sx={{ color: '#fff' }}>{pedido.fecha_entrega?.split('T')[0] || '—'}</Typography>
+                                            </Box>
+                                        </Box>
+                                        {/* Tabla de productos */}
+                                        <Typography variant="h6" sx={{ color: '#FFD700', mb: 1 }}>Productos del pedido</Typography>
+                                        <TableContainer component={Paper} sx={{ bgcolor: '#232323', borderRadius: 2, mb: 2 }}>
+                                            <Table size="small">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell sx={{ color: '#FFD700', fontWeight: 700 }}>Producto</TableCell>
+                                                        <TableCell sx={{ color: '#FFD700', fontWeight: 700 }}>Cantidad</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {detalles.length === 0 ? (
+                                                        <TableRow>
+                                                            <TableCell colSpan={2} sx={{ color: '#fff', textAlign: 'center' }}>No hay productos en este pedido.</TableCell>
+                                                        </TableRow>
+                                                    ) : detalles.map((d: any) => (
+                                                        <TableRow key={d.id}>
+                                                            <TableCell sx={{ color: '#fff' }}>{d.producto_nombre || '—'}</TableCell>
+                                                            <TableCell sx={{ color: '#FFD700', fontWeight: 700 }}>{d.cantidad || '—'}</TableCell>
                                 </TableRow>
                             ))}
-
                         </TableBody>
                     </Table>
                 </TableContainer>
-            </div>
+                                    </Box>
+                                );
+                            })()}
+                        </DialogContent>
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 2 }}>
+                            <Button onClick={() => setShowDetalle(false)} variant="contained" sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}>
+                                Cerrar
+                            </Button>
+                        </Box>
+                    </Dialog>
 
-            {/* sección para mostrar los componentes que son llamados en lo botones, se da el id para obtener los datos correctos del pedido*/}
-            {detalle && pedidoSeleccionado !== null && (
-                <PedidoDetalle
-                    id={pedidoSeleccionado}
-                    setDetalle={() => {setDetalle(false)
-                        setPedidoSeleccionado(null)
-                    }}
-                />
-            )}
-            {despacho && pedidoSeleccionado !== null && (
-                <DespachoDetalle
-                    id={pedidoSeleccionado}
-                    setDespacho={() => {setDespacho(false)
-                        setPedidoSeleccionado(null)
-                    }}
-                />
-            )}
-        </Container>
+                    {/* Mensaje si no hay pedidos */}
+                    {!loading && !error && pedidosFiltros.length === 0 && (
+                        <Box sx={{ textAlign: 'center', p: 4, color: '#666' }}>
+                            <Typography variant="h6">No se encontraron pedidos</Typography>
+                            <Typography variant="body2">Intenta ajustar los filtros o recargar los datos</Typography>
+                        </Box>
+                    )}
+                </Box>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// Componente para tarjetas de estadísticas
+function StatCard({ color, icon, title, valor, subtitulo }: {
+    color: string; icon: string; title: string; valor: number; subtitulo: string;
+}) {
+    return (
+        <Paper sx={{ bgcolor: '#232323', border: `2px solid ${color}`, borderRadius: 2, p: 2, minWidth: 160, textAlign: 'center' }}>
+            <Typography variant="h3" sx={{ color, mb: 1 }}>{icon}</Typography>
+            <Typography variant="h4" sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>
+                {valor}
+            </Typography>
+            <Typography variant="h6" sx={{ color: "#FFD700", mb: 1 }}>
+                {title}
+            </Typography>
+            <Typography variant="body2" sx={{ color: "#ccc" }}>
+                {subtitulo}
+            </Typography>
+        </Paper>
     );
 }
 

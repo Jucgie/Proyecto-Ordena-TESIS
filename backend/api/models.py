@@ -143,7 +143,7 @@ class Productos(models.Model):
     id_prodc = models.BigAutoField(primary_key=True)
     nombre_prodc = models.CharField(max_length=255)
     descripcion_prodc = models.CharField(max_length=255, null=True)
-    codigo_interno = models.CharField(max_length=255)
+    codigo_interno = models.CharField(max_length=255, unique=True)
     fecha_creacion = models.DateTimeField()
     activo = models.BooleanField(default=True)
     marca_fk = models.ForeignKey(Marca, on_delete=models.CASCADE, db_column='marca_fk')

@@ -3,7 +3,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes,Pedidos,PersonalEntrega,DetallePedido,EstadoPedido, Informe, SolicitudProductos, Pedidos, DetallePedido, Notificacion, Historial, Stock, EstadoPedido, PersonalEntrega, MovInventario, Proveedor
-from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer
+from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer, MovInventarioSerializer
 from django.db import transaction
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
@@ -1928,30 +1928,58 @@ def verificar_producto_existente(request):
             'error': 'Error interno del servidor'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-def generate_codigo_unico(nombre, marca, categoria, modelo, bodega):
+def extraer_modelo_desde_nombre(nombre):
+    """
+    Extrae una variante/modelo relevante del nombre del producto (ej: 10m, 500ml, 2L, 500W, 220V, 1HP, 1/2", 16mm, 10'', etc.)
+    Si no encuentra, retorna 'GEN'.
+    """
+    patrones = [
+        r"(\d+\s?(m|ml|l|kg|g|cm|mm|pcs|un|lt|mts|mt|x\d+))",  # Medidas y cantidades
+        r"(\d+\s?(w|kw|hp|v|ah|hz|rpm|bar|psi|amp|a|kva|kcal|btu))",  # Potencias, voltajes, energía
+        r"(\d+/\d+\s?\"|\d+\s?\"|\d+/\d+\s?''|\d+\s?'')",  # Fracciones y pulgadas (doble y simple)
+        r"(\d+\s?mm|\d+\s?cm|\d+\s?m)",  # Milímetros, centímetros, metros
+        r"(rojo|azul|verde|negro|blanco|amarillo|gris|naranja|madera|inox|cobre|plata|dorado|transparente|beige|marrón|morado|celeste|turquesa|ocre|pino|nogal|grafito|acero|galvanizado|zinc)",  # Colores y materiales
+        r"(grande|pequeño|mediano|extra|mini|maxi|compacto|industrial|profesional|hogar|básico|premium)",  # Tamaños y calidades
+        r"(\d+\s?kg|\d+\s?g|\d+\s?lb|\d+\s?ton)",  # Pesos
+        r"(\d+\s?ml|\d+\s?l|\d+\s?cc)",  # Volúmenes
+        r"(\d+\s?panel|\d+\s?placa|\d+\s?rollo|\d+\s?bolsa|\d+\s?caja|\d+\s?bulto|\d+\s?barril|\d+\s?galón)",  # Unidades de empaque
+    ]
+    for patron in patrones:
+        match = re.search(patron, nombre, re.IGNORECASE)
+        if match:
+            return match.group(0).replace(' ', '').upper()
+    return 'GEN'
+
+def generate_codigo_unico(nombre, marca, categoria, modelo, bodega=None, sucursal=None):
     """
     Genera un código único basado en características del producto
     Formato: {CAT}-{MARCA}-{MODELO}-{YYYYMM}-{NNN}
-    Ejemplo: FER-STANLEY-MART500-202406-001
+    Ejemplo: FERR-STAN-500W-202406-001
+    El correlativo NNN es único por bodega/sucursal, categoría, marca y modelo
     """
     try:
-        # Obtener prefijos
-        categoria_prefijo = categoria[:3].upper()
-        marca_prefijo = marca[:3].upper()
-        modelo_prefijo = modelo[:3].upper() if modelo else 'GEN'
+        categoria_prefijo = categoria[:4].upper() if categoria else 'GEN'
+        marca_prefijo = marca[:4].upper() if marca else 'GEN'
+        if not modelo or modelo.strip() == '':
+            modelo_prefijo = extraer_modelo_desde_nombre(nombre)
+        else:
+            modelo_prefijo = modelo[:4].upper()
         fecha_actual = timezone.now().strftime('%Y%m')
-        
-        # Crear patrón base
         patron = f'{categoria_prefijo}-{marca_prefijo}-{modelo_prefijo}-{fecha_actual}'
-        
-        # Buscar último número para esta combinación
+        # Filtro por bodega o sucursal
+        filtro_ubicacion = {}
+        if bodega:
+            filtro_ubicacion['bodega_fk'] = bodega
+        if sucursal:
+            filtro_ubicacion['sucursal_fk'] = sucursal
+        # Buscar último número para esta combinación en la ubicación
         ultimo_producto = Productos.objects.filter(
             codigo_interno__startswith=patron,
-            bodega_fk=bodega
+            categoria_fk__nombre__iexact=categoria,
+            marca_fk__nombre_mprod__iexact=marca,
+            **filtro_ubicacion
         ).order_by('-codigo_interno').first()
-        
         if ultimo_producto:
-            # Extraer el número del último código
             try:
                 ultimo_numero = int(ultimo_producto.codigo_interno.split('-')[-1])
                 nuevo_numero = ultimo_numero + 1
@@ -1959,16 +1987,11 @@ def generate_codigo_unico(nombre, marca, categoria, modelo, bodega):
                 nuevo_numero = 1
         else:
             nuevo_numero = 1
-        
-        # Formatear el código
         codigo = f'{patron}-{nuevo_numero:03d}'
-        
         logger.info(f"Código único generado para {nombre}: {codigo}")
         return codigo
-        
     except Exception as e:
         logger.error(f"Error generando código único para {nombre}: {str(e)}")
-        # Fallback: usar timestamp
         return f'PROD-{int(timezone.now().timestamp())}'
 
 def buscar_producto_por_codigo(codigo_interno, bodega):
@@ -2182,35 +2205,65 @@ def producto_por_codigo_unico(request, codigo_interno):
             'detalle': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-def buscar_productos_similares(nombre, marca, categoria, bodega):
+def buscar_productos_similares(nombre, marca, categoria, bodega, codigo_interno=None, modelo=None):
     """
-    Busca productos similares basándose en nombre, marca y categoría
+    Busca productos similares basándose en código interno (exacto) y, si no hay coincidencia, por nombre, marca, categoría y modelo/variante
     Retorna productos ordenados por similitud
     """
     try:
-        # Buscar productos con nombre similar en la misma bodega
-        productos_similares = Productos.objects.filter(
-            bodega_fk=bodega,
-            activo=True
-        ).filter(
+        queryset = Productos.objects.filter(bodega_fk=bodega, activo=True)
+        # 1. Buscar por código interno exacto si se proporciona
+        if codigo_interno:
+            productos_similares = queryset.filter(codigo_interno=codigo_interno)
+            if productos_similares.exists():
+                productos_con_stock = []
+                for producto in productos_similares[:10]:
+                    try:
+                        stock_obj = Stock.objects.get(productos_fk=producto, bodega_fk=bodega.id_bdg)
+                        stock_actual = float(stock_obj.stock)
+                        stock_minimo = float(stock_obj.stock_minimo) if stock_obj.stock_minimo else 0
+                        stock_maximo = float(stock_obj.stock_maximo) if stock_obj.stock_maximo else 0
+                    except Stock.DoesNotExist:
+                        stock_actual = 0
+                        stock_minimo = 0
+                        stock_maximo = 0
+                    productos_con_stock.append({
+                        'id': producto.id_prodc,
+                        'nombre': producto.nombre_prodc,
+                        'codigo_interno': producto.codigo_interno,
+                        'marca': producto.marca_fk.nombre_mprod,
+                        'categoria': producto.categoria_fk.nombre,
+                        'descripcion': producto.descripcion_prodc,
+                        'stock_actual': stock_actual,
+                        'stock_minimo': stock_minimo,
+                        'stock_maximo': stock_maximo,
+                        'fecha_creacion': producto.fecha_creacion.isoformat() if producto.fecha_creacion else None
+                    })
+                return productos_con_stock
+        # 2. Si no hay coincidencia por código, buscar por nombre/marca/categoría
+        productos_similares = queryset.filter(
             models.Q(nombre_prodc__icontains=nombre) |
-            models.Q(nombre_prodc__icontains=nombre.split()[0])  # Primera palabra del nombre
+            models.Q(nombre_prodc__icontains=nombre.split()[0])
         )
-        
-        # Filtrar por marca y categoría si están especificadas
         if marca:
             productos_similares = productos_similares.filter(
                 marca_fk__nombre_mprod__icontains=marca
             )
-        
         if categoria:
             productos_similares = productos_similares.filter(
                 categoria_fk__nombre__icontains=categoria
             )
-        
-        # Obtener información de stock para cada producto
+        # --- FILTRO POR MODELO/VARIANTE ---
+        if modelo and modelo.strip() != '':
+            modelo_normalizado = modelo.strip().lower()
+            productos_similares = productos_similares.filter(
+                models.Q(descripcion_prodc__icontains=modelo_normalizado) |
+                models.Q(nombre_prodc__icontains=modelo_normalizado) |
+                models.Q(codigo_interno__icontains=modelo_normalizado) |
+                models.Q(descripcion_prodc__isnull=True) | models.Q(descripcion_prodc='')
+            )
         productos_con_stock = []
-        for producto in productos_similares[:10]:  # Limitar a 10 resultados
+        for producto in productos_similares[:10]:
             try:
                 stock_obj = Stock.objects.get(productos_fk=producto, bodega_fk=bodega.id_bdg)
                 stock_actual = float(stock_obj.stock)
@@ -2220,7 +2273,6 @@ def buscar_productos_similares(nombre, marca, categoria, bodega):
                 stock_actual = 0
                 stock_minimo = 0
                 stock_maximo = 0
-            
             productos_con_stock.append({
                 'id': producto.id_prodc,
                 'nombre': producto.nombre_prodc,
@@ -2233,9 +2285,7 @@ def buscar_productos_similares(nombre, marca, categoria, bodega):
                 'stock_maximo': stock_maximo,
                 'fecha_creacion': producto.fecha_creacion.isoformat() if producto.fecha_creacion else None
             })
-        
         return productos_con_stock
-        
     except Exception as e:
         logger.error(f"Error buscando productos similares: {str(e)}")
         return []
@@ -2251,28 +2301,149 @@ def buscar_productos_similares_endpoint(request):
         marca = request.data.get('marca', '')
         categoria = request.data.get('categoria', '')
         bodega_id = request.data.get('bodega_id')
-        
+        codigo_interno = request.data.get('codigo_interno', None)
+        modelo = request.data.get('modelo', None)
         if not nombre or not bodega_id:
             return Response({
                 'error': 'Nombre y bodega_id son requeridos'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
         try:
             bodega = BodegaCentral.objects.get(id_bdg=bodega_id)
         except BodegaCentral.DoesNotExist:
             return Response({
                 'error': 'Bodega no encontrada'
             }, status=status.HTTP_404_NOT_FOUND)
-        
-        productos_similares = buscar_productos_similares(nombre, marca, categoria, bodega)
-        
+        productos_similares = buscar_productos_similares(nombre, marca, categoria, bodega, codigo_interno, modelo)
         return Response({
             'productos_similares': productos_similares,
             'total_encontrados': len(productos_similares)
         })
-        
     except Exception as e:
         logger.error(f"Error en endpoint buscar_productos_similares: {str(e)}")
         return Response({
             'error': 'Error interno del servidor'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def movimientos_inventario(request):
+    """
+    Lista los movimientos de inventario con filtros avanzados y estadísticas.
+    """
+    # Filtros básicos
+    bodega_id = request.GET.get('bodega')
+    sucursal_id = request.GET.get('sucursal')
+    producto_id = request.GET.get('producto')
+    usuario_id = request.GET.get('usuario')
+    
+    # Filtros avanzados
+    tipo_movimiento = request.GET.get('tipo_movimiento')  # ENTRADA, SALIDA, AJUSTE
+    fecha_inicio = request.GET.get('fecha_inicio')
+    fecha_fin = request.GET.get('fecha_fin')
+    cantidad_min = request.GET.get('cantidad_min')
+    cantidad_max = request.GET.get('cantidad_max')
+    
+    # Paginación
+    limit = int(request.GET.get('limit', 200))
+    offset = int(request.GET.get('offset', 0))
+
+    queryset = MovInventario.objects.all().select_related(
+        'productos_fk', 'usuario_fk', 'productos_fk__bodega_fk', 'productos_fk__sucursal_fk'
+    )
+
+    # Aplicar filtros
+    if bodega_id:
+        queryset = queryset.filter(productos_fk__bodega_fk=bodega_id)
+    if sucursal_id:
+        queryset = queryset.filter(productos_fk__sucursal_fk=sucursal_id)
+    if producto_id:
+        queryset = queryset.filter(productos_fk__id_prodc=producto_id)
+    if usuario_id:
+        queryset = queryset.filter(usuario_fk__id_us=usuario_id)
+    if fecha_inicio:
+        queryset = queryset.filter(fecha__gte=fecha_inicio)
+    if fecha_fin:
+        queryset = queryset.filter(fecha__lte=fecha_fin)
+    if cantidad_min:
+        queryset = queryset.filter(cantidad__gte=cantidad_min)
+    if cantidad_max:
+        queryset = queryset.filter(cantidad__lte=cantidad_max)
+    if tipo_movimiento:
+        if tipo_movimiento == "ENTRADA":
+            queryset = queryset.filter(cantidad__gt=0)
+        elif tipo_movimiento == "SALIDA":
+            queryset = queryset.filter(cantidad__lt=0)
+        elif tipo_movimiento == "AJUSTE":
+            queryset = queryset.filter(cantidad=0)
+
+    # --- Calcula estadísticas ANTES del slicing ---
+    total_movimientos = queryset.count()
+    total_entradas = queryset.filter(cantidad__gt=0).count()
+    total_salidas = queryset.filter(cantidad__lt=0).count()
+    total_ajustes = queryset.filter(cantidad=0).count()
+    suma_entradas = queryset.filter(cantidad__gt=0).aggregate(
+        total=models.Sum('cantidad')
+    )['total'] or 0
+    suma_salidas = abs(queryset.filter(cantidad__lt=0).aggregate(
+        total=models.Sum('cantidad')
+    )['total'] or 0)
+
+    # --- Solo aquí aplica el slicing para la respuesta ---
+    queryset = queryset.order_by('-fecha')[offset:offset + limit]
+
+    serializer = MovInventarioSerializer(queryset, many=True)
+    
+    # Preparar respuesta con estadísticas
+    response_data = {
+        'movimientos': serializer.data,
+        'estadisticas': {
+            'total_movimientos': total_movimientos,
+            'entradas': {
+                'cantidad': total_entradas,
+                'unidades': suma_entradas
+            },
+            'salidas': {
+                'cantidad': total_salidas,
+                'unidades': suma_salidas
+            },
+            'ajustes': {
+                'cantidad': total_ajustes,
+                'unidades': 0
+            },
+            'balance': suma_entradas - suma_salidas
+        },
+        'filtros_aplicados': {
+            'bodega': bodega_id,
+            'sucursal': sucursal_id,
+            'tipo_movimiento': tipo_movimiento,
+            'fecha_inicio': fecha_inicio,
+            'fecha_fin': fecha_fin,
+            'limit': limit,
+            'offset': offset
+        }
+    }
+    
+    return Response(response_data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pedidos_recientes(request):
+    """
+    Endpoint para obtener los pedidos más recientes, con paginación y filtro por tipo (ingreso/salida)
+    Parámetros GET:
+      - tipo: 'ingreso' o 'salida' (opcional)
+      - limit: cantidad de pedidos a devolver (por defecto 10)
+      - offset: desde qué posición (por defecto 0)
+    """
+    tipo = request.GET.get('tipo', None)
+    limit = int(request.GET.get('limit', 10))
+    offset = int(request.GET.get('offset', 0))
+    queryset = Pedidos.objects.all().order_by('-fecha_entrega')
+    total = queryset.count()
+    pedidos = queryset[offset:offset+limit]
+    from .serializers import PedidosSerializer
+    serializer = PedidosSerializer(pedidos, many=True)
+    return Response({
+        'total': total,
+        'pedidos': serializer.data
+    })

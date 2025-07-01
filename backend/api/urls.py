@@ -5,7 +5,7 @@ from .views import (
     login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, 
     SolicitudesViewSet, UsuarioViewSet, InformeViewSet, PedidosViewSet, 
     PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,
-    generar_qr_producto_view, producto_por_codigo, actualizar_stock_por_codigo, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint
+    generar_qr_producto_view, producto_por_codigo, actualizar_stock_por_codigo, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint, movimientos_inventario, pedidos_recientes
 )
 
 router = DefaultRouter()
@@ -21,6 +21,7 @@ router.register(r'personal-entrega', PersonalEntregaViewSet, basename='personal-
 router.register(r'proveedores', ProveedorViewSet, basename='proveedor')
 
 urlpatterns = [
+    path('pedidos/recientes/', pedidos_recientes, name='pedidos_recientes'),
     path('', include(router.urls)),
     path('auth/login/', login, name='login'),
     path('auth/register/', register, name='register'),
@@ -35,6 +36,7 @@ urlpatterns = [
     path('extraer-productos-pdf/', ExtraerProductosPDF.as_view(), name='extraer_productos_pdf'),
     path('pedidos/', PedidosViewSet.as_view({'get':'pedidos'}),name='pedidos'),
     
+    
     # URLs para códigos QR
     path('qr/producto/<int:producto_id>/', generar_qr_producto_view, name='generar_qr_producto'),
     path('qr/producto-codigo/<str:codigo_interno>/', producto_por_codigo, name='producto_por_codigo'),
@@ -44,5 +46,6 @@ urlpatterns = [
     path('verificar-producto/', verificar_producto_existente, name='verificar_producto_existente'),
     path('producto-codigo-unico/<str:codigo_interno>/', producto_por_codigo_unico, name='producto_por_codigo_unico'),
     path('buscar-productos-similares/', buscar_productos_similares_endpoint, name='buscar_productos_similares_endpoint'),
+    path('movimientos-inventario/', movimientos_inventario, name='movimientos-inventario'),
 ]
 

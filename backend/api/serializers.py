@@ -102,9 +102,80 @@ class ModulosSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class MovInventarioSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.CharField(source='productos_fk.nombre_prodc', read_only=True)
+    producto_codigo = serializers.CharField(source='productos_fk.codigo_interno', read_only=True)
+    usuario_nombre = serializers.CharField(source='usuario_fk.nombre', read_only=True)
+    tipo_movimiento = serializers.SerializerMethodField()
+    stock_actual = serializers.SerializerMethodField()
+    ubicacion = serializers.SerializerMethodField()
+    icono_movimiento = serializers.SerializerMethodField()
+    color_movimiento = serializers.SerializerMethodField()
+    descripcion_movimiento = serializers.SerializerMethodField()
+
     class Meta:
         model = MovInventario
-        fields = '__all__'
+        fields = [
+            'id_mvin', 'cantidad', 'fecha', 'productos_fk', 'producto_nombre', 'producto_codigo',
+            'usuario_fk', 'usuario_nombre', 'tipo_movimiento', 'stock_actual', 'ubicacion',
+            'icono_movimiento', 'color_movimiento', 'descripcion_movimiento'
+        ]
+
+    def get_tipo_movimiento(self, obj):
+        """Determina el tipo de movimiento basado en la cantidad"""
+        if obj.cantidad > 0:
+            return "ENTRADA"
+        elif obj.cantidad < 0:
+            return "SALIDA"
+        else:
+            return "AJUSTE"
+
+    def get_stock_actual(self, obj):
+        """Obtiene el stock actual del producto"""
+        try:
+            stock_obj = Stock.objects.filter(productos_fk=obj.productos_fk).first()
+            return float(stock_obj.stock) if stock_obj else 0
+        except:
+            return 0
+
+    def get_ubicacion(self, obj):
+        """Obtiene la ubicación (bodega o sucursal) del producto"""
+        producto = obj.productos_fk
+        if producto.bodega_fk:
+            return f"Bodega: {producto.bodega_fk.nombre_bdg}"
+        elif producto.sucursal_fk:
+            return f"Sucursal: {producto.sucursal_fk.nombre_sucursal}"
+        return "Sin ubicación"
+
+    def get_icono_movimiento(self, obj):
+        """Retorna el icono apropiado para el tipo de movimiento"""
+        tipo = self.get_tipo_movimiento(obj)
+        if tipo == "ENTRADA":
+            return "📥"
+        elif tipo == "SALIDA":
+            return "📤"
+        else:
+            return "⚙️"
+
+    def get_color_movimiento(self, obj):
+        """Retorna el color apropiado para el tipo de movimiento"""
+        tipo = self.get_tipo_movimiento(obj)
+        if tipo == "ENTRADA":
+            return "#4CAF50"  # Verde
+        elif tipo == "SALIDA":
+            return "#F44336"  # Rojo
+        else:
+            return "#FF9800"  # Naranja
+
+    def get_descripcion_movimiento(self, obj):
+        """Genera una descripción del movimiento"""
+        tipo = self.get_tipo_movimiento(obj)
+        cantidad_abs = abs(obj.cantidad)
+        if tipo == "ENTRADA":
+            return f"Entrada de {cantidad_abs} unidades"
+        elif tipo == "SALIDA":
+            return f"Salida de {cantidad_abs} unidades"
+        else:
+            return f"Ajuste de {cantidad_abs} unidades"
 
 class NotificacionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -495,11 +566,33 @@ class ProductoSerializer(serializers.ModelSerializer):
         read_only_fields = ['id_prodc', 'fecha_creacion']
 
     def create(self, validated_data):
+        # Validar unicidad de nombre y código
+        nombre = validated_data.get('nombre_prodc')
+        codigo = validated_data.get('codigo_interno')
+        if Productos.objects.filter(nombre_prodc=nombre).exists():
+            raise serializers.ValidationError({'nombre_prodc': 'Ya existe un producto con este nombre.'})
+        if Productos.objects.filter(codigo_interno=codigo).exists():
+            raise serializers.ValidationError({'codigo_interno': 'Ya existe un producto con este código.'})
+        # Generar código automáticamente si no se provee
+        if not codigo:
+            # Ejemplo: usar prefijo de categoría, marca y un contador
+            categoria = validated_data.get('categoria_fk')
+            marca = validated_data.get('marca_fk')
+            from datetime import datetime
+            fecha = datetime.now().strftime('%Y%m')
+            prefijo_cat = str(categoria.id) if categoria else 'GEN'
+            prefijo_marca = str(marca.id_mprod) if marca else 'GEN'
+            contador = Productos.objects.count() + 1
+            codigo = f"PROD-{prefijo_cat}-{prefijo_marca}-{fecha}-{contador:03d}"
+            # Asegurar unicidad
+            while Productos.objects.filter(codigo_interno=codigo).exists():
+                contador += 1
+                codigo = f"PROD-{prefijo_cat}-{prefijo_marca}-{fecha}-{contador:03d}"
+            validated_data['codigo_interno'] = codigo
         stock_data = validated_data.pop('stock', 0)
         stock_minimo_data = validated_data.pop('stock_minimo', 5)
         validated_data['fecha_creacion'] = timezone.now()
         producto = Productos.objects.create(**validated_data)
-        
         # Crear el registro de stock
         Stock.objects.create(
             productos_fk=producto,

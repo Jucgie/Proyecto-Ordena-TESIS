@@ -1,183 +1,462 @@
+import React from "react";
 import styled from "styled-components";
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Paper from '@mui/material/Paper';
-import {BtnAct} from "../button/ButtonHist";
-import { Select, MenuItem } from "@mui/material";
-//import ReplayIcon from '@mui/icons-material/Replay';
-
-
+import { useEffect, useState } from "react";
+import { historialService } from "../../services/historialService";
+import {
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+    Select, MenuItem, TextField, Button, Box, Typography, Chip, Card, CardContent,
+    Grid, IconButton, Tooltip, Alert, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions
+} from "@mui/material";
+import {
+    FilterAlt as FilterIcon,
+    Refresh as RefreshIcon,
+    FileDownload as ExportIcon,
+    TrendingUp as TrendingUpIcon,
+    Search as SearchIcon
+} from "@mui/icons-material";
 
 interface Props {
     setHistorial: () => void;
+    bodegaId?: string;
+    sucursalId?: string;
 }
 
-function createData(
-    name: Date,
-    calories: string,
-    fat: string,
-    carbs: string,
-    protein: string,
-) {
-    return { name, calories, fat, carbs, protein };
+interface Movimiento {
+    id_mvin: number;
+    cantidad: number;
+    fecha: string;
+    producto_nombre: string;
+    producto_codigo: string;
+    usuario_nombre: string;
+    tipo_movimiento: string;
+    stock_actual: number;
+    ubicacion: string;
+    icono_movimiento: string;
+    color_movimiento: string;
+    descripcion_movimiento: string;
 }
 
-const rows = [
-    createData(new Date('2025-03-02'), '20:20', 'Añadir Producto', 'admin', 'Añadio Produto_1 al inventario'),
-    createData(new Date('2025-03-02'), '20:20', 'Añadir Producto', 'admin', 'Añadio Produto_1 al inventario'),
-    createData(new Date('2025-03-02'), '20:20', 'Añadir Producto', 'admin', 'Añadio Produto_1 al inventario'),
-    createData(new Date('2025-03-02'), '20:20', 'Añadir Producto', 'admin', 'Añadio Produto_1 al inventario'),
-    createData(new Date('2025-03-02'), '20:20', 'Añadir Producto', 'admin', 'Añadio Produto_1 al inventario'),
-        createData(new Date('2025-03-02'), '20:20', 'Añadir Producto', 'admin', 'Añadio Produto_1 al inventario'),
-            createData(new Date('2025-03-02'), '20:20', 'Añadir Producto', 'admin', 'Añadio Produto_1 al inventario'),
-                createData(new Date('2025-03-02'), '20:20', 'Añadir Producto', 'admin', 'Añadio Produto_1 al inventario'),
-                    createData(new Date('2025-03-02'), '20:20', 'Añadir Producto', 'admin', 'Añadio Produto_1 al inventario'),
+interface Estadisticas {
+    total_movimientos: number;
+    entradas: { cantidad: number; unidades: number };
+    salidas: { cantidad: number; unidades: number };
+    ajustes: { cantidad: number; unidades: number };
+    balance: number;
+}
 
-];
+export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Props) {
+    const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
+    const [estadisticas, setEstadisticas] = useState<Estadisticas | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    
+    // Filtros
+    const [filtros, setFiltros] = useState({
+        tipo_movimiento: '',
+        fecha_inicio: '',
+        fecha_fin: '',
+        cantidad_min: '',
+        cantidad_max: '',
+        search: ''
+    });
+    
+    // Estados de UI
+    const [showFiltros, setShowFiltros] = useState(false);
+    const [showEstadisticas, setShowEstadisticas] = useState(true);
 
-export function InventarioHistorial({ setHistorial }: Props) {
+    const cargarMovimientos = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const params = {
+                bodega: bodegaId,
+                sucursal: sucursalId,
+                ...filtros
+            };
+            const data = await historialService.getMovimientosInventario(params);
+            setMovimientos(data.movimientos);
+            setEstadisticas(data.estadisticas);
+        } catch (err) {
+            setError("Error al cargar movimientos");
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        cargarMovimientos();
+    }, [bodegaId, sucursalId]);
+
+    const handleFiltroChange = (campo: string, valor: string) => {
+        setFiltros(prev => ({ ...prev, [campo]: valor }));
+    };
+
+    const aplicarFiltros = () => {
+        cargarMovimientos();
+        setShowFiltros(false);
+    };
+
+    const limpiarFiltros = () => {
+        setFiltros({
+            tipo_movimiento: '',
+            fecha_inicio: '',
+            fecha_fin: '',
+            cantidad_min: '',
+            cantidad_max: '',
+            search: ''
+        });
+    };
+
+    const exportarExcel = () => {
+        alert("Función de exportación en desarrollo");
+    };
+
+    const movimientosFiltrados = movimientos.filter(mov => 
+        filtros.search === '' || 
+        mov.producto_nombre.toLowerCase().includes(filtros.search.toLowerCase()) ||
+        mov.producto_codigo.toLowerCase().includes(filtros.search.toLowerCase()) ||
+        mov.usuario_nombre.toLowerCase().includes(filtros.search.toLowerCase())
+    );
+
     return (
-        <Container>
-            <div className="cerr">
-                <span onClick={setHistorial} className="vol"> 🠔 Volver</span>
-            </div>
-            <section className="Botones">
-                <div className="Boton-start">
-                    <input type="text" placeholder="Buscar"/>
-                </div>
-                <div className="Boton_center">
-                        <Select
-                            style={{ width: 100, height:40,background: "#2E2E2E", color: "white", borderRadius: "5px" }}
-                          >
-                            <MenuItem value="">Todas las categorías</MenuItem>
-                            <MenuItem value="categoria_1">categoria_1</MenuItem>
-                            <MenuItem value="categoria_2">categoria_2</MenuItem>
-                            <MenuItem value="categoria_3">categoria_3</MenuItem>
-                          </Select>
+        <Dialog
+            open={true}
+            onClose={setHistorial}
+            maxWidth="xl"
+            fullWidth
+            PaperProps={{
+                sx: {
+                    background: '#1E1E1E',
+                    borderRadius: 3,
+                    minHeight: '80vh',
+                    maxHeight: '95vh',
+                    boxShadow: 24,
+                    p: 0,
+                    overflow: 'hidden',
+                }
+            }}
+        >
+            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: '#232323', color: '#FFD700', fontWeight: 700, fontSize: 24 }}>
+                📊 Bitácora de Movimientos de Inventario
+                <Button onClick={setHistorial} variant="outlined" sx={{ color: "#FFD700", borderColor: "#FFD700" }}>
+                    🠔 Volver
+                </Button>
+            </DialogTitle>
+            <DialogContent sx={{ p: 0, bgcolor: '#1E1E1E', overflow: 'auto' }}>
+                <Box sx={{ p: 3 }}>
+                    {/* Estadísticas */}
+                    {showEstadisticas && estadisticas && (
+                        <EstadisticasCard>
+                            <Grid container spacing={2}>
+                                <Grid item xs={12} md={3}>
+                                    <StatCard color="#4CAF50" icon="📥" title="Entradas" 
+                                        valor={estadisticas.entradas.cantidad} subtitulo={`${estadisticas.entradas.unidades} unidades`} />
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <StatCard color="#F44336" icon="📤" title="Salidas" 
+                                        valor={estadisticas.salidas.cantidad} subtitulo={`${estadisticas.salidas.unidades} unidades`} />
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <StatCard color="#FF9800" icon="⚙️" title="Ajustes" 
+                                        valor={estadisticas.ajustes.cantidad} subtitulo="Movimientos" />
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <StatCard color={estadisticas.balance >= 0 ? "#4CAF50" : "#F44336"} 
+                                        icon={estadisticas.balance >= 0 ? "📈" : "📉"} title="Balance" 
+                                        valor={estadisticas.balance} subtitulo="unidades" />
+                                </Grid>
+                            </Grid>
+                        </EstadisticasCard>
+                    )}
 
-                                                  <Select
-                            style={{ width: 100, height:40,background: "#2E2E2E", color: "white", borderRadius: "5px" }}
-                          >
-                            <MenuItem value="">Todas las categorías</MenuItem>
-                            <MenuItem value="categoria_1">categoria_1</MenuItem>
-                            <MenuItem value="categoria_2">categoria_2</MenuItem>
-                            <MenuItem value="categoria_3">categoria_3</MenuItem>
-                          </Select>
+                    {/* Barra de herramientas */}
+                    <ToolbarContainer>
+                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flex: 1 }}>
+                            <TextField
+                                placeholder="Buscar por producto, código o usuario..."
+                                value={filtros.search}
+                                onChange={(e) => handleFiltroChange('search', e.target.value)}
+                                size="small"
+                                sx={{ minWidth: 300 }}
+                                InputProps={{
+                                    startAdornment: <SearchIcon sx={{ color: '#666', mr: 1 }} />
+                                }}
+                            />
+                            <Button
+                                variant="outlined"
+                                startIcon={<FilterIcon />}
+                                onClick={() => setShowFiltros(!showFiltros)}
+                                sx={{ color: "#FFD700", borderColor: "#FFD700" }}
+                            >
+                                Filtros
+                            </Button>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Tooltip title="Recargar">
+                                <IconButton onClick={cargarMovimientos} sx={{ color: "#FFD700" }}>
+                                    <RefreshIcon />
+                                </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Exportar">
+                                <IconButton onClick={exportarExcel} sx={{ color: "#FFD700" }}>
+                                    <ExportIcon />
+                                </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Mostrar/Ocultar Estadísticas">
+                                <IconButton onClick={() => setShowEstadisticas(!showEstadisticas)} sx={{ color: "#FFD700" }}>
+                                    <TrendingUpIcon />
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
+                    </ToolbarContainer>
 
-                </div>
-                <div className="Boton-end">
-                    <BtnAct titulo="Recargar" background="#1E1E1E" />
-                    <BtnAct titulo="Exportar" background="#1E1E1E" />
-                </div>
-            </section>
-            <div className="table-container">
+                    {/* Filtros avanzados */}
+                    {showFiltros && (
+                        <FiltrosCard>
+                            <Grid container spacing={2} alignItems="center">
+                                <Grid item xs={12} md={2}>
+                                    <TextField
+                                        select
+                                        label="Tipo de Movimiento"
+                                        value={filtros.tipo_movimiento}
+                                        onChange={(e) => handleFiltroChange('tipo_movimiento', e.target.value)}
+                                        size="small"
+                                        fullWidth
+                                    >
+                                        <MenuItem value="">Todos</MenuItem>
+                                        <MenuItem value="ENTRADA">📥 Entradas</MenuItem>
+                                        <MenuItem value="SALIDA">📤 Salidas</MenuItem>
+                                        <MenuItem value="AJUSTE">⚙️ Ajustes</MenuItem>
+                                    </TextField>
+                                </Grid>
+                                <Grid item xs={12} md={2}>
+                                    <TextField
+                                        label="Cantidad Mín"
+                                        type="number"
+                                        value={filtros.cantidad_min}
+                                        onChange={(e) => handleFiltroChange('cantidad_min', e.target.value)}
+                                        size="small"
+                                        fullWidth
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={2}>
+                                    <TextField
+                                        label="Cantidad Máx"
+                                        type="number"
+                                        value={filtros.cantidad_max}
+                                        onChange={(e) => handleFiltroChange('cantidad_max', e.target.value)}
+                                        size="small"
+                                        fullWidth
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={2}>
+                                    <TextField
+                                        label="Fecha Inicio"
+                                        type="date"
+                                        value={filtros.fecha_inicio}
+                                        onChange={(e) => handleFiltroChange('fecha_inicio', e.target.value)}
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ shrink: true }}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={2}>
+                                    <TextField
+                                        label="Fecha Fin"
+                                        type="date"
+                                        value={filtros.fecha_fin}
+                                        onChange={(e) => handleFiltroChange('fecha_fin', e.target.value)}
+                                        size="small"
+                                        fullWidth
+                                        InputLabelProps={{ shrink: true }}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={2}>
+                                    <Box sx={{ display: 'flex', gap: 1 }}>
+                                        <Button variant="contained" onClick={aplicarFiltros} sx={{ bgcolor: "#FFD700", color: "#232323" }}>
+                                            Aplicar
+                                        </Button>
+                                        <Button variant="outlined" onClick={limpiarFiltros} sx={{ color: "#FFD700", borderColor: "#FFD700" }}>
+                                            Limpiar
+                                        </Button>
+                                    </Box>
+                                </Grid>
+                            </Grid>
+                        </FiltrosCard>
+                    )}
 
-                <TableContainer component={Paper}
-                        sx={{
-                            maxHeight:400,width: "auto", background: '#5B5B5B',
-                            '& .MuiTableCell-root': { color: 'white', textAlign: 'center' }
-                        }}
-                >
-                    <Table sx={{ minWidth: 650}} aria-label="simple table">
+                    {/* Tabla de movimientos */}
+                    <TableContainerStyled>
+                        {loading ? (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                                <CircularProgress sx={{ color: "#FFD700" }} />
+                            </Box>
+                        ) : error ? (
+                            <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>
+                        ) : (
+                            <TableContainer component={Paper} sx={{ bgcolor: '#2E2E2E', borderRadius: 2 }}>
+                                <Table>
                         <TableHead>
-                            <TableRow>
-                                <TableCell>Fecha</TableCell>
-                                <TableCell align="right">Hora</TableCell>
-                                <TableCell align="right">Acción</TableCell>
-                                <TableCell align="right">Usuario</TableCell>
-                                <TableCell align="right">Descripción</TableCell>
+                                        <TableRow sx={{ bgcolor: '#232323' }}>
+                                            <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
+                                            <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Hora</TableCell>
+                                            <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Tipo</TableCell>
+                                            <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Producto</TableCell>
+                                            <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Código</TableCell>
+                                            <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Cantidad</TableCell>
+                                            <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Stock Actual</TableCell>
+                                            <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Usuario</TableCell>
+                                            <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Ubicación</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {rows.map((row) => (
+                                        {movimientosFiltrados.map((mov) => {
+                                            const fecha = new Date(mov.fecha);
+                                            return (
                                 <TableRow
-                                    key={row.fat}
-                                    sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                                >
-                                    <TableCell component="th" scope="row">
-                                        {row.name.toLocaleDateString()}
+                                                    key={mov.id_mvin}
+                                                    sx={{ 
+                                                        '&:hover': { bgcolor: '#3E3E3E' },
+                                                        borderLeft: `4px solid ${mov.color_movimiento}`
+                                                    }}
+                                                >
+                                                    <TableCell sx={{ color: "#fff" }}>
+                                                        {fecha.toLocaleDateString()}
+                                                    </TableCell>
+                                                    <TableCell sx={{ color: "#fff" }}>
+                                                        {fecha.toLocaleTimeString()}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Chip
+                                                            label={`${mov.icono_movimiento} ${mov.tipo_movimiento}`}
+                                                            size="small"
+                                                            sx={{
+                                                                bgcolor: mov.color_movimiento,
+                                                                color: "#fff",
+                                                                fontWeight: 600
+                                                            }}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell sx={{ color: "#fff", fontWeight: 500 }}>
+                                                        {mov.producto_nombre}
+                                                    </TableCell>
+                                                    <TableCell sx={{ color: "#ccc", fontFamily: "monospace" }}>
+                                                        {mov.producto_codigo}
+                                                    </TableCell>
+                                                    <TableCell sx={{ color: "#fff", fontWeight: 600 }}>
+                                                        <span style={{ color: mov.cantidad > 0 ? "#4CAF50" : "#F44336" }}>
+                                                            {mov.cantidad > 0 ? '+' : ''}{mov.cantidad}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell sx={{ color: "#fff" }}>
+                                                        {mov.stock_actual}
+                                                    </TableCell>
+                                                    <TableCell sx={{ color: "#fff" }}>
+                                                        {mov.usuario_nombre}
+                                                    </TableCell>
+                                                    <TableCell sx={{ color: "#ccc", fontSize: "0.875rem" }}>
+                                                        {mov.ubicacion}
                                     </TableCell>
-                                    <TableCell align="right">{row.calories}</TableCell>
-                                    <TableCell align="right">{row.fat}</TableCell>
-                                    <TableCell align="right">{row.carbs}</TableCell>
-                                    <TableCell align="right">{row.protein}</TableCell>
                                 </TableRow>
-                            ))}
+                                            );
+                                        })}
                         </TableBody>
                     </Table>
                 </TableContainer>
-            </div>
+                        )}
+                    </TableContainerStyled>
 
-        </Container>
+                    {/* Mensaje si no hay movimientos */}
+                    {!loading && !error && movimientosFiltrados.length === 0 && (
+                        <Box sx={{ textAlign: 'center', p: 4, color: '#666' }}>
+                            <Typography variant="h6">No se encontraron movimientos</Typography>
+                            <Typography variant="body2">Intenta ajustar los filtros o recargar los datos</Typography>
+                        </Box>
+                    )}
+                </Box>
+            </DialogContent>
+        </Dialog>
     );
 }
 
+// Componente para tarjetas de estadísticas
+function StatCard({ color, icon, title, valor, subtitulo }: {
+    color: string; icon: string; title: string; valor: number; subtitulo: string;
+}) {
+    return (
+        <Card sx={{ bgcolor: '#2E2E2E', border: `2px solid ${color}`, borderRadius: 2 }}>
+            <CardContent sx={{ textAlign: 'center', p: 2 }}>
+                <Typography variant="h3" sx={{ color, mb: 1 }}>{icon}</Typography>
+                <Typography variant="h4" sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>
+                    {valor}
+                </Typography>
+                <Typography variant="h6" sx={{ color: "#FFD700", mb: 1 }}>
+                    {title}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "#ccc" }}>
+                    {subtitulo}
+                </Typography>
+            </CardContent>
+        </Card>
+    );
+}
+
+// Estilos
 const Container = styled.div`
   position: fixed;
   height: 90vh;
-  width: 60%;
-  left: 55%;
-  top:50%;
+  width: 80%;
+  left: 50%;
+  top: 50%;
   transform: translate(-50%, -50%);
-  border-radius: 5px;
+  border-radius: 8px;
   background: #1E1E1E;
   box-shadow: -10px 15px 30px rgba(10, 9, 9, 0.4);
-  padding: 13px 26px 20px 26px;
+  padding: 20px;
   z-index: 100;
-  display:flex;
-  align-items:center;
-  flex-direction:column;
-  justify-content:center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+`;
 
-    .cerr{
-        margin-bottom:40px;
-        font-size:20px;
-        cursor:pointer;
-    }
-
-  .table-container {
+const Header = styled.div`
     display: flex;
-    justify-content: center;
+  justify-content: space-between;
     align-items: center;
-    
-  }
+  padding-bottom: 16px;
+  border-bottom: 2px solid #333;
+`;
 
-  .Botones{
-    display:flex;
-    width: 100%;
-    margin-bottom: 20px;
-}
-  .Boton-end{
+const EstadisticasCard = styled.div`
+  background: #2E2E2E;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #444;
+`;
+
+const ToolbarContainer = styled.div`
     display: flex;
-    justify-content: end;
-    align-items: end;
-    flex-direction: row;
-    width: 100%;
-    gap: 10px;
-  }
-
-    .Boton-start{
-    display: flex;
-    justify-content: start;
-    align-items: start;
-    flex-direction: row;
-    width: 100%;
-    gap: 10px;
-
-    input{
-        padding: 0.7em;
-    }
-    }
-    .Boton_center{
-        display: flex;
-    justify-content: center;
+  justify-content: space-between;
     align-items: center;
-    flex-direction: row;
-    width: 100%;
-    gap: 10px;
-    }
-    `
+  padding: 12px;
+  background: #2E2E2E;
+  border-radius: 8px;
+  border: 1px solid #444;
+`;
+
+const FiltrosCard = styled.div`
+  background: #2E2E2E;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #444;
+`;
+
+const TableContainerStyled = styled.div`
+  flex: 1;
+  overflow: auto;
+  background: #2E2E2E;
+  border-radius: 8px;
+  border: 1px solid #444;
+`;

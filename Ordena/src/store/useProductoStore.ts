@@ -122,8 +122,11 @@ export const useInventariosStore = create<InventariosState>()(
                             [ubicacionId]: [...(state.inventarios[ubicacionId] || []), nuevoProductoFrontend],
                         },
                     }));
-                } catch (error) {
-                    console.error('Error adding producto:', error);
+                } catch (error: any) {
+                    if (error.response && error.response.status === 400) {
+                        throw error.response.data;
+                    }
+                    throw error;
                 }
             },
 
