@@ -4,11 +4,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import ( 
     login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, 
     SolicitudesViewSet, UsuarioViewSet, InformeViewSet, PedidosViewSet, 
-    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF
+    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF, BodegaCentralViewSet
 )
 
 router = DefaultRouter()
 
+router.register(r'bodegas',BodegaCentralViewSet, basename='bodega'),
 router.register(r'productos', ProductoViewSet, basename='producto')
 router.register(r'marcas', MarcaViewSet, basename='marca')
 router.register(r'categorias', CategoriaViewSet, basename='categoria')

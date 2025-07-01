@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { solicitudesService } from "../services/api";
+import { historialService } from "../services/historialService";
 
 interface Solicitud {
     id_solc: number;
@@ -24,9 +25,17 @@ interface Solicitud {
     }>;
 }
 
+export interface Bodega{
+  id: number;
+  bodega_nombre:string;
+  direccion:string;
+  rut:string;
+}
+
 interface BodegaState {
     vista: "bodega" | "sucursal";
     solicitudes: Solicitud[];
+    bodegas: Bodega[];
     pedidos: any[];
     transferencias: number;
     solicitudesTransferidas: any[];
@@ -41,6 +50,7 @@ interface BodegaState {
     deleteSolicitud: (id: number) => Promise<void>;
     addSolicitud: (solicitud: Solicitud) => void;
     clearSolicitudes: () => void;
+    fetchBodegas: () => Promise<void>;
     
     // Funciones de pedidos
     addPedido: (pedido: any) => void;
@@ -60,6 +70,7 @@ export const useBodegaStore = create<BodegaState>()(
     (set, get) => ({
       vista: "bodega",
       solicitudes: [],
+      bodegas: [],
       pedidos: [],
       transferencias: 0,
       solicitudesTransferidas: [],
@@ -121,7 +132,24 @@ export const useBodegaStore = create<BodegaState>()(
       addSolicitud: (solicitud: Solicitud) => set(state => ({
         solicitudes: [...state.solicitudes, solicitud]
       })),
-      
+      fetchBodegas: async () => {
+        try {
+          // Asumimos que tu servicio tiene un método para obtener las bodegas
+          const bodegasData = await historialService.getBodegas()
+          // Mapeamos por si los nombres de la API no coinciden exactamente con la interfaz
+          const bodegasMapeadas = bodegasData.map((b: any) => ({
+            id: b.id || b.id_bdg, // Acepta 'id' o 'id_bdg' del backend
+            bodega_nombre: b.bodega_nombre || b.nombre_bdg, // Acepta ambos nombres
+            direccion: b.direccion,
+            rut: b.rut,
+          }));
+          set({ bodegas: bodegasMapeadas });
+        } catch (error) {
+          console.error('Error fetching bodegas:', error);
+        }
+      },
+
+
       clearSolicitudes: () => set({ solicitudes: [] }),
       
       // Funciones de pedidos

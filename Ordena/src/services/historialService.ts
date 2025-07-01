@@ -9,7 +9,11 @@ export const historialService ={
     getSolicitudes: async()=>{
         const response = await api.get('/solicitudes/');
         return response.data;   
-    }
+    },
+    getBodegas: async () => {
+    const response = await api.get('/bodegas/'); // Asegúrate que la URL es correcta
+    return response.data;
+    },
     
 }
 

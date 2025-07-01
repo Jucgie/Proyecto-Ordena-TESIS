@@ -25,6 +25,7 @@ export interface CreateUsuarioData {
   contrasena: string;
   rol_fk: number;
   sucursal_fk?: number;
+  bodeg_fk?: number;
 }
 
 // Define la estructura completa del estado y sus acciones
