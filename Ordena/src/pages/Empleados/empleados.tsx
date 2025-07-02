@@ -8,33 +8,48 @@ import Layout from "../../components/layout/layout";
 
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button,
-    Dialog, DialogTitle, DialogContent, DialogActions, TextField, Select, MenuItem,
+    Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText,TextField, Select, MenuItem,
     Menu,
-    Container
+    Container, Snackbar, Alert
 } from "@mui/material";
 
 import { SUCURSALES } from "../../constants/ubicaciones";
 
 import { useAuthStore } from "../../store/useAuthStore";
 import { useUsuariosStore } from "../../store/useUsuarioStore";
-import type { Usuario,CreateUsuarioData } from "../../store/useUsuarioStore";
+import type { Usuario, CreateUsuarioData } from "../../store/useUsuarioStore";
 
 export default function Empleados() {
 
     const usuario = useAuthStore(state => state.usuario);
 
-    const { usuarios, fetchUsuarios, updateUsuario, addUsuario, removeUsuario, loading, error: storeError  } = useUsuariosStore();
-    
+    const { usuarios, fetchUsuarios, updateUsuario, addUsuario, removeUsuario, loading, error: storeError } = useUsuariosStore();
+
     const [modalOpen, setModalOpen] = useState(false);
-    
+
     const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState<Partial<Usuario & CreateUsuarioData> | null>(null);
-    
+
     const [isNew, setIsNew] = useState(false);
-    
+
     const [errores, setErrores] = useState<Partial<Record<keyof CreateUsuarioData, string>>>({});
 
+    //Confirmación para deshabilitar
+    const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
+    const [employeeToDisable, setEmployeeToDisable] = useState<string | null>(null);
+
+    //Ajustes Snackbar
+    const [notificacion, setNotificacion] = useState<{
+        open: boolean;
+        message: string;
+        severity: 'success' | 'error'
+    }>({
+        open: false,
+        message: '',
+        severity: 'success'
+    });
+
     useEffect(() => {
-        
+
         // Llama a la función para traer los usuarios de la API 
         fetchUsuarios();
     }, [fetchUsuarios]);
@@ -53,19 +68,19 @@ export default function Empleados() {
     if (loading) {
         return (
             <Layout>
-            <Loader>
-                <>
-                <img src={ordena} alt="Ordena_logo" />
-                <p>Ordena</p>
-                <div>Cargando Empleados...</div>
-                </>
-            </Loader>
+                <Loader>
+                    <>
+                        <img src={ordena} alt="Ordena_logo" />
+                        <p>Ordena</p>
+                        <div>Cargando Empleados...</div>
+                    </>
+                </Loader>
             </Layout>)
-        
+
         // <Layout><div style={{ color: "#FFD700", padding: 32, textAlign: "center" }}>Cargando empleados...</div></Layout>;
     }
 
-        // Muestra un mensaje de error si la carga falla
+    // Muestra un mensaje de error si la carga falla
     if (storeError) {
         return <Layout><div style={{ color: "#FF4D4F", padding: 32, textAlign: "center" }}>Error1: {storeError}</div></Layout>;
     }
@@ -84,7 +99,7 @@ export default function Empleados() {
         if (!empleadoSeleccionado.rol_fk)
             err.rol_fk = "Rol requerido";
         setErrores(err);
-        return Object.keys(err).length === 0; 
+        return Object.keys(err).length === 0;
     };
 
     // Solo empleados de la sucursal del supervisor
@@ -97,7 +112,7 @@ export default function Empleados() {
     );
 
 
-        // --- INICIO DEPURACIÓN ---
+    // --- INICIO DEPURACIÓN ---
     // Para ayudarte a encontrar el problema, hemos añadido estos logs.
     // Abre la consola de tu navegador (F12) para verlos.
     console.log("--- DEPURANDO VISTA DE EMPLEADOS ---");
@@ -115,13 +130,13 @@ export default function Empleados() {
             empleado
                 ? { ...empleado }
                 : {
-                      nombre: "",
-                      correo: "",
-                      rut: "",
-                      rol_fk: undefined, // Para que el placeholder del Select se muestre
-                      sucursal_fk: usuario.sucursal,
-                      contrasena: "",
-                  }
+                    nombre: "",
+                    correo: "",
+                    rut: "",
+                    rol_fk: undefined, // Para que el placeholder del Select se muestre
+                    sucursal_fk: usuario.sucursal,
+                    contrasena: "",
+                }
         );
         setModalOpen(true);
     };
@@ -136,38 +151,89 @@ export default function Empleados() {
     const handleSave = async () => {
         if (!validar()) return;
         if (!empleadoSeleccionado) return;
-        if (isNew) {
-            await addUsuario(empleadoSeleccionado as CreateUsuarioData);
-        } else {
-            await updateUsuario(empleadoSeleccionado.id_us!, empleadoSeleccionado);
-        }
-        handleCloseModal();
-    };
 
-/*     const handleDelete = (id: string) => {
-        if (window.confirm("¿Seguro que deseas eliminar este empleado?")) {
-            removeUsuario(id);
-        }
-    }; */
-    const handleDisable = async (id: string) => {
-        if (window.confirm("¿Seguro que deseas deshabilitar este empleado?")) {
-            try {
-                // 1. Llamamos a updateUsuario y esperamos a que termine la actualización en el backend.
-                await updateUsuario(id, { is_active: false });
-
-                // 2. Una vez confirmado el cambio, volvemos a pedir la lista de usuarios.
-                // Esto refresca el estado local y hace que el usuario desaparezca de la tabla de activos.
-                await fetchUsuarios();
-            } catch (error) {
-                console.error("Error al deshabilitar el usuario:", error);
-                // Opcional: podrías mostrar una notificación de error al usuario aquí.
+        try {
+            if (isNew) {
+                await addUsuario(empleadoSeleccionado as CreateUsuarioData);
+                setNotificacion({
+                    open: true,
+                    message: 'Empleado agregado exitosamente',
+                    severity: 'success'
+                });
+            } else {
+                await updateUsuario(empleadoSeleccionado.id_us!, empleadoSeleccionado);
+                setNotificacion({
+                    open: true,
+                    message: 'Empleado actualizado exitosamente',
+                    severity: 'success'
+                })
             }
+            handleCloseModal();
+        } catch (error) {
+            console.error("Error al guardar el empleado:", error);
+            setNotificacion({
+                open: true,
+                message: 'Error al guardar el empleado',
+                severity: 'error'
+            })
         }
     };
-    return (
-        <Layout>
 
-            <ContainerE>
+    /*     const handleDelete = (id: string) => {
+            if (window.confirm("¿Seguro que deseas eliminar este empleado?")) {
+                removeUsuario(id);
+            }
+        }; */
+    //Deshabilitar Empleado
+    const ModalDeshabilitar = (id: string) => {
+        setEmployeeToDisable(id);
+        setConfirmDisableOpen(true);
+    };
+    const OpCerraModalDeshabilitar = () => {
+        setConfirmDisableOpen(false);
+        setEmployeeToDisable(null);
+    };
+
+    const ModalConfirmDeshabilitar = async () => {
+        if (!employeeToDisable) return;
+        try {
+            // 1. Llamamos a updateUsuario y esperamos a que termine la actualización en el backend.
+            await updateUsuario(employeeToDisable, { is_active: false });
+
+            // 2. Una vez confirmado el cambio, volvemos a pedir la lista de usuarios.
+            // Esto refresca el estado local y hace que el usuario desaparezca de la tabla de activos.
+            //await fetchUsuarios();
+            setNotificacion({
+                open: true,
+                message: 'Empleado deshabilitado exitosamente',
+                severity: 'success'
+            });
+        } catch (error) {
+            console.error("Error al deshabilitar el usuario:", error);
+            // Opcional: podrías mostrar una notificación de error al usuario aquí.
+            setNotificacion({
+                open: true,
+                message: 'Error al deshabilitar el usuario',
+                severity: 'error'
+            });
+        } finally{
+            OpCerraModalDeshabilitar();
+
+        }
+};
+
+//cerrar notificacion
+const handeCloseNotificacion = () => {
+    setNotificacion({
+        ...notificacion,
+        open: false
+    });
+}
+
+return (
+    <Layout>
+
+        <ContainerE>
 
             <h2 style={{ color: "#FFD700", margin: "24px 0" }}>Gestión de Empleados</h2>
 
@@ -180,70 +246,72 @@ export default function Empleados() {
             </Button>
 
             <div className="tablaPrincipal">
-            <TableContainer component={Paper} 
-                sx={{ background: "#1b1a1a",
+                <TableContainer component={Paper}
+                    sx={{
+                        background: "#1b1a1a",
                         border: "1px solid rgb(36, 34, 34)",
-                        maxHeight:"25vw"
-                     }}>
-                <Table stickyHeader sx={{minWidth: 150 }} aria-label="simple table">
-                    <TableHead sx={{
+                        maxHeight: "25vw"
+                    }}>
+                    <Table stickyHeader sx={{ minWidth: 150 }} aria-label="simple table">
+                        <TableHead sx={{
                             '& th': {
                                 backgroundColor: '#232323',
-                                color: 'white'}
-                            }}>
-                        <TableRow>
-                            <TableCell style={{ color: "#FFD700" }}>Nombre</TableCell>
-                            <TableCell style={{ color: "#FFD700" }}>Correo</TableCell>
-                            <TableCell style={{ color: "#FFD700" }}>Rut</TableCell>
-                            <TableCell style={{ color: "#FFD700" }}>Rol</TableCell>
-                            <TableCell style={{ color: "#FFD700" }}>Sucursal</TableCell>
-                            <TableCell style={{ color: "#FFD700" }}>Acciones</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {empleadosActivosSucursal.length > 0 ? (
-
-                        empleadosActivosSucursal.map((emp: Usuario) => (
-                            <TableRow key={emp.id_us}>
-                                <TableCell style={{ color: "#fff" }}>{emp.nombre}</TableCell>
-                                <TableCell style={{ color: "#fff" }}>{emp.correo}</TableCell>
-                                <TableCell style={{ color: "#fff" }}>{emp.rut}</TableCell>
-                                <TableCell style={{ color: "#fff" }}>
-                                    {emp.rol_nombre ? emp.rol_nombre.charAt(0).toUpperCase() + emp.rol_nombre.slice(1) : "-"}
-                                </TableCell>
-                               <TableCell style={{ color: "#fff" }}>
-                                    {SUCURSALES.find(s => s.id == emp.sucursal_fk)?.nombre || "-"}
-                                </TableCell>
-                                <TableCell>
-                                    <Button
-                                        variant="outlined"
-                                        style={{ color: "#FFD700", borderColor: "#FFD700", marginRight: 8 }}
-                                        onClick={() => handleOpenModal(emp)}
-                                    >
-                                        Editar
-                                    </Button>
-                                    <Button
-                                        variant="outlined"
-                                        style={{ color: "#FF4D4F", borderColor: "#FF4D4F" }}
-                                        onClick={() => handleDisable(emp.id_us)}
-                                    >
-                                        Deshabilitar
-                                    </Button>
-
-                                </TableCell>
-                            </TableRow>
-                        ))
-                        ) : (
+                                color: 'white'
+                            }
+                        }}>
                             <TableRow>
-                                <TableCell colSpan={6} style={{ textAlign: 'center', color: '#ccc', padding: '20px' }}>
-                                    No se encontraron empleados activos para esta sucursal.
-                                    
-                                </TableCell>
-                            </TableRow>   
-                        )}                 
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                                <TableCell style={{ color: "#FFD700" }}>Nombre</TableCell>
+                                <TableCell style={{ color: "#FFD700" }}>Correo</TableCell>
+                                <TableCell style={{ color: "#FFD700" }}>Rut</TableCell>
+                                <TableCell style={{ color: "#FFD700" }}>Rol</TableCell>
+                                <TableCell style={{ color: "#FFD700" }}>Sucursal</TableCell>
+                                <TableCell style={{ color: "#FFD700" }}>Acciones</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {empleadosActivosSucursal.length > 0 ? (
+
+                                empleadosActivosSucursal.map((emp: Usuario) => (
+                                    <TableRow key={emp.id_us}>
+                                        <TableCell style={{ color: "#fff" }}>{emp.nombre}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{emp.correo}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{emp.rut}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>
+                                            {emp.rol_nombre ? emp.rol_nombre.charAt(0).toUpperCase() + emp.rol_nombre.slice(1) : "-"}
+                                        </TableCell>
+                                        <TableCell style={{ color: "#fff" }}>
+                                            {SUCURSALES.find(s => s.id == emp.sucursal_fk)?.nombre || "-"}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="outlined"
+                                                style={{ color: "#FFD700", borderColor: "#FFD700", marginRight: 8 }}
+                                                onClick={() => handleOpenModal(emp)}
+                                            >
+                                                Editar
+                                            </Button>
+                                            <Button
+                                                variant="outlined"
+                                                style={{ color: "#FF4D4F", borderColor: "#FF4D4F" }}
+                                                onClick={() => ModalDeshabilitar(emp.id_us)}
+                                            >
+                                                Deshabilitar
+                                            </Button>
+
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={6} style={{ textAlign: 'center', color: '#ccc', padding: '20px' }}>
+                                        No se encontraron empleados activos para esta sucursal.
+
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
             </div>
 
             <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
@@ -283,21 +351,22 @@ export default function Empleados() {
                             />
                             <Select
                                 value={empleadoSeleccionado.rol_fk || ""}
-                                onChange={e => setEmpleadoSeleccionado({ ...empleadoSeleccionado, rol_fk: Number (e.target.value) })}
+                                onChange={e => setEmpleadoSeleccionado({ ...empleadoSeleccionado, rol_fk: Number(e.target.value) })}
                                 variant="filled"
                                 style={{ color: "#fff", background: "#181818" }}
                                 error={!!errores.rol_fk}
                                 displayEmpty
                             >
+                                {/*Rol del empleado */}
                                 <MenuItem value="" disabled>Seleccione un rol</MenuItem>
                                 <MenuItem value={1}>
-                                    Administrador
-                                </MenuItem>
-                                <MenuItem value={2}>
                                     Supervisor
                                 </MenuItem>
-                                <MenuItem value={3}>
+                                <MenuItem value={2}>
                                     Bodeguero
+                                </MenuItem>
+                                <MenuItem value={3}>
+                                    Transportista
                                 </MenuItem>
                             </Select>
                             {errores.rol_fk && <span style={{ color: "#FF4D4F", fontSize: 13 }}>{errores.rol_fk}</span>}
@@ -311,14 +380,14 @@ export default function Empleados() {
                                 <MenuItem value="" disabled>
                                     Sucursal
                                 </MenuItem>
-                                {SUCURSALES.map(s=>(
+                                {SUCURSALES.map(s => (
                                     <MenuItem key={s.id} value={s.id}>
                                         {s.nombre}
                                     </MenuItem>
                                 ))}
                             </Select>
 
-{/*                             <Select
+                            {/*                             <Select
                                 value={empleadoSeleccionado.sucursal?.id || ""}
                                 onChange={e => setEmpleadoSeleccionado({
                                     ...empleadoSeleccionado,
@@ -355,9 +424,41 @@ export default function Empleados() {
                     </Button>
                 </DialogActions>
             </Dialog>
+            {/*Alerta/Notificacion */}
+            <Snackbar
+                open={notificacion.open}
+                autoHideDuration={6000}
+                onClose={handeCloseNotificacion}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+                <Alert onClose={handeCloseNotificacion} severity={notificacion.severity} sx={{ width: '100%' }}>
+                    {notificacion.message}
+                </Alert>
+            </Snackbar>
+
+            {/*Mensaje de Eliminacion */}
+            <Dialog
+                open={confirmDisableOpen}
+                onClose={OpCerraModalDeshabilitar}
+                PaperProps={{ style: { background: '#232323', color: 'white' } }}
+            >
+                <DialogTitle style={{ color: "#FFD700" }}>
+                    Confirmar Deshabilitación
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText style={{ color: 'white' }}>
+                        ¿Estás seguro de deshabilitar a este empleado?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={OpCerraModalDeshabilitar} style={{ color: "#fff" }}>Cancelar</Button>
+                    <Button onClick={ModalConfirmDeshabilitar} style={{ color: "#FF4D4F" }} autoFocus>
+                        Deshabilitar
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </ContainerE>
-        </Layout>
-    );
+    </Layout>
+);
 }
 
 const ContainerE = styled.div`

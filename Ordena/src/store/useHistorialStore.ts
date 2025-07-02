@@ -12,6 +12,7 @@ import { HistProductService } from "../services/historialService";
 
 //Definición de interfaces
 
+
 export interface ProductoSolicitud {
   id_solc_prod: number;
   cantidad: string;
@@ -20,12 +21,29 @@ export interface ProductoSolicitud {
   producto_codigo: string;
 }
 
+
 interface Solicitud {
   id_solc: number;
   fecha_creacion: string;
   observacion: string; 
   productos:ProductoSolicitud[];
   usuario_nombre: string;
+}
+
+export interface DetallePedido {
+  id: number;
+  cantidad: string;
+  descripcion: string;
+  productos_pedido_fk: number;
+  producto_nombre: string;
+  producto_codigo: string;
+}
+
+interface Bodega {
+  id_bdg: number;
+  nombre_bdg: string;
+  direccion: string;
+  
 }
 
 interface Sucursal {
@@ -54,8 +72,9 @@ export interface Pedidos{
     personal_entrega_fk?: PersonalEntrega;
     usuario_fk: number;
     solicitud_fk?: Solicitud;
-    bodega_fk?: number;
+    bodega_fk: Bodega;
     proveedor_fk?: number;
+detalles_pedido?:DetallePedido[];
 
 }
 
@@ -111,6 +130,7 @@ export interface Productos {
   description: string;
   stock: number;
   stock_minimo:number;
+  bodega_fk:number;
   im: File | string | null;
 }
 
@@ -138,6 +158,9 @@ create<productStock>()(
                 set({loading:true,error:null});
                 try {
                     const data = await HistProductService.getProducts();
+                    if (data && data.length > 0) {
+                        console.log("DEBUG: Primer producto recibido de la API:", data[0]);
+                    }
                     set({productos:data,loading:false});
 
                 //seccion error

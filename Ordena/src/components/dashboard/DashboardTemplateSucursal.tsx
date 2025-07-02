@@ -5,6 +5,9 @@ import { Grafics_b } from "../graficos/Grafics_bar";
 import { Grafics_Pie } from "../graficos/Grafics_pie";
 {/* Fin importaciones de componentes graficos */}
 
+import ordena from "../../assets/ordena.svg";
+
+
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -12,33 +15,32 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Paper from '@mui/material/Paper';
-import { Chip } from "@mui/material";
 
-import ordena from "../../assets/ordena.svg";
-
+import { SUCURSALES } from "../../constants/ubicaciones";
 
 //Obtención de datos de la api por medio del archivo store
 import { useHistorialStore } from "../../store/useHistorialStore";
 import { useHistProductStore } from "../../store/useHistorialStore";
 import { useInventariosStore } from "../../store/useProductoStore";
-import { useProveedoresStore } from "../../store/useProveedorStore";
+import { useBodegaStore } from "../../store/useBodegaStore";
 
-
-import { useUsuariosStore } from "../../store/useUsuarioStore";
+//import { useAuthStore } from "../../store/useAuthStore";
 
 //datos de la autenticación
 import { useAuthStore } from "../../store/useAuthStore";
 
 import stockImage  from '../../assets/en-stock.png';
-import { use, useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { useUsuariosStore } from "../../store/useUsuarioStore";
+
+import { Chip } from "@mui/material";
+
 
 //import { useEffect } from "react";
 
-import { SUCURSALES } from "../../constants/ubicaciones";
 
 
-
-export function CountElement() {
+export function CountElementSucursal() {
 
     //Obtención perfil de usuario
     const {usuario} = useAuthStore();
@@ -46,68 +48,81 @@ export function CountElement() {
     //Definición de constante para obtener datos 
 
     const {pedidos,fetchPedidos, loading:loadingPedidos} = useHistorialStore();
-    const {productos, fetchProducts,loading:loadingProducto} = useHistProductStore();
-    const {usuarios,fetchUsuarios, loading:loadingUsuarios} = useUsuariosStore();
-    const {proveedores,fetchProveedores,loading:loadingProveedor} = useProveedoresStore();
-
-    const isLoading = loadingPedidos || loadingProducto || loadingProveedor || loadingUsuarios;
-
-
+    const {solicitudes, fetchSolicitudes} = useBodegaStore();
+    const {usuarios,fetchUsuarios} = useUsuariosStore();
    // const prodct = useInventariosStore(state=>state.inventarios)
   //  const prodcts = Object.values(prodct).flat();
   // Cargar los datos cuando el componente se monta
     useEffect(() => {
         fetchPedidos();
-        fetchProducts();
         fetchUsuarios();
-        fetchProveedores();
+        if (usuario?.sucursal) {
+            fetchSolicitudes({sucursal_id: String(usuario.sucursal)})
+        }
+    }, [fetchPedidos, fetchSolicitudes, fetchUsuarios, usuario?.sucursal]);   
 
-    }, [fetchPedidos, fetchProducts,fetchUsuarios,fetchProveedores]);   
 
-
- 
     //almacenar datos
     //let pedidosMostrados = pedidos;
-    //let inventarioMostrados = productos;
+    //let solicitudesoMostrados = solicitudes;
+
 
     //filtrar datos según el perfil bodega
-    const {pedidosMostrados, inventarioMostrados} = useMemo(() => {
-        if (usuario?.tipo === 'bodega' && usuario.bodega){
+    const {pedidosMostrados, solicitudesMostrados} = useMemo(() => {
+        if (usuario?.tipo === 'sucursal' && usuario.sucursal){
 
-            const bodegaId = String(usuario.bodega);
+            const sucursalId = String(usuario.sucursal);
 
-            const pedidosFiltrados = pedidos.filter(p => String(p.bodega_fk)=== bodegaId);
+            const pedidosFiltrados = pedidos.filter(p => String(p.sucursal_fk)=== sucursalId);
 
-            const inventarioFiltrados = productos.filter(p => String(p.bodega_fk) === bodegaId);
+            const solicitudesFilrados = solicitudes.filter(s => String(s.fk_sucursal) === sucursalId);
+
+
             
-            return {pedidosMostrados: pedidosFiltrados, inventarioMostrados: inventarioFiltrados};
+            return {pedidosMostrados: pedidosFiltrados, solicitudesMostrados: solicitudesFilrados};
 
         }
-        return {pedidosMostrados: pedidos, inventarioMostrados: productos}
+        return {pedidosMostrados: pedidos, solicitudesMostrados: solicitudes}
 
+     /*         else if (usuario?.tipo === 'sucursal' && usuario.sucursal) {
+            const sucursalId = usuario.sucursal;
+            // Los pedidos se filtran por el ID de la sucursal.
+            pedidosMostrados = pedidos.filter(p => String(p.sucursal_fk) === sucursalId);
+            // Los productos en useHistProductStore no tienen sucursal_fk, por lo que el inventario es 0 para sucursales.
+            inventarioMostrados = [];
+        } */
 
-    },[usuario, pedidos, productos]);
+    },[usuario, pedidos, solicitudes]);
+
+    const totalSolicitudes = useMemo(()=>
+        (solicitudesMostrados || []).length
+    ,[solicitudesMostrados]) ;
 
     //Se obtiene los pedidos según el id del estado_pedido
-    const pedidosActivos = useMemo(()=>
+    const pedidosCamino = useMemo(()=>
         (pedidosMostrados || []).filter(p => p.estado_pedido_fk === 1).length
     ,[pedidosMostrados]) ;
+
+    const pedidosCompletados = useMemo(()=>
+        (pedidosMostrados || []).filter(p => p.estado_pedido_fk === 2).length,
+    [pedidosMostrados]
+    )
+    
 
     //Se obtinen los pedidos pendientes
     const pedidosPendientes = useMemo(()=>
         (pedidosMostrados || []).filter(p => p.estado_pedido_fk === 3).length,
     [pedidosMostrados]
     )
-    const pedidosCompletados = useMemo(()=>
-        (pedidosMostrados || []).filter(p => p.estado_pedido_fk === 2).length,
-    [pedidosMostrados]
-    )
+
 
     //Se obtiene los productos bajos, por medio de un filtro comparando el stock y el stock minimo
-    const productossStockBajo = useMemo(() => 
-        (inventarioMostrados || []).filter(p=>p.stock <= p.stock_minimo
-        ),[inventarioMostrados]
-    );
+    const totalEmpleadosActivos = useMemo(() => {
+        if (usuario?.rol === 'supervisor' && usuario.sucursal) {
+            return usuarios.filter(emp => emp.sucursal_fk == usuario.sucursal && emp.is_active).length;
+        }
+        return 0;
+    }, [usuarios, usuario]);
 
     //Se obtiene los ultimos pedidos por fecha y se muestran solo los cinco "ultimos"
     const ultimosPedidos = useMemo(() => {
@@ -116,15 +131,11 @@ export function CountElement() {
             .slice(0, 5);
     }, [pedidosMostrados]);
 
-    //se obtiene el total de productos
-    const totalProducts = inventarioMostrados.length;
-
-    const totalEmpleadosActivos = useMemo(() => {
-        if (usuario?.rol === 'supervisor' && usuario.bodega) {
-            return usuarios.filter(emp => emp.bodeg_fk == usuario.bodega && emp.is_active).length;
-        }
-        return 0;
-    }, [usuarios, usuario]);
+    const ultimasSolicitudes = useMemo(() => {
+        return [...(solicitudesMostrados || [])]
+            .sort((a, b) => new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime())
+            .slice(0, 5);
+    }, [solicitudesMostrados]);
 
     const getEstadoPedido = (id_estado: number) => {
         switch (id_estado) {
@@ -134,10 +145,27 @@ export function CountElement() {
                 return <Chip label="Completado" color="success" size="small" sx={{ color: 'white', backgroundColor: '#4CAF50' }} />;
             case 3:
                 return <Chip label="Pendiente" color="warning" size="small" sx={{ color: 'white', backgroundColor: '#FF9800' }} />;
+            default:
+                return <Chip label="Desconocido" size="small" />;
         }
     };
 
-   if (isLoading) {
+        const getEstadoSolicitud = (estado: string) => {
+        switch (estado?.toLowerCase()) {
+            case 'aprobada':
+                return <Chip label="Aprobada" color="success" size="small" sx={{ color: 'white', backgroundColor: '#4CAF50' }} />;
+            case 'denegada':
+                return <Chip label="Denegada" color="error" size="small" sx={{ color: 'white', backgroundColor: '#f44336' }} />;
+            case 'pendiente':
+                return <Chip label="Pendiente" color="warning" size="small" sx={{ color: 'white', backgroundColor: '#FF9800' }} />;
+            default:
+                return <Chip label={estado || "Desconocido"} size="small" />;
+        }
+    };
+
+    //se obtiene el total de productos
+    //const totalProducts = inventarioMostrados.length;
+   if (loadingPedidos) {
         return (
                 <Loader>
                     <>
@@ -148,6 +176,7 @@ export function CountElement() {
                 </Loader>
         );
     }
+
     return (
         <Contenedor_Dashboard>
             <h1 className="titulo_bn">Bienvenido, {usuario?.nombre || 'usuario'} </h1>
@@ -155,29 +184,27 @@ export function CountElement() {
             {/* container para los cuadrados resumen */}
             <Container>
                 <ul className="cuadroEstd">
-                    <p className="titulo">Pedidos Activos</p>
-                    <h1 className="numero">{pedidosActivos}</h1>
+                    <p className="titulo">Total solicitudes</p>
+                    <h1 className="numero">{totalSolicitudes}</h1>
                 </ul>
                 <ul className="cuadroEstd">
-                    <p className="titulo">Total Inventario</p>
-                    <h1 className="numero">{totalProducts}</h1>
+                    <p className="titulo">Pedidos En camino</p>
+                    <h1 className="numero">{pedidosCamino}</h1>
                 </ul>
                 <ul className="cuadroEstd">
                     <p className="titulo">Entregas Pendientes</p>
                     <h1 className="numero">{pedidosPendientes}</h1>
                 </ul>
-                {/*cuadros segun el rol */}
                 {usuario?.rol != 'supervisor' && (
                 <ul className="cuadroEstd">
                     <p className="titulo">Pedidos Completados</p>
                     <h1 className="numero">{pedidosCompletados}</h1>
                 </ul>)}
                 {usuario?.rol === 'supervisor' && (
-                    <ul className="cuadroEstd">
-                        <p className="titulo">Empleados Activos</p>
-                        <h1 className="numero">{totalEmpleadosActivos}</h1>
-                    </ul>
-                )} 
+                <ul className="cuadroEstd">
+                    <p className="titulo">Empleados Activos</p>
+                    <h1 className="numero">{totalEmpleadosActivos}</h1>
+                </ul>)}
             </Container>
 
             <br />
@@ -195,15 +222,8 @@ export function CountElement() {
                 </section>
                 {/* Sección para el cuadrado de productos con menor stock */}
                 <section className="grafico">
-                    <h4 className="titulo_d">Productos con stock mínimo</h4>
-
-                     {productossStockBajo.length === 0 ? (
-                        <Mensaje>
-                            <img src={stockImage} alt="producto con stock" />
-                            <p>¡Todos los productos tienen stock suficiente!</p>
-                        </Mensaje>
-                    ) : (
-                        /* Tabla que contiene información de productos con menor stock */
+                    <h4 className="titulo_d">Ultimas Solicitudes</h4>
+                    {ultimasSolicitudes.length > 0 ?(
                         <TableContainer
                             component={Paper}
                             sx={{
@@ -225,29 +245,31 @@ export function CountElement() {
                         }}>
                                     <TableRow>
                                         <TableCell>Id</TableCell>
-                                        <TableCell>Producto</TableCell>
-                                        <TableCell align="right">Stock</TableCell>
+                                        <TableCell>Fecha</TableCell>
+                                        <TableCell align="right">N° Productos</TableCell>
+                                        <TableCell align="right">Estado</TableCell>
                                     </TableRow>
                                 </TableHead>
 
-                            {/*Cuerpo de tabla */}
-                                <TableBody>
-                                    {productossStockBajo.map((row) => (
+                                 <TableBody>
+                                    {ultimasSolicitudes.map((solicitud)=> (
                                         <TableRow
-                                            key={row.id_prodc}
+                                            key={solicitud.id_solc}
                                             sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                                         >
                                             <TableCell component="th" scope="row">
-                                                {row.id_prodc}
+                                                {solicitud.id_solc}
                                             </TableCell>
-                                            <TableCell align="right">{row.nombre_prodc}</TableCell>
-                                            <TableCell align="right">{row.stock}</TableCell>
-
+                                            <TableCell align="right">{new Date(solicitud.fecha_creacion).toLocaleDateString()}</TableCell>
+                                            <TableCell align="right">{solicitud.productos?.length ?? 0}</TableCell>
+ <TableCell>{getEstadoSolicitud(solicitud.estado)}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
                             </Table>
                         </TableContainer>
+                    ):(
+                        <div><p>no hay solicitudes</p></div>
                     )}
                 </section>
             </section>
@@ -285,29 +307,29 @@ export function CountElement() {
                         }} >
                                 <TableRow>
                                     <TableCell>Id</TableCell>
-                                    <TableCell>Origen/Destino</TableCell>
+                                    <TableCell>Sucursal</TableCell>
                                     <TableCell>Productos</TableCell>
-                                    <TableCell>Fecha Entrega</TableCell>
+                                    <TableCell>Fecha Inicio</TableCell>
                                     <TableCell>Estado</TableCell>
+
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {/*Reorrido de los datos */}
-                                {ultimosPedidos.map((pedidos) => (
+                                {ultimosPedidos.map((row) => (
                                     <TableRow
-                                        key={pedidos.id_p}
+                                        key={row.id_p}
                                         sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                                     >
                                         <TableCell component="th" scope="row">
-                                            {pedidos.id_p} </TableCell>
+                                            {row.id_p} </TableCell>
                                         <TableCell component="th" scope="row">
-                                            {(pedidos.sucursal_fk
-                                                ? SUCURSALES.find(s => s.id == pedidos.sucursal_fk)?.nombre
-                                                : (proveedores.find(p => p.id_provd == pedidos.proveedor_fk)?.nombres_provd)??'N/A')}
+                                            {SUCURSALES.find(s => s.id == row.sucursal_fk)?.nombre ?? 'N/A'}
                                         </TableCell>
-                                        <TableCell>{pedidos.detalles_pedido?.length || 0}</TableCell>
-                                        <TableCell>{pedidos.fecha_entrega.split('T')[0] ?? 'N/A'}</TableCell>
-                                        <TableCell>{getEstadoPedido(pedidos.estado_pedido_fk)}</TableCell>
+                                        <TableCell>{row.solicitud_fk?.productos?.length ?? 0}</TableCell>
+                                        <TableCell>{row.fecha_entrega.split('T')[0] ?? 'N/A'}</TableCell>
+                                        <TableCell>{getEstadoPedido(row.estado_pedido_fk)}</TableCell>
+
 
 
 
@@ -466,7 +488,7 @@ const Container = styled.div`
         width: 60%;
         display: grid;
         justify-content: center;
-        align-items: center;
+        align-content: start;
         border: 1px solid rgb(36, 34, 34);
         background-color: rgb(20, 20, 20);
         padding: 10px;
@@ -520,7 +542,6 @@ const Contenedor_Dashboard = styled.div`
         }
     }
 `;
-
 const Loader = styled.div`
     display:flex;
     position:fixed;

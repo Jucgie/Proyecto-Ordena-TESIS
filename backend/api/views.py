@@ -1615,6 +1615,11 @@ class ExtraerProductosPDF(APIView):
                 'productos': [],
                 'datos': datos
             }, status=500)
+class BodegaCentralViewSet(viewsets.ModelViewSet):
+    queryset = BodegaCentral.objects.all()
+    serializer_class = BodegaCentralSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
 def generar_qr_producto(codigo_interno):
     """Genera un código QR para un producto usando solo el código interno"""
