@@ -30,12 +30,14 @@ interface BodegaState {
     pedidos: any[];
     transferencias: number;
     solicitudesTransferidas: any[];
+    paginaActual: number;
+    totalSolicitudes: number;
     
     // Funciones de vista
     setVista: (vista: "bodega" | "sucursal") => void;
     
     // Funciones de solicitudes
-    fetchSolicitudes: (params?: { bodega_id?: string; sucursal_id?: string; estado?: string }) => Promise<void>;
+    fetchSolicitudes: (params?: { bodega_id?: string; sucursal_id?: string; estado?: string; limit?: number; offset?: number }) => Promise<void>;
     createSolicitud: (solicitudData: any) => Promise<void>;
     updateSolicitud: (id: number, cambios: any) => Promise<void>;
     deleteSolicitud: (id: number) => Promise<void>;
@@ -63,6 +65,8 @@ export const useBodegaStore = create<BodegaState>()(
       pedidos: [],
       transferencias: 0,
       solicitudesTransferidas: [],
+      paginaActual: 1,
+      totalSolicitudes: 0,
       
       // Funciones de vista
       setVista: (vista: "bodega" | "sucursal") => set({ vista }),
@@ -70,10 +74,17 @@ export const useBodegaStore = create<BodegaState>()(
       // Funciones de solicitudes con backend
       fetchSolicitudes: async (params) => {
         try {
-          // Filtrar el parámetro estado ya que no existe en el backend
           const { estado, ...paramsBackend } = params || {};
-          const solicitudes = await solicitudesService.getSolicitudes(paramsBackend);
-          set({ solicitudes });
+          // Por defecto limit 20
+          const limit = paramsBackend.limit ?? 20;
+          const offset = paramsBackend.offset ?? 0;
+          const response = await solicitudesService.getSolicitudes({ ...paramsBackend, limit, offset });
+          // Si el backend retorna un array, asumimos que no hay total, si retorna objeto, buscamos total
+          if (Array.isArray(response)) {
+            set({ solicitudes: response });
+          } else {
+            set({ solicitudes: response.results || response, totalSolicitudes: response.count || 0 });
+          }
         } catch (error) {
           console.error('Error fetching solicitudes:', error);
         }

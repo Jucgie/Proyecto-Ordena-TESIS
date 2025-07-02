@@ -1,9 +1,9 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, permissions
 from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes,Pedidos,PersonalEntrega,DetallePedido,EstadoPedido, Informe, SolicitudProductos, Pedidos, DetallePedido, Notificacion, Historial, Stock, EstadoPedido, PersonalEntrega, MovInventario, Proveedor
-from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer, MovInventarioSerializer
+from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer, MovInventarioSerializer, NotificacionSerializer
 from django.db import transaction
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
@@ -24,6 +24,7 @@ from io import BytesIO
 from django.http import HttpResponse
 from django.conf import settings
 from django.db import models
+from api.utils.notificaciones import crear_notificacion
 
 logger = logging.getLogger(__name__)
 
@@ -484,18 +485,16 @@ class SolicitudesViewSet(viewsets.ModelViewSet):
         queryset = Solicitudes.objects.all()
         bodega_id = self.request.query_params.get('bodega_id')
         sucursal_id = self.request.query_params.get('sucursal_id')
-        
-        logger.info(f"DEBUG - SolicitudesViewSet: Parámetros recibidos - bodega_id={bodega_id}, sucursal_id={sucursal_id}")
-        
+        limit = int(self.request.query_params.get('limit', 20))
+        offset = int(self.request.query_params.get('offset', 0))
         if bodega_id:
-            logger.info(f"DEBUG - SolicitudesViewSet: Filtrando por bodega_id={bodega_id}")
             queryset = queryset.filter(fk_bodega=bodega_id)
         if sucursal_id:
-            logger.info(f"DEBUG - SolicitudesViewSet: Filtrando por sucursal_id={sucursal_id}")
             queryset = queryset.filter(fk_sucursal=sucursal_id)
-        
-        logger.info(f"DEBUG - SolicitudesViewSet: Total de solicitudes encontradas: {queryset.count()}")
-        return queryset.order_by('-fecha_creacion')
+        queryset = queryset.order_by('-fecha_creacion')
+        if hasattr(self, 'action') and self.action == 'list':
+            return queryset[offset:offset+limit]
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save()
@@ -521,13 +520,12 @@ class SolicitudesViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         try:
             instance = self.get_object()
-            # Detectar si hay cambio de estado (deberías tener un campo 'estado' o similar)
             estado_anterior = getattr(instance, 'estado', None)
             serializer = self.get_serializer(instance, data=request.data, partial=kwargs.pop('partial', False))
-            serializer.is_valid(raise_exception=True)
+            if not serializer.is_valid():
+                return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
             self.perform_update(serializer)
             estado_nuevo = serializer.validated_data.get('estado', None)
-            # Si la solicitud pasa a 'aprobada' y antes no lo estaba, descuenta stock
             if estado_nuevo == 'aprobada' and estado_anterior != 'aprobada':
                 productos_solicitados = SolicitudProductos.objects.filter(solicitud_fk=instance)
                 for prod in productos_solicitados:
@@ -538,13 +536,10 @@ class SolicitudesViewSet(viewsets.ModelViewSet):
                     stock_obj.save()
             return Response(serializer.data)
         except Solicitudes.DoesNotExist:
-            logger.error(f"Solicitud {kwargs.get('id_solc')} no encontrada")
             return Response({'error': 'Solicitud no encontrada'}, status=status.HTTP_404_NOT_FOUND)
         except serializers.ValidationError as e:
-            logger.error(f"Error de validación al actualizar solicitud: {str(e)}")
             return Response({'error': e.detail}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error al actualizar solicitud: {str(e)}")
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], url_path='archivar-solicitudes')
@@ -797,6 +792,21 @@ class PedidosViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             self.perform_create(serializer)
+            # Notificación automática al usuario solicitante
+            pedido_id = serializer.data.get('id_p')
+            if pedido_id:
+                try:
+                    pedido = Pedidos.objects.get(id_p=pedido_id)
+                    if pedido.usuario_fk:
+                        crear_notificacion(
+                            usuario=pedido.usuario_fk,
+                            nombre=f"Pedido #{pedido.id_p} creado",
+                            descripcion=f"Tu pedido #{pedido.id_p} ha sido registrado exitosamente.",
+                            tipo="info",
+                            pedido=pedido
+                        )
+                except Exception as e:
+                    logger.error(f"Error creando notificación de pedido creado: {str(e)}")
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
             logger.error(f"Error al crear pedido: {str(e)}")
@@ -809,19 +819,39 @@ class PedidosViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(instance, data=request.data, partial=kwargs.pop('partial', False))
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
-            
             # Lógica para manejar cambios de estado
             estado_nuevo = serializer.validated_data.get('estado_pedido_fk', None)
-            if estado_nuevo and hasattr(estado_nuevo, 'nombre') and estado_nuevo.nombre == 'aprobado' and estado_anterior != 'aprobado':
-                detalles = DetallePedido.objects.filter(pedidos_fk=instance)
-                for detalle in detalles:
-                    stock_obj, created = Stock.objects.get_or_create(
-                        productos_fk=detalle.productos_pedido_fk,
-                        bodega_fk=instance.bodega_fk.id_bdg
-                    )
-                    stock_obj.stock += detalle.cantidad
-                    stock_obj.save()
-            
+            if estado_nuevo and hasattr(estado_nuevo, 'nombre'):
+                if estado_nuevo.nombre == 'En camino' and estado_anterior != 'En camino':
+                    # Notificar a la sucursal que el pedido fue despachado
+                    if instance.sucursal_fk and hasattr(instance.sucursal_fk, 'usuarios_fk'):
+                        crear_notificacion(
+                            usuario=instance.sucursal_fk.usuarios_fk,
+                            nombre=f"Pedido #{instance.id_p} despachado",
+                            descripcion=f"Tu pedido #{instance.id_p} ha sido despachado y está en camino.",
+                            tipo="success",
+                            pedido=instance
+                        )
+                if estado_nuevo.nombre == 'Completado' and estado_anterior != 'Completado':
+                    # Notificar a la sucursal que el pedido fue recibido
+                    if instance.sucursal_fk and hasattr(instance.sucursal_fk, 'usuarios_fk'):
+                        crear_notificacion(
+                            usuario=instance.sucursal_fk.usuarios_fk,
+                            nombre=f"Pedido #{instance.id_p} recibido",
+                            descripcion=f"Tu pedido #{instance.id_p} ha sido recibido y completado.",
+                            tipo="success",
+                            pedido=instance
+                        )
+                if estado_nuevo.nombre == 'Rechazado' and estado_anterior != 'Rechazado':
+                    # Notificar al usuario solicitante que el pedido fue rechazado
+                    if instance.usuario_fk:
+                        crear_notificacion(
+                            usuario=instance.usuario_fk,
+                            nombre=f"Pedido #{instance.id_p} rechazado",
+                            descripcion=f"Tu pedido #{instance.id_p} ha sido rechazado.",
+                            tipo="error",
+                            pedido=instance
+                        )
             return Response(serializer.data)
         except Exception as e:
             logger.error(f"Error al actualizar pedido: {str(e)}")
@@ -881,6 +911,24 @@ class PedidosViewSet(viewsets.ModelViewSet):
                     productos_pedido_fk=sp.producto_fk,
                     pedidos_fk=pedido
                 )
+                # Descontar stock de la bodega y registrar movimiento de salida
+                try:
+                    stock_obj, _ = Stock.objects.get_or_create(
+                        productos_fk=sp.producto_fk,
+                        bodega_fk=solicitud.fk_bodega.id_bdg,
+                        defaults={'stock': 0, 'stock_minimo': 0, 'stock_maximo': 0, 'sucursal_fk': None, 'proveedor_fk': None}
+                    )
+                    stock_obj.stock = max(stock_obj.stock - sp.cantidad, 0)
+                    stock_obj.save()
+                    # Registrar movimiento de inventario tipo SALIDA
+                    MovInventario.objects.create(
+                        cantidad=-abs(sp.cantidad),
+                        fecha=timezone.now(),
+                        productos_fk=sp.producto_fk,
+                        usuario_fk=request.user
+                    )
+                except Exception as e:
+                    logger.error(f"Error registrando salida de inventario para producto {sp.producto_fk}: {str(e)}")
             logger.info(f"Pedido {pedido.id_p} creado exitosamente desde solicitud {solicitud_id}")
             return Response({
                 'mensaje': 'Pedido creado exitosamente',
@@ -1393,6 +1441,22 @@ class ProveedorViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Error al obtener historial de ingresos: {str(e)}")
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class NotificacionViewSet(viewsets.ModelViewSet):
+    queryset = Notificacion.objects.all()
+    serializer_class = NotificacionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Solo notificaciones del usuario autenticado
+        return Notificacion.objects.filter(usuario_fk=self.request.user)
+
+    @action(detail=True, methods=['patch'], url_path='leer')
+    def marcar_leida(self, request, pk=None):
+        notificacion = self.get_object()
+        notificacion.leida = True
+        notificacion.save()
+        return Response({'status': 'notificación marcada como leída'})
 
 MARCAS = [
     'Stanley', 'Bosch', 'Makita', 'Dewalt', 'Black+Decker', 'Einhell', 'Truper', 'Irwin', 'Hilti', '3M'

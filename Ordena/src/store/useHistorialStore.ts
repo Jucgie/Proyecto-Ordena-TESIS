@@ -63,7 +63,7 @@ interface HistorialState {
     pedidos: Pedidos[];
     loading: boolean;
     error: string | null;
-    fetchPedidos: () => Promise<void>;
+    fetchPedidos: (params?: { bodega_id?: string; sucursal_id?: string }) => Promise<void>;
 }
 
 
@@ -76,16 +76,15 @@ export const useHistorialStore = create<HistorialState>()(
             loading: false,
             error: null,
             //llamada a la api
-            fetchPedidos: async () => {
+            fetchPedidos: async (params = {}) => {
                 set({ loading: true, error: null });
                 try {
-                    const data = await historialService.getPedidos();
+                    const data = await historialService.getPedidos(params);
                     set({ pedidos: data, loading: false });
-                    //seccion error
                 } catch (error: unknown) {
-                    let errorMessage ="Error al obtener productos";
+                    let errorMessage ="Error al obtener pedidos";
                     if (error instanceof Error) { 
-                    errorMessage = error.message;
+                        errorMessage = error.message;
                     }
                     set({error: errorMessage,loading:false});
                 }

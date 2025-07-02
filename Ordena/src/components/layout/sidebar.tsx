@@ -24,7 +24,9 @@ export default function Sidebar() {
         { to: "/historial", icon: ManageHistoryIcon, label: "Historial y Reportes" },
         { to: "/solicitudes", icon: AssignmentIcon, label: "Solicitudes" },
         { to: "/informes", icon: DescriptionIcon, label: "Informes" },
-        { to: "/proveedores", icon: AssignmentIndIcon, label: "Proveedores" },
+        ...(usuario?.bodega
+            ? [{ to: "/proveedores", icon: AssignmentIndIcon, label: "Proveedores" }]
+            : []),
     ];
     
     return (

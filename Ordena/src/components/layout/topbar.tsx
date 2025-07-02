@@ -4,6 +4,7 @@ import { useBodegaStore } from "../../store/useBodegaStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { BODEGA_CENTRAL } from "../../constants/ubicaciones";
 import { SUCURSALES } from "../../constants/ubicaciones"; // Asegúrate de tener este array con tus sucursales
+import NotificationCenter from "../notificaciones/NotificationCenter";
 
 
 export default function Topbar() {
@@ -47,7 +48,7 @@ export default function Topbar() {
             }}
         >
             <div style={{ display: "flex", alignItems: "center", gap: "10px", position: "relative" }}>
-
+                <NotificationCenter />
                 <AccountCircleIcon style={{ color: "#FFD700", fontSize: 32 }} />
                 <span
                     style={{ color: "#FFD700", fontWeight: 500, cursor: "pointer", userSelect: "none" }}

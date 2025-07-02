@@ -6,158 +6,121 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Paper from '@mui/material/Paper';
-
-//Obtención de datos de la api por medio del archivo store
+import { Box, Typography, Grid, Chip } from '@mui/material';
 import { useHistorialStore } from "../../store/useHistorialStore";
 import type { ProductoSolicitud } from "../../store/useHistorialStore";
-
 
 //Definición de Interfaces 
 interface Props {
     setDetalle: () => void;
     id: number;
-
 }
 
 export function PedidoDetalle({ id, setDetalle }: Props) {
-    {/*Definicón de constante para obtener los datos */}
     const pedidos = useHistorialStore(state => state.pedidos);
     const pedido = pedidos.find((p) => p.id_p === id);
-
-
+    if (!pedido) return null;
+    const productos = pedido.solicitud_fk?.productos || [];
+    const fecha = pedido.fecha_entrega ? new Date(pedido.fecha_entrega) : null;
     return (
         <Container>
-            {/*Sección para cerra/salir de la ventana */}
             <div className="cerr">
                 <span onClick={setDetalle} className="vol"> X</span>
             </div>
-            <div className="titulo">
-
-                <h2>Pedido #{pedido?.id_p}</h2>
-                <h4>Productos</h4>
-            </div>
-            <div className="table-container">
-
-                {/*Tabla central que muestra los productos y su cantidad */}
+            <Box className="contenido" sx={{ width: '100%' }}>
+                <Typography variant="h5" sx={{ color: '#FFD700', fontWeight: 700, mb: 1 }}>
+                    Pedido #{pedido.id_p}
+                </Typography>
+                <Grid container spacing={2} sx={{ mb: 2 }}>
+                    <Grid item xs={12} md={6}>
+                        <Typography variant="body1" sx={{ color: '#fff' }}>
+                            <b>Fecha:</b> {fecha ? fecha.toLocaleDateString() + ' ' + fecha.toLocaleTimeString() : '—'}
+                        </Typography>
+                        <Typography variant="body1" sx={{ color: '#fff' }}>
+                            <b>Sucursal:</b> {pedido.sucursal_fk?.nombre_sucursal || pedido.sucursal_nombre || '—'}
+                        </Typography>
+                        <Typography variant="body1" sx={{ color: '#fff' }}>
+                            <b>Usuario:</b> {pedido.solicitud_fk?.usuario_nombre || pedido.usuario_nombre || '—'}
+                        </Typography>
+                        <Typography variant="body1" sx={{ color: '#fff' }}>
+                            <b>Transportista:</b> {pedido.personal_entrega_fk?.nombre_psn || pedido.personal_entrega_nombre || '—'}
+                        </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                        <Typography variant="body1" sx={{ color: '#fff' }}>
+                            <b>Estado:</b> <Chip label={pedido.estado_pedido_fk || '—'} sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }} />
+                        </Typography>
+                        <Typography variant="body1" sx={{ color: '#fff' }}>
+                            <b>Descripción:</b> {pedido.descripcion || '—'}
+                        </Typography>
+                    </Grid>
+                </Grid>
+                <Typography variant="h6" sx={{ color: '#FFD700', fontWeight: 700, mb: 1 }}>
+                    Productos del pedido
+                </Typography>
                 <TableContainer component={Paper}
                     sx={{
-                        maxHeight: 400, width: "16vw", background:"#232323",display:"flex",
+                        maxHeight: 400, width: "100%", background: "#232323",
                         '& .MuiTableCell-root': { color: 'white', textAlign: 'center' },
-                        '@media (max-width: 768px)': {
-                            width: '100%', // o el valor que prefieras
-                            minWidth: 0,
-                            maxWidth: '30vw'
-                        }
                     }}
                 >
-                    <Table sx={{ minWidth: 150 }} aria-label="simple table" stickyHeader> 
-                        <TableHead sx={{
-                            '& .MuiTableCell-root': {
-                                backgroundColor: '#232323',
-                                color: 'white'
-                            }
-                        }} >
+                    <Table sx={{ minWidth: 250 }} aria-label="tabla productos" stickyHeader>
+                        <TableHead sx={{ bgcolor: '#232323' }}>
                             <TableRow>
-                                <TableCell>Producto</TableCell>
-                                <TableCell align="right">Cantidad</TableCell>
+                                <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Producto</TableCell>
+                                <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Código</TableCell>
+                                <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }} align="right">Cantidad</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody sx={{ background: "#232323" }}>
-
-                            {/*Recorrido de los datos */}
-                            {pedido?.solicitud_fk?.productos?.map((p: ProductoSolicitud) => (
-
-                                <TableRow
-                                    key={p.id_solc_prod}
-                                    sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-
-
-                                    <TableCell component="th" scope="row">
-                                        {p.producto_nombre}
-                                    </TableCell>
-
-                                    <TableCell>{Number(p.cantidad)}</TableCell>
-
-
+                            {productos.map((p: ProductoSolicitud) => (
+                                <TableRow key={p.id_solc_prod}>
+                                    <TableCell>{p.producto_nombre}</TableCell>
+                                    <TableCell>{p.producto_codigo || '—'}</TableCell>
+                                    <TableCell align="right">{Number(p.cantidad)}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
                 </TableContainer>
-            </div>
+            </Box>
         </Container>
-
     );
 }
-
 
 const Container = styled.div`
   position: fixed;
   height: 90vh;
-  width: 30%;
-  left: 85%;
-  top:50%;
+  width: 50vw;
+  left: 50%;
+  top: 50%;
   transform: translate(-50%, -50%);
-  border-radius: 5px;
+  border-radius: 8px;
   background: #1E1E1E;
-  box-shadow: -20px 0px 20px rgba(36, 36, 36, 0.6);
-  padding: 13px 26px 20px 26px;
+  box-shadow: 0px 0px 40px rgba(36, 36, 36, 0.7);
+  padding: 24px 32px 24px 32px;
   z-index: 100;
-  display:flex;
-  align-items:center;
-  flex-direction:column;
-  justify-content:center;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow-y: auto;
 
-    .cerr{
-        margin-bottom:40px;
-        font-size:20px;
-        left:2vh;
-        display:flex;
-        position:fixed;
-        justify-content:start;
-        align-content:start;
-        top:0;
-        width:100%;
-        color:white;
-        font-weight:bold;
-    }
-
-    .table-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        align-content:center;
-        top:50%;
-        height:90vh;
-        position:static;
+  .cerr {
+    margin-bottom: 10px;
+    font-size: 22px;
+    width: 100%;
+    color: white;
+    font-weight: bold;
+    display: flex;
+    justify-content: flex-end;
+    cursor: pointer;
   }
-
-    .titulo{
-        display:flex;
-        flex-direction:column;
-        justify-content:start;
-        align-items:center;
-        text-align:center;
-        top:2px;
-
+  .contenido {
+    width: 100%;
   }
-  /* --- MEDIA QUERY --- */
-  @media (max-width: 768px) {
+  @media (max-width: 900px) {
     width: 95vw;
-    left: 50%;
-    padding: 8px 4px 12px 4px;
-
-    .table-container {
-      width: 100%;
-      padding: 0;
-      position: static;
-    }
-
-    .cerr{
-        left:unset;
-        right:2vh;
-        justify-content:flex-end;        
-    }
+    padding: 10px 4px 12px 4px;
   }
-
 `

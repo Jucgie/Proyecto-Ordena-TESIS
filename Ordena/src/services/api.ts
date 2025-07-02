@@ -39,7 +39,7 @@ export const solicitudesService = {
     },
 
     // Obtener solicitudes
-    getSolicitudes: async (params?: { bodega_id?: string; sucursal_id?: string; estado?: string }) => {
+    getSolicitudes: async (params?: { bodega_id?: string; sucursal_id?: string; estado?: string; limit?: number; offset?: number }) => {
         // Filtrar el parámetro estado ya que no existe en el backend
         const { estado, ...paramsBackend } = params || {};
         const response = await api.get('/solicitudes/', { params: paramsBackend });
@@ -154,7 +154,6 @@ export const pedidosService = {
     // Crear ingreso de bodega
     crearIngresoBodega: async (data: {
         fecha: string;
-        num_rem?: string;
         num_guia_despacho?: string;
         observaciones?: string;
         productos: Array<{
@@ -344,14 +343,5 @@ export const buscarProductosSimilares = async (data: {
     const response = await api.post('/buscar-productos-similares/', data);
     return response.data;
 };
-
-export async function getPedidosRecientes({ tipo, limit = 10, offset = 0 }: { tipo?: string, limit?: number, offset?: number }) {
-    const params = new URLSearchParams();
-    if (tipo) params.append('tipo', tipo);
-    params.append('limit', String(limit));
-    params.append('offset', String(offset));
-    const response = await api.get(`/pedidos/recientes/?${params.toString()}`);
-    return response.data;
-}
 
 export default api;

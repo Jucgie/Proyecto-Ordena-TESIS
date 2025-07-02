@@ -25,6 +25,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { COLORS } from '../../constants/colors';
+import { parseApiError } from '../../utils/errorUtils';
 
 async function fetchImagenUnsplash(nombre: string): Promise<string> {
     const accessKey = "rz2WkwQyM7en1zvTElwVpAbqGaOroIHqoNCllxW1qlg";
@@ -216,54 +218,63 @@ export default function Inventario() {
         try {
             await addProducto(ubicacionId, p);
             setModalAddOpen(false);
+            showSnackbar('Producto agregado correctamente', 'success');
         } catch (error: any) {
             setModalAddOpen(false);
-            let msg: string | string[] = "Error desconocido";
-            let errorObj = error;
-    
-            // Si el error viene anidado en error.error
-            if (error && typeof error === "object" && error.error) {
-                errorObj = error.error;
-            }
-    
-            if (errorObj && typeof errorObj === "object" && errorObj !== null) {
-                // Extraer todos los mensajes de los arrays del objeto
-                const mensajes = Object.values(errorObj)
-                    .flat()
-                    .filter((m: any) => typeof m === "string");
-                if (mensajes.length === 1) {
-                    msg = mensajes[0];
-                } else if (mensajes.length > 1) {
-                    msg = mensajes;
-                } else {
-                    msg = JSON.stringify(errorObj);
-                }
-            } else if (typeof errorObj === "string") {
-                msg = errorObj;
-            } else if (errorObj?.detail) {
-                msg = errorObj.detail;
-            }
-            setErrorModalMessage(msg as string); // <-- aquí está el error de tipos
+            const msg = parseApiError(error);
+            setErrorModalMessage(msg as string);
             setShowErrorModal(true);
+            showSnackbar(msg, 'error');
         }
     };
 
-    const handleUpdateProduct = (updatedProduct: ProductInt) => {
-        if (updatedProduct.id_prodc) {
-            updateProducto(ubicacionId, updatedProduct);
+    const handleUpdateProduct = async (updatedProduct: ProductInt) => {
+        try {
+            if (updatedProduct.id_prodc) {
+                await updateProducto(ubicacionId, updatedProduct);
+                showSnackbar('Producto actualizado correctamente', 'success');
+            }
+            setModalEditOpen(false);
+            setModalDetailOpen(false);
+        } catch (error: any) {
+            const msg = parseApiError(error);
+            setErrorModalMessage(msg as string);
+            setShowErrorModal(true);
+            showSnackbar(msg, 'error');
         }
-        setModalEditOpen(false);
-        setModalDetailOpen(false);
     };
 
     const handleDesactivarProductos = (codes: string[]) => {
-        const productosADesactivar = productos.filter(p => codes.includes(p.code));
-        const idsADesactivar = productosADesactivar.map(p => p.id_prodc).filter(Boolean);
-        if (idsADesactivar.length > 0) {
-            desactivarProductos(ubicacionId, idsADesactivar.map(id => id!.toString()));
+        try {
+            const productosADesactivar = productos.filter(p => codes.includes(p.code));
+            const idsADesactivar = productosADesactivar.map(p => p.id_prodc).filter(Boolean);
+            if (idsADesactivar.length > 0) {
+                desactivarProductos(ubicacionId, idsADesactivar.map(id => id!.toString()));
+                showSnackbar('Productos desactivados correctamente', 'success');
+            }
+            setSelected([]);
+            setDeleteMode(false);
+        } catch (error: any) {
+            const msg = parseApiError(error);
+            setErrorModalMessage(msg as string);
+            setShowErrorModal(true);
+            showSnackbar(msg, 'error');
         }
-        setSelected([]);
-        setDeleteMode(false);
+    };
+
+    const handleQuickStockUpdate = async (updatedProduct: ProductInt) => {
+        try {
+            if (updatedProduct.id_prodc) {
+                await updateProducto(ubicacionId, updatedProduct);
+                showSnackbar('Stock actualizado correctamente', 'success');
+                setModalDetailOpen(false);
+            }
+        } catch (error: any) {
+            const msg = parseApiError(error);
+            setErrorModalMessage(msg as string);
+            setShowErrorModal(true);
+            showSnackbar(msg, 'error');
+        }
     };
 
     // --- Formularios ---
@@ -322,8 +333,8 @@ export default function Inventario() {
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: unknown }>) => {
             const { name, value } = e.target as HTMLInputElement;
-            if (name === "stock") {
-                setForm(f => ({ ...f, stock: Number(value) }));
+            if (name === "stock" || name === "stock_minimo" || name === "stock_maximo") {
+                setForm(f => ({ ...f, [name]: Number(value) }));
             } else {
                 setForm(f => ({ ...f, [name]: value }));
             }
@@ -703,14 +714,20 @@ export default function Inventario() {
     }
 
     // Modal de detalles
-    function ProductDetailsModal({ product, open, onClose, onEdit }: {
+    function ProductDetailsModal({ product, open, onClose, onEdit, onQuickStockUpdate }: {
         product: ProductInt | null,
         open: boolean,
         onClose: () => void,
-        onEdit: () => void
+        onEdit: () => void,
+        onQuickStockUpdate: (p: ProductInt) => void | Promise<void>
     }) {
+        const [editStock, setEditStock] = React.useState(false);
+        const [newStock, setNewStock] = React.useState(product?.stock || 0);
+        React.useEffect(() => {
+            setNewStock(product?.stock || 0);
+            setEditStock(false);
+        }, [product]);
         if (!product) return null;
-        
         return (
             <Dialog 
                 open={open} 
@@ -741,48 +758,84 @@ export default function Inventario() {
                     </IconButton>
                 </DialogTitle>
                 <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff", pt: '28px' }}>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '200px 1fr' }, gap: 4 }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '220px 1fr' }, gap: 4 }}>
                         {/* Columna de la Imagen */}
                         <Box>
-                        <CardMedia
-                            component="img"
-                            image={
-                                typeof product.im === "string"
-                                    ? product.im
-                                    : product.im
-                                        ? URL.createObjectURL(product.im)
-                                        : sin_imagen
-                            }
-                            alt={product.name}
+                            <CardMedia
+                                component="img"
+                                image={
+                                    typeof product.im === "string"
+                                        ? product.im
+                                        : product.im
+                                            ? URL.createObjectURL(product.im)
+                                            : sin_imagen
+                                }
+                                alt={product.name}
                                 sx={{ 
                                     borderRadius: "8px", 
                                     width: '100%',
                                     height: 'auto',
-                                    maxHeight: 200,
+                                    maxHeight: 220,
                                     objectFit: "cover",
-                                    border: '1px solid #333'
+                                    border: '1px solid #333',
+                                    boxShadow: 3
                                 }}
-                        />
+                            />
                         </Box>
-                        
                         {/* Columna de Detalles */}
                         <Box>
-                            <Typography variant="h4" sx={{ color: "#FFFFFF", fontWeight: 600, mb: 1 }}>
+                            <Typography variant="h4" sx={{ color: "#FFD700", fontWeight: 700, mb: 1, letterSpacing: 1 }}>
                                 {product.name}
                             </Typography>
-                            
-                            <Box sx={{ 
-                                display: 'grid', 
-                                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                                gap: 2,
-                                mb: 3
-                            }}>
-                                <DetailItem label="Código" value={product.code} />
-                                <DetailItem label="Marca" value={product.brand} />
-                                <DetailItem label="Categoría" value={product.category} />
-                                <DetailItem label="Stock" value={product.stock.toString()} isHighlight />
+                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+                                <Chip label={product.code} sx={{ bgcolor: '#232323', color: '#FFD700', fontWeight: 700, fontSize: 16, px: 2 }} />
+                                <Chip label={product.brand} sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, fontSize: 16, px: 2 }} />
+                                <Chip label={product.category} sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, fontSize: 16, px: 2 }} />
                             </Box>
-                            
+                            <Box sx={{ mb: 3 }}>
+                                <Typography variant="subtitle2" sx={{ color: "#E0E0E0", fontWeight: 500, mb: 1 }}>
+                                    Stock actual
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <Chip 
+                                        label={product.stock + (product.stock === 1 ? ' unidad' : ' unidades')}
+                                        sx={{ 
+                                            bgcolor: product.stock === 0 ? '#F44336' : product.stock < product.stock_minimo ? '#FF9800' : product.stock > product.stock_maximo ? '#4caf50' : '#232323',
+                                            color: product.stock === 0 ? '#fff' : '#FFD700',
+                                            fontWeight: 700, fontSize: 22, px: 3, py: 2, height: 48, fontFamily: 'monospace', letterSpacing: 1.5
+                                        }}
+                                    />
+                                    {!editStock ? (
+                                        <Button size="small" variant="outlined" sx={{ color: '#FFD700', borderColor: '#FFD700', fontWeight: 700 }} onClick={() => setEditStock(true)}>
+                                            Editar stock
+                                        </Button>
+                                    ) : (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <TextField
+                                                type="number"
+                                                value={newStock}
+                                                onChange={e => setNewStock(Number(e.target.value))}
+                                                size="small"
+                                                sx={{ width: 90, bgcolor: '#232323', input: { color: '#FFD700', fontWeight: 700, fontSize: 20, textAlign: 'center' } }}
+                                                inputProps={{ min: 0 }}
+                                            />
+                                            <Button size="small" variant="contained" sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}
+                                                onClick={async () => {
+                                                    await onQuickStockUpdate({ ...product, stock: newStock });
+                                                    setEditStock(false);
+                                                }}>
+                                                Guardar
+                                            </Button>
+                                            <Button size="small" variant="outlined" sx={{ color: '#FFD700', borderColor: '#FFD700', fontWeight: 700 }} onClick={() => { setEditStock(false); setNewStock(product.stock); }}>
+                                                Cancelar
+                                            </Button>
+                                        </Box>
+                                    )}
+                                </Box>
+                                <Typography variant="caption" sx={{ color: '#888', display: 'block', mt: 1 }}>
+                                    Mínimo: {product.stock_minimo} | Máximo: {product.stock_maximo}
+                                </Typography>
+                            </Box>
                             <Typography variant="subtitle1" sx={{ color: "#E0E0E0", fontWeight: 500, borderBottom: '1px solid #333', pb: 1, mb: 2 }}>
                                 Descripción
                             </Typography>
@@ -811,7 +864,7 @@ export default function Inventario() {
                         Cerrar
                     </Button>
                     <Button 
-                        onClick={onEdit} 
+                        onClick={() => onEdit(product)} 
                         startIcon={<EditIcon />} 
                         variant="contained" 
                         sx={{
@@ -1381,6 +1434,16 @@ export default function Inventario() {
             ? productosOrdenados.filter(p => p.stock > p.stock_maximo)
             : filteredProducts;
 
+    // PAGINACIÓN
+    const [page, setPage] = useState(1);
+    const itemsPerPage = 20;
+    const totalPages = Math.ceil(productosParaMostrar.length / itemsPerPage);
+    const paginatedProducts = productosParaMostrar.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+    // FEEDBACK VISUAL
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const showSnackbar = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
+
     return (
         <Layout>
             <Box sx={{ maxWidth: 1200, margin: "0 auto", padding: 3 }}>
@@ -1516,7 +1579,7 @@ export default function Inventario() {
                         ) : (
                             viewMode === 'cards' ? (
                                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center" }}>
-                                    {productosParaMostrar.map((product, idx) => (
+                                    {paginatedProducts.map((product, idx) => (
                                         <Card
                                             key={product.code + idx}
                                             sx={{
@@ -1598,6 +1661,14 @@ export default function Inventario() {
                             )
                         )}
                     </Box>
+                    {/* Controles de paginación */}
+                    {totalPages > 1 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, gap: 2 }}>
+                            <Button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} variant="outlined">Anterior</Button>
+                            <Typography sx={{ color: COLORS.DORADO, fontWeight: 600 }}>Página {page} de {totalPages}</Typography>
+                            <Button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} variant="outlined">Siguiente</Button>
+                        </Box>
+                    )}
                     {/* Botón desactivar seleccionados */}
                     {deleteMode && selected.length > 0 && (
                         <Button
@@ -1660,8 +1731,9 @@ export default function Inventario() {
                 fullWidth
                 PaperProps={{
                     sx: {
-                        backgroundColor: "#1a1a1a",
-                        borderRadius: 2,
+                        backgroundColor: "#181818",
+                        borderRadius: 3,
+                        boxShadow: 24,
                     }
                 }}
             >
@@ -1669,18 +1741,23 @@ export default function Inventario() {
                     background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
                     color: "#FFD700",
                     borderBottom: "2px solid #FFD700",
-                    fontWeight: 600
+                    fontWeight: 700,
+                    fontSize: 26,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 2
                 }}>
-                    ✏️ Editar Producto
+                    <EditIcon sx={{ color: "#FFD700", fontSize: 32, mr: 1 }} />
+                    Editar Producto
                 </DialogTitle>
-                <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff", pt: '28px' }}>
-                <ProductForm
-                    initial={productoActual!}
-                    onSave={handleUpdateProduct}
-                    onCancel={() => setModalEditOpen(false)}
-                    marcas={marcasNombres}
-                    categorias={categoriasNombres}
-                />
+                <DialogContent sx={{ bgcolor: "#181818", color: "#fff", pt: '28px' }}>
+                    <ProductForm
+                        initial={productoActual!}
+                        onSave={handleUpdateProduct}
+                        onCancel={() => setModalEditOpen(false)}
+                        marcas={marcasNombres}
+                        categorias={categoriasNombres}
+                    />
                 </DialogContent>
             </Dialog>
             <ProductDetailsModal
@@ -1691,6 +1768,7 @@ export default function Inventario() {
                     setModalDetailOpen(false);
                     setModalEditOpen(true);
                 }}
+                onQuickStockUpdate={handleQuickStockUpdate}
             />
             <FiltroModal
                 open={modalFiltroOpen}
@@ -1739,6 +1817,13 @@ export default function Inventario() {
                     </Button>
                 </DialogActions>
             </Dialog>
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={3000}
+                onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+                message={snackbar.message}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            />
         </Layout>
     );
 }

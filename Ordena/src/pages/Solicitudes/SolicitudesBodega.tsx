@@ -26,6 +26,8 @@ export default function SolicitudesBodega() {
         addPedido,
         setTransferencias,
         addSolicitudesTransferidas,
+        paginaActual,
+        totalSolicitudes,
     } = useBodegaStore();
     const usuario = useAuthStore(state => state.usuario);
     const [modalOpen, setModalOpen] = useState(false);
@@ -33,6 +35,7 @@ export default function SolicitudesBodega() {
     const [solicitudAEliminar, setSolicitudAEliminar] = useState<any>(null);
     const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [pagina, setPagina] = useState(1);
     
     // Estado para checks
     const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
@@ -46,20 +49,23 @@ export default function SolicitudesBodega() {
 
     const fetchProductos = useInventariosStore(state => state.fetchProductos);
 
-    // Cargar solicitudes al montar el componente
+    // Cargar solicitudes al montar el componente y al cambiar de página
     useEffect(() => {
         console.log('DEBUG - SolicitudesBodega: usuario?.bodega =', usuario?.bodega);
         if (usuario?.bodega) {
             console.log('DEBUG - SolicitudesBodega: Cargando solicitudes para bodega_id =', usuario.bodega.toString());
             setLoading(true);
-            fetchSolicitudes({ bodega_id: usuario.bodega.toString() })
+            fetchSolicitudes({ bodega_id: usuario.bodega.toString(), limit: 20, offset: (pagina - 1) * 20 })
                 .finally(() => setLoading(false));
         }
-    }, [usuario?.bodega, fetchSolicitudes]);
+    }, [usuario?.bodega, fetchSolicitudes, pagina]);
 
     // Debug: verificar las solicitudes cargadas
     console.log('DEBUG - SolicitudesBodega: solicitudes =', solicitudes);
     console.log('DEBUG - SolicitudesBodega: solicitudesFiltradas =', solicitudesFiltradas);
+
+    // Calcular total de páginas
+    const totalPaginas = Math.max(1, Math.ceil((totalSolicitudes || solicitudesFiltradas.length) / 20));
 
     // Función para generar OCI con formato correcto
     const generarOCIFunction = async (solicitud: any) => {
@@ -364,6 +370,28 @@ export default function SolicitudesBodega() {
                         </TableBody>
                     </Table>
                 </TableContainer>
+                {/* Controles de paginación (ahora abajo) */}
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 16, gap: 16 }}>
+                    <Button
+                        variant="outlined"
+                        sx={{ color: '#FFD700', borderColor: '#FFD700' }}
+                        disabled={pagina === 1}
+                        onClick={() => setPagina(p => Math.max(1, p - 1))}
+                    >
+                        Anterior
+                    </Button>
+                    <span style={{ color: '#FFD700', fontWeight: 600 }}>
+                        Página {pagina} de {totalPaginas}
+                    </span>
+                    <Button
+                        variant="outlined"
+                        sx={{ color: '#FFD700', borderColor: '#FFD700' }}
+                        disabled={pagina === totalPaginas}
+                        onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+                    >
+                        Siguiente
+                    </Button>
+                </div>
                 {/* Modal de detalles */}
                 <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="md" fullWidth>
                     <DialogTitle sx={{ 

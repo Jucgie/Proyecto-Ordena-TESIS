@@ -230,8 +230,6 @@ export default function Informes() {
         const modulos: { [key: string]: string } = {
             'solicitudes': 'Solicitudes',
             'pedidos': 'Pedidos',
-            'inventario': 'Inventario',
-            'productos': 'Productos',
             'proveedores': 'Proveedores'
         };
         return modulos[modulo] || modulo;
@@ -366,8 +364,7 @@ export default function Informes() {
                         <MenuItem value="">Todos</MenuItem>
                         <MenuItem value="solicitudes">Solicitudes</MenuItem>
                         <MenuItem value="pedidos">Pedidos</MenuItem>
-                        <MenuItem value="inventario">Inventario</MenuItem>
-                        <MenuItem value="productos">Productos</MenuItem>
+                        <MenuItem value="proveedores">Proveedores</MenuItem>
                     </TextField>
                     <TextField
                         type="date"
@@ -494,7 +491,7 @@ export default function Informes() {
                     </DialogTitle>
                     <DialogContent style={{ background: "#181818", color: "#fff" }}>
                         {informeSeleccionado && (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "16px" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "16px" }}>
                                 <TextField
                                     label="ID del Informe"
                                     value={informeSeleccionado.id_informe}
@@ -502,10 +499,10 @@ export default function Informes() {
                                     size="small"
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
-                                            '& fieldset': { borderColor: '#FFD700' },
+                                            '& fieldset': { borderColor: '#444' },
                                             '& input': { color: '#fff' }
                                         },
-                                        '& .MuiInputLabel-root': { color: '#FFD700' }
+                                        '& .MuiInputLabel-root': { color: '#bbb' }
                                     }}
                                 />
                                 <TextField
@@ -515,10 +512,10 @@ export default function Informes() {
                                     size="small"
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
-                                            '& fieldset': { borderColor: '#FFD700' },
+                                            '& fieldset': { borderColor: '#444' },
                                             '& input': { color: '#fff' }
                                         },
-                                        '& .MuiInputLabel-root': { color: '#FFD700' }
+                                        '& .MuiInputLabel-root': { color: '#bbb' }
                                     }}
                                 />
                                 <TextField
@@ -530,10 +527,10 @@ export default function Informes() {
                                     minRows={2}
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
-                                            '& fieldset': { borderColor: '#FFD700' },
+                                            '& fieldset': { borderColor: '#444' },
                                             '& textarea': { color: '#fff' }
                                         },
-                                        '& .MuiInputLabel-root': { color: '#FFD700' }
+                                        '& .MuiInputLabel-root': { color: '#bbb' }
                                     }}
                                 />
                                 <TextField
@@ -543,10 +540,10 @@ export default function Informes() {
                                     size="small"
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
-                                            '& fieldset': { borderColor: '#FFD700' },
+                                            '& fieldset': { borderColor: '#444' },
                                             '& input': { color: '#fff' }
                                         },
-                                        '& .MuiInputLabel-root': { color: '#FFD700' }
+                                        '& .MuiInputLabel-root': { color: '#bbb' }
                                     }}
                                 />
                                 <TextField
@@ -556,10 +553,10 @@ export default function Informes() {
                                     size="small"
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
-                                            '& fieldset': { borderColor: '#FFD700' },
+                                            '& fieldset': { borderColor: '#444' },
                                             '& input': { color: '#fff' }
                                         },
-                                        '& .MuiInputLabel-root': { color: '#FFD700' }
+                                        '& .MuiInputLabel-root': { color: '#bbb' }
                                     }}
                                 />
                                 <TextField
@@ -569,25 +566,10 @@ export default function Informes() {
                                     size="small"
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
-                                            '& fieldset': { borderColor: '#FFD700' },
+                                            '& fieldset': { borderColor: '#444' },
                                             '& input': { color: '#fff' }
                                         },
-                                        '& .MuiInputLabel-root': { color: '#FFD700' }
-                                    }}
-                                />
-                                <TextField
-                                    label="Contenido (JSON)"
-                                    value={informeSeleccionado.contenido}
-                                    InputProps={{ readOnly: true }}
-                                    size="small"
-                                    multiline
-                                    minRows={4}
-                                    sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                            '& fieldset': { borderColor: '#FFD700' },
-                                            '& textarea': { color: '#fff' }
-                                        },
-                                        '& .MuiInputLabel-root': { color: '#FFD700' }
+                                        '& .MuiInputLabel-root': { color: '#bbb' }
                                     }}
                                 />
                             </div>

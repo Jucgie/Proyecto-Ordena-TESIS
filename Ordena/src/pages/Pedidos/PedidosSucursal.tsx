@@ -29,6 +29,8 @@ export default function PedidosSucursal() {
     const [loading, setLoading] = useState(true);
     const hasLoaded = useRef(false);
     const fetchProductos = useInventariosStore(state => state.fetchProductos);
+    const [paginaActual, setPaginaActual] = useState(1);
+    const PEDIDOS_POR_PAGINA = 10;
 
     const sucursalActualId = usuario?.sucursal || "";
     
@@ -116,17 +118,21 @@ export default function PedidosSucursal() {
     };
     
     const pedidosFiltrados = useMemo(() => {
-        
         const filtrados = pedidos.filter((row) => {
             const esSalida = row.tipo === "salida";
             const coincideSucursal = String(row.sucursalDestino) === String(sucursalActualId);
             const coincideEstado = estado === "" || row.estado === estado;
             const coincideFecha = fecha === "" || row.fecha === fecha;
-            
             return esSalida && coincideSucursal && coincideEstado && coincideFecha;
         });
         return filtrados;
     }, [pedidos, sucursalActualId, estado, fecha]);
+
+    const totalPaginas = Math.ceil(pedidosFiltrados.length / PEDIDOS_POR_PAGINA);
+    const pedidosPaginados = pedidosFiltrados.slice(
+        (paginaActual - 1) * PEDIDOS_POR_PAGINA,
+        paginaActual * PEDIDOS_POR_PAGINA
+    );
 
     const handleConfirmarRecepcion = async (id: number) => {
         try {
@@ -378,14 +384,14 @@ export default function PedidosSucursal() {
                                         Cargando pedidos...
                                     </TableCell>
                                 </TableRow>
-                            ) : pedidosFiltrados.length === 0 ? (
+                            ) : pedidosPaginados.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={7} align="center" style={{ color: "#8A8A8A" }}>
                                         No hay registros para mostrar.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                pedidosFiltrados.map((row: any, index: number) => (
+                                pedidosPaginados.map((row: any, index: number) => (
                                     <TableRow key={`${row.id}-${row.fecha}-${index}`}>
                                         <TableCell style={{ color: "#fff" }}>{row.id}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.fecha}</TableCell>
@@ -433,6 +439,28 @@ export default function PedidosSucursal() {
                         </TableBody>
                     </Table>
                 </TableContainer>
+                {/* Paginación */}
+                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", margin: "24px 0" }}>
+                    <Button
+                        variant="outlined"
+                        onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))}
+                        disabled={paginaActual === 1}
+                        style={{ marginRight: 8 }}
+                    >
+                        Anterior
+                    </Button>
+                    <span style={{ color: "#FFD700", fontWeight: 600, margin: "0 16px" }}>
+                        Página {paginaActual} de {totalPaginas}
+                    </span>
+                    <Button
+                        variant="outlined"
+                        onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))}
+                        disabled={paginaActual === totalPaginas || totalPaginas === 0}
+                        style={{ marginLeft: 8 }}
+                    >
+                        Siguiente
+                    </Button>
+                </div>
                 {/* Modal de detalles */}
                 <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="md" fullWidth>
                     <DialogTitle sx={{ 

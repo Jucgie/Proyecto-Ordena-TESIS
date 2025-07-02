@@ -103,7 +103,6 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
     
     // Estados para documentos
     const [fecha, setFecha] = useState("");
-    const [numRem, setNumRem] = useState("");
     const [numGuiaDespacho, setNumGuiaDespacho] = useState("");
     const [observacionesRecepcion, setObservacionesRecepcion] = useState("");
     
@@ -137,19 +136,6 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
             }
         }
     }, [categorias]);
-
-    const generarREMAutomatico = () => {
-        const numeroREM = DocumentoGenerator.generarNumeroREM();
-        setNumRem(numeroREM);
-        mostrarFeedback(`Número REM generado: ${numeroREM}`);
-    };
-
-    const formatearREM = () => {
-        if (numRem) {
-            const remFormateado = DocumentoGenerator.formatearDocumento('REM', numRem);
-            setNumRem(remFormateado);
-        }
-    };
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -299,12 +285,6 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                 camposRellenados++;
             }
             
-            if (datos.num_rem) {
-                setNumRem(datos.num_rem);
-                camposRellenados++;
-            } else {
-            }
-            
             if (datos.observaciones) {
                 setObservacionesRecepcion(datos.observaciones);
                 camposRellenados++;
@@ -367,7 +347,6 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
             asignado: tipo === "salida" ? asignado : undefined,
             sucursalDestino: tipo === "salida" ? sucursalDestino : undefined,
             fecha,
-            numRem,
             numGuiaDespacho,
             archivoGuia,
             nombreArchivo,
@@ -384,7 +363,6 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
         setAsignado("");
         setSucursalDestino("");
         setFecha("");
-        setNumRem("");
         setNumGuiaDespacho("");
         setArchivoGuia(null);
         setNombreArchivo("");
@@ -800,57 +778,6 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                                         '& .MuiInputLabel-root': { color: "#ccc" }
                                     }}
                                 />
-                            </Box>
-
-                            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2, alignItems: 'end', mb: 2 }}>
-                                <TextField
-                                    label="N° REM"
-                                    value={numRem}
-                                    onChange={e => setNumRem(e.target.value)}
-                                    fullWidth
-                                    placeholder="Ej: REM-2024-001234"
-                                    InputLabelProps={{ style: { color: "#ccc" } }}
-                                    sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                            color: "#fff",
-                                            '& fieldset': { borderColor: "#444" },
-                                            '&:hover fieldset': { borderColor: "#FFD700" },
-                                            '&.Mui-focused fieldset': { borderColor: "#FFD700" }
-                                        },
-                                        '& .MuiInputLabel-root': { color: "#ccc" }
-                                    }}
-                                />
-                                
-                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button
-                                        variant="outlined"
-                                        onClick={generarREMAutomatico}
-                                        sx={{
-                                            borderColor: "#FFD700",
-                                            color: "#FFD700",
-                                            "&:hover": {
-                                                borderColor: "#FFD700",
-                                                bgcolor: "rgba(255, 215, 0, 0.1)"
-                                            }
-                                        }}
-                                    >
-                                        Generar REM
-                                    </Button>
-                                    <Button
-                                        variant="outlined"
-                                        onClick={formatearREM}
-                                        sx={{
-                                            borderColor: "#FFD700",
-                                            color: "#FFD700",
-                                            "&:hover": {
-                                                borderColor: "#FFD700",
-                                                bgcolor: "rgba(255, 215, 0, 0.1)"
-                                            }
-                                        }}
-                                    >
-                                        Formatear
-                                    </Button>
-                                </Box>
                             </Box>
 
                             <TextField

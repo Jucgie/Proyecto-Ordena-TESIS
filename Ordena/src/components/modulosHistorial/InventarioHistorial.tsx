@@ -14,6 +14,10 @@ import {
     TrendingUp as TrendingUpIcon,
     Search as SearchIcon
 } from "@mui/icons-material";
+import { useAuthStore } from "../../store/useAuthStore";
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Props {
     setHistorial: () => void;
@@ -45,6 +49,7 @@ interface Estadisticas {
 }
 
 export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Props) {
+    const usuario = useAuthStore((state: any) => state.usuario);
     const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
     const [estadisticas, setEstadisticas] = useState<Estadisticas | null>(null);
     const [loading, setLoading] = useState(false);
@@ -68,10 +73,11 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
         setLoading(true);
         setError(null);
         try {
+            // Prioriza bodega si el usuario tiene ambos
             const params = {
-                bodega: bodegaId,
-                sucursal: sucursalId,
-                ...filtros
+                ...filtros,
+                bodega: usuario?.bodega || bodegaId || undefined,
+                sucursal: (!usuario?.bodega && usuario?.sucursal) ? usuario.sucursal : (sucursalId || undefined),
             };
             const data = await historialService.getMovimientosInventario(params);
             setMovimientos(data.movimientos);
@@ -109,7 +115,53 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
     };
 
     const exportarExcel = () => {
-        alert("Función de exportación en desarrollo");
+        // Prepara los datos para exportar
+        const data = movimientosFiltrados.map(mov => ({
+            ID: mov.id_mvin,
+            Fecha: new Date(mov.fecha).toLocaleDateString(),
+            Hora: new Date(mov.fecha).toLocaleTimeString(),
+            Tipo: mov.tipo_movimiento,
+            Producto: mov.producto_nombre,
+            Código: mov.producto_codigo,
+            Cantidad: mov.cantidad,
+            'Stock Actual': mov.stock_actual,
+            Usuario: mov.usuario_nombre,
+            Ubicación: mov.ubicacion
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const header = ["ID", "Fecha", "Hora", "Tipo", "Producto", "Código", "Cantidad", "Stock Actual", "Usuario", "Ubicación"];
+        XLSX.utils.sheet_add_aoa(ws, [header], { origin: "A1" });
+        ws['!cols'] = [
+            { wch: 6 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 22 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 18 }
+        ];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Movimientos Inventario');
+        XLSX.writeFile(wb, 'historial_inventario.xlsx');
+    };
+
+    const exportarPDF = () => {
+        const doc = new jsPDF('l');
+        doc.setFontSize(18);
+        doc.text('Historial de Movimientos de Inventario', 14, 16);
+        autoTable(doc, {
+            startY: 22,
+            head: [["ID", "Fecha", "Hora", "Tipo", "Producto", "Código", "Cantidad", "Stock Actual", "Usuario", "Ubicación"]],
+            body: movimientosFiltrados.map(mov => [
+                mov.id_mvin,
+                new Date(mov.fecha).toLocaleDateString(),
+                new Date(mov.fecha).toLocaleTimeString(),
+                mov.tipo_movimiento,
+                mov.producto_nombre,
+                mov.producto_codigo,
+                mov.cantidad,
+                mov.stock_actual,
+                mov.usuario_nombre,
+                mov.ubicacion
+            ]),
+            headStyles: { fillColor: [255, 215, 0], textColor: [0, 0, 0], fontStyle: 'bold' },
+            styles: { fontSize: 10 },
+        });
+        doc.save('historial_inventario.pdf');
     };
 
     const movimientosFiltrados = movimientos.filter(mov => 
@@ -139,29 +191,33 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
         >
             <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: '#232323', color: '#FFD700', fontWeight: 700, fontSize: 24 }}>
                 📊 Bitácora de Movimientos de Inventario
-                <Button onClick={setHistorial} variant="outlined" sx={{ color: "#FFD700", borderColor: "#FFD700" }}>
-                    🠔 Volver
-                </Button>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Button onClick={exportarExcel} variant="contained" sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}>
+                        Exportar Excel
+                    </Button>
+                    <Button onClick={exportarPDF} variant="contained" sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}>
+                        Exportar PDF
+                    </Button>
+                    <Button onClick={setHistorial} variant="outlined" sx={{ color: "#FFD700", borderColor: "#FFD700" }}>
+                        🠔 Volver
+                    </Button>
+                </Box>
             </DialogTitle>
             <DialogContent sx={{ p: 0, bgcolor: '#1E1E1E', overflow: 'auto' }}>
                 <Box sx={{ p: 3 }}>
                     {/* Estadísticas */}
                     {showEstadisticas && estadisticas && (
                         <EstadisticasCard>
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} md={3}>
+                            <Grid container spacing={2} justifyContent="center" alignItems="center">
+                                <Grid item xs={12} md={4}>
                                     <StatCard color="#4CAF50" icon="📥" title="Entradas" 
                                         valor={estadisticas.entradas.cantidad} subtitulo={`${estadisticas.entradas.unidades} unidades`} />
                                 </Grid>
-                                <Grid item xs={12} md={3}>
+                                <Grid item xs={12} md={4}>
                                     <StatCard color="#F44336" icon="📤" title="Salidas" 
                                         valor={estadisticas.salidas.cantidad} subtitulo={`${estadisticas.salidas.unidades} unidades`} />
                                 </Grid>
-                                <Grid item xs={12} md={3}>
-                                    <StatCard color="#FF9800" icon="⚙️" title="Ajustes" 
-                                        valor={estadisticas.ajustes.cantidad} subtitulo="Movimientos" />
-                                </Grid>
-                                <Grid item xs={12} md={3}>
+                                <Grid item xs={12} md={4}>
                                     <StatCard color={estadisticas.balance >= 0 ? "#4CAF50" : "#F44336"} 
                                         icon={estadisticas.balance >= 0 ? "📈" : "📉"} title="Balance" 
                                         valor={estadisticas.balance} subtitulo="unidades" />
@@ -192,15 +248,10 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
                                 Filtros
                             </Button>
                         </Box>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Box sx={{ display: 'flex', gap: 2 }}>
                             <Tooltip title="Recargar">
                                 <IconButton onClick={cargarMovimientos} sx={{ color: "#FFD700" }}>
                                     <RefreshIcon />
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Exportar">
-                                <IconButton onClick={exportarExcel} sx={{ color: "#FFD700" }}>
-                                    <ExportIcon />
                                 </IconButton>
                             </Tooltip>
                             <Tooltip title="Mostrar/Ocultar Estadísticas">

@@ -180,7 +180,11 @@ class MovInventarioSerializer(serializers.ModelSerializer):
 class NotificacionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notificacion
-        fields = '__all__'
+        fields = [
+            'id_ntf', 'nombre_ntf', 'descripcion', 'usuario_fk', 'pedido_fk', 'producto_fk',
+            'tipo', 'leida', 'link', 'fecha_hora_ntd'
+        ]
+        read_only_fields = ['id_ntf', 'fecha_hora_ntd']
 
 class PedidosSerializer(serializers.ModelSerializer):
     sucursal_nombre = serializers.CharField(source='sucursal_fk.nombre_sucursal', read_only=True)
@@ -483,6 +487,8 @@ class ProductoSerializer(serializers.ModelSerializer):
     stock_write = serializers.IntegerField(write_only=True, required=False, source='stock')
     stock_minimo = serializers.SerializerMethodField()
     stock_minimo_write = serializers.IntegerField(write_only=True, required=False, source='stock_minimo')
+    stock_maximo = serializers.SerializerMethodField()
+    stock_maximo_write = serializers.IntegerField(write_only=True, required=False, source='stock_maximo')
 
     def get_stock(self, obj):
         """Obtiene el stock real desde la tabla Stock"""
@@ -556,12 +562,49 @@ class ProductoSerializer(serializers.ModelSerializer):
             print(f"Error en get_stock_minimo para producto {obj.id_prodc}: {str(e)}")
             return 0
 
+    def get_stock_maximo(self, obj):
+        """Obtiene el stock máximo desde la tabla Stock"""
+        try:
+            request = self.context.get('request')
+            if not request:
+                return 0
+            sucursal_id = request.query_params.get('sucursal_id')
+            bodega_id = request.query_params.get('bodega_id')
+            if sucursal_id:
+                stock_obj = Stock.objects.filter(
+                    productos_fk=obj,
+                    sucursal_fk=sucursal_id
+                ).first()
+            elif bodega_id:
+                stock_obj = Stock.objects.filter(
+                    productos_fk=obj,
+                    bodega_fk=bodega_id
+                ).first()
+            else:
+                if obj.bodega_fk:
+                    stock_obj = Stock.objects.filter(
+                        productos_fk=obj,
+                        bodega_fk=obj.bodega_fk.id_bdg
+                    ).first()
+                elif obj.sucursal_fk:
+                    stock_obj = Stock.objects.filter(
+                        productos_fk=obj,
+                        sucursal_fk=obj.sucursal_fk.id
+                    ).first()
+                else:
+                    return 0
+            return float(stock_obj.stock_maximo) if stock_obj and stock_obj.stock_maximo is not None else 0
+        except Exception as e:
+            print(f"Error en get_stock_maximo para producto {obj.id_prodc}: {str(e)}")
+            return 0
+
     class Meta:
         model = Productos
         fields = [
             'id', 'id_prodc', 'nombre_prodc', 'descripcion_prodc', 'codigo_interno',
             'fecha_creacion', 'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre',
-            'bodega_fk', 'bodega_nombre', 'sucursal_fk', 'sucursal_nombre', 'stock', 'stock_minimo', 'stock_write', 'stock_minimo_write'
+            'bodega_fk', 'bodega_nombre', 'sucursal_fk', 'sucursal_nombre',
+            'stock', 'stock_minimo', 'stock_maximo', 'stock_write', 'stock_minimo_write', 'stock_maximo_write'
         ]
         read_only_fields = ['id_prodc', 'fecha_creacion']
 
@@ -591,6 +634,7 @@ class ProductoSerializer(serializers.ModelSerializer):
             validated_data['codigo_interno'] = codigo
         stock_data = validated_data.pop('stock', 0)
         stock_minimo_data = validated_data.pop('stock_minimo', 5)
+        stock_maximo_data = validated_data.pop('stock_maximo', 100)
         validated_data['fecha_creacion'] = timezone.now()
         producto = Productos.objects.create(**validated_data)
         # Crear el registro de stock
@@ -598,6 +642,7 @@ class ProductoSerializer(serializers.ModelSerializer):
             productos_fk=producto,
             stock=stock_data,
             stock_minimo=stock_minimo_data,
+            stock_maximo=stock_maximo_data,
             bodega_fk=producto.bodega_fk.id_bdg if producto.bodega_fk else None,
             sucursal_fk=producto.sucursal_fk.id if producto.sucursal_fk else None,
             proveedor_fk=None
@@ -607,12 +652,11 @@ class ProductoSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         stock_data = validated_data.pop('stock', None)
         stock_minimo_data = validated_data.pop('stock_minimo', None)
-
+        stock_maximo_data = validated_data.pop('stock_maximo', None)
         # Actualiza los campos del producto principal
         instance = super().update(instance, validated_data)
-
-        # Si se envió un nuevo stock o stock mínimo, actualiza la tabla Stock
-        if stock_data is not None or stock_minimo_data is not None:
+        # Si se envió un nuevo stock, stock mínimo o stock máximo, actualiza la tabla Stock
+        if stock_data is not None or stock_minimo_data is not None or stock_maximo_data is not None:
             # Determinar si es bodega o sucursal
             if instance.bodega_fk:
                 stock_obj, created = Stock.objects.get_or_create(
@@ -621,6 +665,7 @@ class ProductoSerializer(serializers.ModelSerializer):
                     defaults={
                         'stock': 0,
                         'stock_minimo': 5,
+                        'stock_maximo': 100,
                         'sucursal_fk': None,
                         'proveedor_fk': None
                     }
@@ -632,19 +677,20 @@ class ProductoSerializer(serializers.ModelSerializer):
                     defaults={
                         'stock': 0,
                         'stock_minimo': 5,
+                        'stock_maximo': 100,
                         'bodega_fk': None,
                         'proveedor_fk': None
                     }
                 )
             else:
                 return instance
-            
             if stock_data is not None:
                 stock_obj.stock = stock_data
             if stock_minimo_data is not None:
                 stock_obj.stock_minimo = stock_minimo_data
+            if stock_maximo_data is not None:
+                stock_obj.stock_maximo = stock_maximo_data
             stock_obj.save()
-
         return instance
 
     def validate_marca_fk(self, value):

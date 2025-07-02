@@ -286,6 +286,66 @@ class Stock(models.Model):
     def id(self):
         return self.id_stock
 
+    def save(self, *args, **kwargs):
+        from api.utils.notificaciones import crear_notificacion  # Importación local para evitar circularidad
+        from api.models import Usuario, BodegaCentral, Sucursal, Productos, Notificacion
+        # Obtener valores anteriores
+        if self.pk:
+            try:
+                prev = Stock.objects.get(pk=self.pk)
+                prev_stock = float(prev.stock)
+            except Stock.DoesNotExist:
+                prev_stock = None
+        else:
+            prev_stock = None
+        stock_actual = float(self.stock)
+        stock_min = float(self.stock_minimo) if self.stock_minimo is not None else 0
+        stock_max = float(self.stock_maximo) if self.stock_maximo is not None else None
+        producto = self.productos_fk
+        super().save(*args, **kwargs)
+        # Notificar si stock cruza el mínimo (de normal a crítico)
+        if prev_stock is not None and prev_stock > stock_min and stock_actual <= stock_min:
+            if self.bodega_fk:
+                usuarios = Usuario.objects.filter(bodeg_fk=self.bodega_fk)
+                ubicacion = BodegaCentral.objects.filter(id_bdg=self.bodega_fk).first()
+                ubicacion_nombre = ubicacion.nombre_bdg if ubicacion else 'Bodega'
+            elif self.sucursal_fk:
+                usuarios = Usuario.objects.filter(sucursal_fk=self.sucursal_fk)
+                ubicacion = Sucursal.objects.filter(id=self.sucursal_fk).first()
+                ubicacion_nombre = ubicacion.nombre_sucursal if ubicacion else 'Sucursal'
+            else:
+                usuarios = []
+                ubicacion_nombre = 'Ubicación desconocida'
+            for usuario in usuarios:
+                crear_notificacion(
+                    usuario=usuario,
+                    nombre=f"Stock crítico: {producto.nombre_prodc}",
+                    descripcion=f"El stock del producto '{producto.nombre_prodc}' en {ubicacion_nombre} está en {stock_actual} (mínimo: {stock_min})",
+                    tipo="error",
+                    producto=producto
+                )
+        # Notificar si stock cruza el máximo (de normal a máximo)
+        if stock_max is not None and prev_stock is not None and prev_stock < stock_max and stock_actual >= stock_max:
+            if self.bodega_fk:
+                usuarios = Usuario.objects.filter(bodeg_fk=self.bodega_fk)
+                ubicacion = BodegaCentral.objects.filter(id_bdg=self.bodega_fk).first()
+                ubicacion_nombre = ubicacion.nombre_bdg if ubicacion else 'Bodega'
+            elif self.sucursal_fk:
+                usuarios = Usuario.objects.filter(sucursal_fk=self.sucursal_fk)
+                ubicacion = Sucursal.objects.filter(id=self.sucursal_fk).first()
+                ubicacion_nombre = ubicacion.nombre_sucursal if ubicacion else 'Sucursal'
+            else:
+                usuarios = []
+                ubicacion_nombre = 'Ubicación desconocida'
+            for usuario in usuarios:
+                crear_notificacion(
+                    usuario=usuario,
+                    nombre=f"Stock máximo superado: {producto.nombre_prodc}",
+                    descripcion=f"El stock del producto '{producto.nombre_prodc}' en {ubicacion_nombre} está en {stock_actual} (máximo: {stock_max})",
+                    tipo="warning",
+                    producto=producto
+                )
+
 class MovInventario(models.Model):
     id_mvin = models.BigAutoField(primary_key=True)
     cantidad = models.IntegerField()
@@ -302,12 +362,25 @@ class MovInventario(models.Model):
         return self.id_mvin
 
 class Notificacion(models.Model):
+    TIPO_CHOICES = [
+        ('info', 'Información'),
+        ('warning', 'Advertencia'),
+        ('error', 'Error'),
+        ('success', 'Éxito'),
+    ]
     id_ntf = models.BigAutoField(primary_key=True)
     nombre_ntf = models.CharField(max_length=255)
-    descripcion = models.CharField(max_length=255)
-    usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    pedido_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE, db_column='pedido_fk')
-    fecha_hora_ntd = models.DateTimeField()
+    descripcion = models.TextField()
+    usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='notificaciones', db_column='usuario_fk')
+    pedido_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE, null=True, blank=True, db_column='pedido_fk')
+    producto_fk = models.ForeignKey(Productos, on_delete=models.CASCADE, null=True, blank=True, db_column='producto_fk')
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='info')
+    leida = models.BooleanField(default=False)
+    link = models.CharField(max_length=255, blank=True, null=True)
+    fecha_hora_ntd = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.nombre_ntf} - {self.usuario_fk}'
 
     class Meta:
         db_table = 'notificacion'

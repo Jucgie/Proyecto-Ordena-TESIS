@@ -85,7 +85,7 @@ export default function Proveedores() {
                     descripcion: `${prod.nombre} - ${prod.marca} - ${prod.categoria}`,
                     cantidad: prod.cantidad
                 })),
-                observaciones: `${ingreso.observaciones}\nREM: ${ingreso.num_rem || 'No especificado'}\nGuía: ${ingreso.num_guia_despacho || 'No especificada'}`,
+                observaciones: `${ingreso.observaciones}\nGuía: ${ingreso.num_guia_despacho || 'No especificada'}`,
                 conformidad: "Recibido conforme",
                 responsable: usuario?.nombre || "Responsable de Bodega",
                 proveedor: {
@@ -114,7 +114,6 @@ export default function Proveedores() {
                     cantidad: prod.cantidad
                 })),
                 observaciones: ingreso.observaciones,
-                num_rem: ingreso.num_rem,
                 num_guia_despacho: ingreso.num_guia_despacho,
                 responsable: usuario?.nombre || "Responsable de Bodega"
             };
@@ -237,7 +236,6 @@ export default function Proveedores() {
                                                     <TableRow>
                                                         <TableCell style={{ color: "#FFD700" }}>Fecha</TableCell>
                                                         <TableCell style={{ color: "#FFD700" }}>N° Guía Despacho</TableCell>
-                                                        <TableCell style={{ color: "#FFD700" }}>N° REM</TableCell>
                                                         <TableCell style={{ color: "#FFD700" }}>Acta de Recepción</TableCell>
                                                         <TableCell style={{ color: "#FFD700" }}>Observaciones</TableCell>
                                                         <TableCell style={{ color: "#FFD700" }}>Productos</TableCell>
@@ -248,7 +246,6 @@ export default function Proveedores() {
                                                         <TableRow key={index}>
                                                             <TableCell style={{ color: "#fff" }}>{ing.fecha}</TableCell>
                                                             <TableCell style={{ color: "#fff" }}>{ing.num_guia_despacho || "-"}</TableCell>
-                                                            <TableCell style={{ color: "#fff" }}>{ing.num_rem || "-"}</TableCell>
                                                             <TableCell style={{ color: "#fff" }}>
                                                                 <Button
                                                                     variant="outlined"

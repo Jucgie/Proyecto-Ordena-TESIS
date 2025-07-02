@@ -14,6 +14,7 @@ import {
 import { BtnAct } from "../button/ButtonHist";
 import ordena from "../../assets/ordena.svg";
 import { useHistorialStore } from "../../store/useHistorialStore";
+import { useAuthStore } from "../../store/useAuthStore";
 import { PedidoDetalle } from "./DetallePedido";
 import { DespachoDetalle } from "./DetalleDespacho";
 import * as XLSX from 'xlsx';
@@ -50,6 +51,7 @@ const FiltrosCard = styled.div`
 `;
 
 export function PedidoHistorial({ setPedido }: Props) {
+    const usuario = useAuthStore((state: any) => state.usuario);
     const [busqueda, setBusqueda] = useState("");
     const [detalle, setDetalle] = useState(false);
     const [pedidoSeleccionado, setPedidoSeleccionado] = useState<number | null>(null);
@@ -62,8 +64,15 @@ export function PedidoHistorial({ setPedido }: Props) {
     const [tab, setTab] = useState<'ingresos' | 'salidas'>('salidas');
 
     useEffect(() => {
-        fetchPedidos();
-    }, [fetchPedidos]);
+        // Prioriza bodega si el usuario tiene ambos
+        const params: any = {};
+        if (usuario?.bodega) {
+            params.bodega_id = usuario.bodega;
+        } else if (usuario?.sucursal) {
+            params.sucursal_id = usuario.sucursal;
+        }
+        fetchPedidos(params);
+    }, [fetchPedidos, usuario]);
 
     // Estadísticas simples
     const totalPedidos = pedidos.length;
@@ -246,8 +255,8 @@ export function PedidoHistorial({ setPedido }: Props) {
                     {/* Estadísticas */}
                     {showEstadisticas && (
                         <EstadisticasCard>
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} md={3}>
+                            <Grid container spacing={2} justifyContent="center" alignItems="center">
+                                <Grid item xs={12} md={6}>
                                     <StatCard color="#FFD700" icon="📦" title="Total Pedidos" valor={totalPedidos} subtitulo="" />
                                 </Grid>
                                 <Grid item xs={12} md={3}>
@@ -255,9 +264,6 @@ export function PedidoHistorial({ setPedido }: Props) {
                                 </Grid>
                                 <Grid item xs={12} md={3}>
                                     <StatCard color="#FF9800" icon="⏳" title="Pendientes" valor={totalPendientes} subtitulo="" />
-                                </Grid>
-                                <Grid item xs={12} md={3}>
-                                    <StatCard color="#2196F3" icon="🛒" title="Productos pedidos" valor={totalProductos} subtitulo="" />
                                 </Grid>
                             </Grid>
                         </EstadisticasCard>
@@ -356,17 +362,17 @@ export function PedidoHistorial({ setPedido }: Props) {
                     {tab === 'salidas' && (
                         <TableContainer component={Paper} sx={{ bgcolor: '#232323', borderRadius: 2, maxHeight: '50vh' }}>
                             <Table stickyHeader>
-                                <TableHead>
-                            <TableRow>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>ID</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Sucursal</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Usuario</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Cantidad (total)</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Transportista</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Acciones</TableCell>
-                            </TableRow>
-                        </TableHead>
+                                <TableHead sx={{ bgcolor: '#232323' }}>
+                                    <TableRow>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>ID</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Fecha</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Sucursal</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Usuario</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Cantidad (total)</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Transportista</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Acciones</TableCell>
+                                    </TableRow>
+                                </TableHead>
                                 <TableBody>
                                     {salidas.map((pedido) => {
                                         const detalles = pedido.detalles_pedido || [];
@@ -404,14 +410,14 @@ export function PedidoHistorial({ setPedido }: Props) {
                     {tab === 'ingresos' && (
                         <TableContainer component={Paper} sx={{ bgcolor: '#232323', borderRadius: 2, maxHeight: '50vh' }}>
                             <Table stickyHeader>
-                                <TableHead>
+                                <TableHead sx={{ bgcolor: '#232323' }}>
                                     <TableRow>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>ID</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Proveedor</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Usuario</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Cantidad (total)</TableCell>
-                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700 }}>Acciones</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>ID</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Fecha</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Proveedor</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Usuario</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Cantidad (total)</TableCell>
+                                        <TableCell sx={{ color: "#FFD700", fontWeight: 700, background: '#232323' }}>Acciones</TableCell>
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>

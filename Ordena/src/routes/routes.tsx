@@ -12,11 +12,21 @@ import Inventario from "../pages/inventario/inventario";
 import Proveedores from "../pages/proveedores/proveedores";
 import Empleados from "../pages/Empleados/empleados";
 import {Dashboard} from "../pages/dashboard/Dashboard";
+import { useAuthStore } from "../store/useAuthStore";
 
 export default function AppRoutes() {
     const { vista } = useBodegaStore();
+    const usuario = useAuthStore(state => state.usuario);
     
     console.log('AppRoutes - Vista actual:', vista);
+    
+    // Componente para proteger la ruta de proveedores
+    const ProtectedProveedoresRoute = () => {
+        if (!usuario?.bodega) {
+            return <Navigate to="/pedidos" replace />;
+        }
+        return <Proveedores />;
+    };
     
     return (
         <BrowserRouter>
@@ -63,7 +73,7 @@ export default function AppRoutes() {
 
                 <Route path="/proveedores" element={
                     <ProtectedRoute>
-                        <Proveedores />
+                        <ProtectedProveedoresRoute />
                     </ProtectedRoute>
                 } />
 

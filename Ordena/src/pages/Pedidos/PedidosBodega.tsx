@@ -29,7 +29,7 @@ import { usuarioService } from "../../services/usuarioService";
 import { solicitudesService, pedidosService, personalEntregaService, informesService } from "../../services/api";
 import EstadoBadge from "../../components/EstadoBadge";
 import { buscarProductosSimilares } from '../../services/api';
-import { getPedidosRecientes } from '../../services/api';
+
 
 // Interfaces
 interface Producto {
@@ -108,6 +108,13 @@ function BotonAccion({ children, startIcon, ...props }: { children: React.ReactN
 }
 
 function formatFecha(fecha: string) {
+    if (!fecha) return '-';
+    const d = new Date(fecha);
+    return d.toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+// Función para formatear fecha legible
+function formatFechaLegible(fecha: string) {
     if (!fecha) return '-';
     const d = new Date(fecha);
     return d.toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -1028,6 +1035,27 @@ export default function PedidosBodega() {
         // eslint-disable-next-line
     }, [pestanaActiva, pedidosArray]);
 
+    // Estados para paginación
+    const [paginaActual, setPaginaActual] = useState(1);
+
+    // Calcular los pedidos a mostrar según la pestaña y la página
+    const datosFiltrados = useMemo(() => {
+        let datos = opcion === 'ingresos' ? ingresos : salidas;
+        // Aquí puedes agregar más filtros si lo deseas
+        return datos;
+    }, [ingresos, salidas, opcion]);
+
+    const totalPaginas = Math.ceil(datosFiltrados.length / PEDIDOS_POR_PAGINA);
+    const pedidosPaginados = datosFiltrados.slice(
+        (paginaActual - 1) * PEDIDOS_POR_PAGINA,
+        paginaActual * PEDIDOS_POR_PAGINA
+    );
+
+    // Resetear página cuando cambian los datos filtrados
+    useEffect(() => {
+        setPaginaActual(1);
+    }, [opcion, ingresos, salidas]);
+
     return (
         <Layout>
             <Snackbar
@@ -1301,10 +1329,32 @@ export default function PedidosBodega() {
                 Limpiar registros pendientes
                 </Button>
                 {opcion === 'ingresos' ? (
-                    <TablaIngresos ingresos={ingresos} onVerDetalles={handleOpenDetailModal} loading={loading} />
+                    <TablaIngresos ingresos={pedidosPaginados} onVerDetalles={handleOpenDetailModal} loading={loading} />
                 ) : (
-                    <TablaSalidas salidas={salidas} onVerDetalles={handleOpenDetailModal} loading={loading} />
+                    <TablaSalidas salidas={pedidosPaginados} onVerDetalles={handleOpenDetailModal} loading={loading} />
                 )}
+                {/* Paginación */}
+                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", margin: "24px 0" }}>
+                    <Button
+                        variant="outlined"
+                        onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))}
+                        disabled={paginaActual === 1}
+                        style={{ marginRight: 8 }}
+                    >
+                        Anterior
+                    </Button>
+                    <span style={{ color: "#FFD700", fontWeight: 600, margin: "0 16px" }}>
+                        Página {paginaActual} de {totalPaginas}
+                    </span>
+                    <Button
+                        variant="outlined"
+                        onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))}
+                        disabled={paginaActual === totalPaginas || totalPaginas === 0}
+                        style={{ marginLeft: 8 }}
+                    >
+                        Siguiente
+                    </Button>
+                </div>
                 <div ref={tablaTransferidasRef} style={{ marginTop: 40 }}>
                     <h3 style={{ color: "#FFD700" }}>Solicitudes transferidas recientemente</h3>
                     <TableContainer component={Paper} style={{ background: "#232323" }}>
@@ -1664,99 +1714,64 @@ export default function PedidosBodega() {
                         borderBottom: "2px solid #FFD700",
                         fontWeight: 600
                     }}>
-                        📋 Detalles del Pedido #{pedidoSeleccionado?.id}
+                        📋 Detalles del Pedido #{pedidoSeleccionado?.id || pedidoSeleccionado?.id_p}
                     </DialogTitle>
                     <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
                         {pedidoSeleccionado && (
                             <>
-                                {/* Información principal */}
-                                <Box sx={{ 
-                                    display: "grid", 
-                                    gridTemplateColumns: "1fr 1fr", 
-                                    gap: 2, 
-                                    mb: 3,
-                                    p: 2,
-                                    bgcolor: "#232323",
-                                    borderRadius: 2,
-                                    border: "1px solid #333"
-                                }}>
-                                <TextField
+                                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                    <TextField
                                         label="ID del Pedido"
-                                    value={pedidoSeleccionado.id}
-                                    InputProps={{
-                                            readOnly: true,
-                                            sx: { color: "#FFD700", fontWeight: 600 }
-                                        }}
+                                        value={pedidoSeleccionado.id || pedidoSeleccionado.id_p}
+                                        InputProps={{ readOnly: true, sx: { color: "#FFD700", fontWeight: 600 } }}
                                         size="small"
-                                        sx={{
-                                            "& .MuiInputLabel-root": { color: "#ccc" },
-                                            "& .MuiOutlinedInput-root": {
-                                                "& fieldset": { borderColor: "#444" },
-                                                "&:hover fieldset": { borderColor: "#FFD700" }
-                                            }
-                                        }}
-                                />
-                                <TextField
-                                    label="Fecha"
-                                    value={pedidoSeleccionado.fecha}
-                                    InputProps={{
-                                            readOnly: true,
-                                            sx: { color: "#fff" }
-                                        }}
+                                        sx={{ "& .MuiInputLabel-root": { color: "#ccc" }, "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: "#444" }, "&:hover fieldset": { borderColor: "#FFD700" } } }}
+                                    />
+                                    <TextField
+                                        label="Fecha"
+                                        value={formatFechaLegible(pedidoSeleccionado.fecha || pedidoSeleccionado.fecha_entrega)}
+                                        InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                         size="small"
-                                        sx={{
-                                            "& .MuiInputLabel-root": { color: "#ccc" },
-                                            "& .MuiOutlinedInput-root": {
-                                                "& fieldset": { borderColor: "#444" },
-                                                "&:hover fieldset": { borderColor: "#FFD700" }
-                                            }
-                                        }}
-                                />
-                                <TextField
-                                    label="Responsable"
-                                    value={pedidoSeleccionado.responsable}
-                                    InputProps={{
-                                            readOnly: true,
-                                            sx: { color: "#fff" }
-                                        }}
+                                        sx={{ "& .MuiInputLabel-root": { color: "#ccc" }, "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: "#444" }, "&:hover fieldset": { borderColor: "#FFD700" } } }}
+                                    />
+                                    <TextField
+                                        label="Responsable"
+                                        value={
+                                            pedidoSeleccionado.responsable || 
+                                            pedidoSeleccionado.responsable_nombre || 
+                                            pedidoSeleccionado.usuario_nombre || 
+                                            pedidoSeleccionado.personal_entrega_nombre || 
+                                            "-"
+                                        }
+                                        InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                         size="small"
-                                        sx={{
-                                            "& .MuiInputLabel-root": { color: "#ccc" },
-                                            "& .MuiOutlinedInput-root": {
-                                                "& fieldset": { borderColor: "#444" },
-                                                "&:hover fieldset": { borderColor: "#FFD700" }
-                                            }
-                                        }}
-                                />
-                                <TextField
-                                    label={opcion === "ingresos" ? "Proveedor" : "Sucursal destino"}
-                                    value={
-                                        opcion === "ingresos"
-                                                ? (pedidoSeleccionado.proveedor?.nombre || SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || "-")
-                                            : (SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || "-")
-                                    }
-                                    InputProps={{
-                                            readOnly: true,
-                                            sx: { color: "#fff" }
-                                        }}
+                                        sx={{ "& .MuiInputLabel-root": { color: "#ccc" }, "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: "#444" }, "&:hover fieldset": { borderColor: "#FFD700" } } }}
+                                    />
+                                    <TextField
+                                        label={opcion === "ingresos" ? "Proveedor" : "Sucursal destino"}
+                                        value={
+                                            opcion === "ingresos"
+                                                ? (
+                                                    pedidoSeleccionado.proveedor?.nombre ||
+                                                    pedidoSeleccionado.proveedor_nombre ||
+                                                    pedidoSeleccionado.proveedorName ||
+                                                    pedidoSeleccionado.proveedor ||
+                                                    "-"
+                                                )
+                                                : (pedidoSeleccionado.sucursal_nombre || pedidoSeleccionado.sucursalDestino || "-")
+                                        }
+                                        InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                         size="small"
-                                        sx={{
-                                            "& .MuiInputLabel-root": { color: "#ccc" },
-                                            "& .MuiOutlinedInput-root": {
-                                                "& fieldset": { borderColor: "#444" },
-                                                "&:hover fieldset": { borderColor: "#FFD700" }
-                                            }
-                                        }}
+                                        sx={{ "& .MuiInputLabel-root": { color: "#ccc" }, "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: "#444" }, "&:hover fieldset": { borderColor: "#FFD700" } } }}
                                     />
                                 </Box>
-
                                 {/* Estado con badge */}
                                 <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
                                     <Typography variant="subtitle2" sx={{ color: "#ccc", mb: 1 }}>
                                         Estado del pedido
                                     </Typography>
                                     <Chip
-                                        label={pedidoSeleccionado.estado || "Pendiente"}
+                                        label={pedidoSeleccionado.estado || pedidoSeleccionado.estado_pedido_nombre || "Pendiente"}
                                         sx={{
                                             bgcolor: pedidoSeleccionado.estado === "Completado" ? "#4CAF50" : 
                                                     pedidoSeleccionado.estado === "En camino" ? "#2196F3" : 
@@ -1767,7 +1782,6 @@ export default function PedidosBodega() {
                                         }}
                                     />
                                 </Box>
-
                                 {/* Información adicional para salidas */}
                                 {opcion === "salidas" && pedidoSeleccionado.asignado && (
                                     <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
@@ -1775,261 +1789,64 @@ export default function PedidosBodega() {
                                             🚚 Información de entrega
                                         </Typography>
                                         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-                                <TextField
+                                            <TextField
                                                 label="Transportista asignado"
                                                 value={pedidoSeleccionado.asignado}
-                                    InputProps={{
-                                                    readOnly: true,
-                                                    sx: { color: "#fff" }
-                                                }}
+                                                InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                                 size="small"
-                                                sx={{
-                                                    "& .MuiInputLabel-root": { color: "#ccc" },
-                                                    "& .MuiOutlinedInput-root": {
-                                                        "& fieldset": { borderColor: "#444" },
-                                                        "&:hover fieldset": { borderColor: "#FFD700" }
-                                                    }
-                                                }}
-                                />
-                                <TextField
+                                                sx={{ "& .MuiInputLabel-root": { color: "#ccc" }, "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: "#444" }, "&:hover fieldset": { borderColor: "#FFD700" } } }}
+                                            />
+                                            <TextField
                                                 label="Patente del vehículo"
                                                 value={pedidoSeleccionado.patenteVehiculo || "N/A"}
-                                    InputProps={{
-                                                    readOnly: true,
-                                                    sx: { color: "#fff" }
-                                                }}
+                                                InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                                 size="small"
-                                                sx={{
-                                                    "& .MuiInputLabel-root": { color: "#ccc" },
-                                                    "& .MuiOutlinedInput-root": {
-                                                        "& fieldset": { borderColor: "#444" },
-                                                        "&:hover fieldset": { borderColor: "#FFD700" }
-                                                    }
-                                                }}
+                                                sx={{ "& .MuiInputLabel-root": { color: "#ccc" }, "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: "#444" }, "&:hover fieldset": { borderColor: "#FFD700" } } }}
                                             />
                                         </Box>
                                     </Box>
                                 )}
-
                                 {/* Productos */}
                                 <Box sx={{ p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
                                     <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
-                                        📦 Productos del pedido ({pedidoSeleccionado.productos?.length || 0})
+                                        📦 Productos del pedido ({pedidoSeleccionado.productos?.length || pedidoSeleccionado.detalles_pedido?.length || 0})
                                     </Typography>
-                                    
-                                    {!pedidoSeleccionado.productos || pedidoSeleccionado.productos.length === 0 ? (
-                                        <Box sx={{ 
-                                            textAlign: "center", 
-                                            py: 3, 
-                                            color: "#8A8A8A",
-                                            fontStyle: "italic"
-                                        }}>
+                                    {(!pedidoSeleccionado.productos && !pedidoSeleccionado.detalles_pedido) || (pedidoSeleccionado.productos?.length === 0 && pedidoSeleccionado.detalles_pedido?.length === 0) ? (
+                                        <Box sx={{ textAlign: "center", py: 3, color: "#8A8A8A", fontStyle: "italic" }}>
                                             No hay productos en este pedido
                                         </Box>
                                     ) : (
-                                        <>
-                                            <TableContainer>
-                                                <Table size="small">
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Producto</TableCell>
-                                                            <TableCell sx={{ color: "#FFD700", fontWeight: 600 }} align="right">Cantidad</TableCell>
+                                        <TableContainer>
+                                            <Table size="small">
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Producto</TableCell>
+                                                        <TableCell sx={{ color: "#FFD700", fontWeight: 600 }} align="right">Cantidad</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {(pedidoSeleccionado.productos || pedidoSeleccionado.detalles_pedido || []).map((prod: any, idx: number) => (
+                                                        <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
+                                                            <TableCell sx={{ color: "#fff" }}>
+                                                                {prod.nombre || prod.producto_nombre || 'N/A'}
+                                                            </TableCell>
+                                                            <TableCell align="right" sx={{ color: "#FFD700", fontWeight: 600 }}>
+                                                                {prod.cantidad || prod.cantidad_solicitada || 0}
+                                                            </TableCell>
                                                         </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        {pedidoSeleccionado.productos.map((prod: any, idx: number) => (
-                                                            <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
-                                                                <TableCell sx={{ color: "#fff" }}>
-                                                                    {prod.nombre || 'N/A'}
-                                                                </TableCell>
-                                                                <TableCell align="right" sx={{ color: "#FFD700", fontWeight: 600 }}>
-                                                                    {prod.cantidad || 0}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))}
-                                                    </TableBody>
-                                                </Table>
-                                            </TableContainer>
-                                            
-                                            {/* Total */}
-                                            <Box sx={{ 
-                                                mt: 2, 
-                                                pt: 2, 
-                                                borderTop: "1px solid #444",
-                                                display: "flex",
-                                                justifyContent: "space-between",
-                                                alignItems: "center"
-                                            }}>
-                                                <Typography sx={{ color: "#FFD700", fontWeight: 600, fontSize: "1.1rem" }}>
-                                                    Total de productos
-                                                </Typography>
-                                                <Typography sx={{ color: "#FFD700", fontWeight: 600, fontSize: "1.1rem" }}>
-                                                    {pedidoSeleccionado.productos.length} productos • {
-                                                        (() => {
-                                                            if (!pedidoSeleccionado.productos || !Array.isArray(pedidoSeleccionado.productos)) return 0;
-                                                            const total = pedidoSeleccionado.productos.reduce((sum: number, p: any) => {
-                                                                const cantidad = Number(p.cantidad || 0);
-                                                                return sum + (isNaN(cantidad) ? 0 : cantidad);
-                                                            }, 0);
-                                                            return isNaN(total) ? 0 : Math.round(total);
-                                                        })()
-                                                    } unidades
-                                                </Typography>
-                                            </Box>
-                                        </>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
                                     )}
-                                </Box>
-
-                                {/* Documentos del pedido */}
-                                <Box sx={{ p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
-                                    <Typography variant="h6" sx={{ color: "#FFD700", mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
-                                        📄 Documentos disponibles
-                                    </Typography>
-                                    <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                                    {pedidoSeleccionado.tipo === "ingreso" ? (
-                                        <Button
-                                            variant="outlined"
-                                            startIcon={<AssignmentTurnedInIcon />}
-                                                sx={{ 
-                                                    borderColor: "#4CAF50", 
-                                                    color: "#4CAF50", 
-                                                    fontWeight: 600,
-                                                    "&:hover": {
-                                                        borderColor: "#4CAF50",
-                                                        bgcolor: "rgba(76, 175, 80, 0.1)"
-                                                    }
-                                                }}
-                                            onClick={() => generarActaRecepcion({
-                                                numeroActa: String(pedidoSeleccionado.id),
-                                                fechaRecepcion: pedidoSeleccionado.fecha,
-                                                sucursal: {
-                                                    nombre: "Bodega Central",
-                                                    direccion: "Camino a Penco 2500, Concepción"
-                                                },
-                                                personaRecibe: {
-                                                    nombre: pedidoSeleccionado.responsable,
-                                                    cargo: "Responsable de Bodega"
-                                                },
-                                                productos: pedidoSeleccionado.productos.map((prod: any) => ({
-                                                    codigo: `${prod.nombre}-${prod.marca}-${prod.categoria}`.replace(/\s+/g, "-").toLowerCase(),
-                                                    descripcion: `${prod.nombre} - ${prod.marca} - ${prod.categoria}`,
-                                                    cantidad: prod.cantidad
-                                                })),
-                                                observaciones: `Guía de Despacho Proveedor: ${pedidoSeleccionado.numRem || "No especificada"}\nN° Orden de Compra: ${pedidoSeleccionado.numGuiaDespacho || "No especificada"}`,
-                                                conformidad: "Recibido conforme",
-                                                responsable: pedidoSeleccionado.responsable,
-                                                proveedor: {
-                                                        nombre: pedidoSeleccionado.proveedor?.nombre || "",
-                                                        rut: pedidoSeleccionado.proveedor?.rut || "",
-                                                        contacto: pedidoSeleccionado.proveedor?.contacto || ""
-                                                }
-                                            })}
-                                        >
-                                            Acta de Recepción
-                                        </Button>
-                                    ) : (
-                                        <>
-                                            <Button
-                                                variant="outlined"
-                                                startIcon={<DescriptionIcon />}
-                                                    sx={{ 
-                                                        borderColor: "#FFD700", 
-                                                        color: "#FFD700", 
-                                                        fontWeight: 600,
-                                                        "&:hover": {
-                                                            borderColor: "#FFD700",
-                                                            bgcolor: "rgba(255, 215, 0, 0.1)"
-                                                        }
-                                                    }}
-                                                onClick={() => generarGuiaDespacho(pedidoSeleccionado)}
-                                            >
-                                                Guía de Despacho
-                                            </Button>
-                                            <Button
-                                                variant="outlined"
-                                                startIcon={<AssignmentTurnedInIcon />}
-                                                    sx={{ 
-                                                        borderColor: "#4CAF50", 
-                                                        color: "#4CAF50", 
-                                                        fontWeight: 600,
-                                                        "&:hover": {
-                                                            borderColor: "#4CAF50",
-                                                            bgcolor: "rgba(76, 175, 80, 0.1)"
-                                                        }
-                                                    }}
-                                                onClick={() => generarActaRecepcion({
-                                                    numeroActa: String(pedidoSeleccionado.id),
-                                                    fechaRecepcion: pedidoSeleccionado.fecha,
-                                                    sucursal: {
-                                                        nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
-                                                        direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
-                                                    },
-                                                    personaRecibe: {
-                                                        nombre: pedidoSeleccionado.asignado || "-",
-                                                        cargo: "Responsable de Sucursal",
-                                                    },
-                                                    productos: pedidoSeleccionado.productos.map((prod: any) => ({
-                                                        codigo: prod.codigo || `${prod.nombre}-${Date.now()}`,
-                                                        descripcion: prod.nombre,
-                                                        cantidad: prod.cantidad
-                                                    })),
-                                                    observaciones: pedidoSeleccionado.observacion || "",
-                                                })}
-                                            >
-                                                Acta de Recepción
-                                            </Button>
-                                            <Button
-                                                variant="outlined"
-                                                startIcon={<LocalShippingIcon />}
-                                                    sx={{ 
-                                                        borderColor: "#2196F3", 
-                                                        color: "#2196F3", 
-                                                        fontWeight: 600,
-                                                        "&:hover": {
-                                                            borderColor: "#2196F3",
-                                                            bgcolor: "rgba(33, 150, 243, 0.1)"
-                                                        }
-                                                    }}
-                                                onClick={() => generarOCI({
-                                                    numeroOCI: String(pedidoSeleccionado.ociAsociada || pedidoSeleccionado.id),
-                                                    fecha: pedidoSeleccionado.fecha,
-                                                    sucursal: {
-                                                        nombre: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.nombre || pedidoSeleccionado.sucursalDestino || "-",
-                                                        direccion: SUCURSALES.find(s => s.id === pedidoSeleccionado.sucursalDestino)?.direccion || pedidoSeleccionado.direccionSucursal || "-",
-                                                    },
-                                                    responsable: pedidoSeleccionado.responsable || "-",
-                                                    productos: pedidoSeleccionado.productos.map((prod: any) => ({
-                                                        codigo: prod.codigo || `${prod.nombre}-${Date.now()}`,
-                                                        descripcion: prod.nombre,
-                                                        cantidad: prod.cantidad
-                                                    })),
-                                                    observaciones: pedidoSeleccionado.observacion || "",
-                                                })}
-                                            >
-                                                Orden de Compra Interna (OCI)
-                                            </Button>
-                                        </>
-                                    )}
-                                    </Box>
                                 </Box>
                             </>
                         )}
                     </DialogContent>
-                    <DialogActions sx={{ 
-                        bgcolor: "#1a1a1a", 
-                        borderTop: "1px solid #333",
-                        p: 2
-                    }}>
+                    <DialogActions sx={{ bgcolor: "#1a1a1a", borderTop: "1px solid #333", p: 2 }}>
                         <Button 
                             onClick={handleCloseDetailModal} 
-                            sx={{ 
-                                color: "#FFD700",
-                                borderColor: "#FFD700",
-                                "&:hover": {
-                                    borderColor: "#FFD700",
-                                    bgcolor: "rgba(255, 215, 0, 0.1)"
-                                }
-                            }}
+                            sx={{ color: "#FFD700", borderColor: "#FFD700", "&:hover": { borderColor: "#FFD700", bgcolor: "rgba(255, 215, 0, 0.1)" } }}
                             variant="outlined"
                         >
                             Cerrar

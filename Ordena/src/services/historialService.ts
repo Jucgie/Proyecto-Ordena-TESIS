@@ -1,8 +1,12 @@
 import api from "./api";
 
 export const historialService ={
-    getPedidos: async()=>{
-        const response = await api.get('/pedidos/');
+    getPedidos: async(params = {})=>{
+        const response = await api.get('/pedidos/', { params });
+        return response.data;
+    },
+    getPedidosRecientes: async (params = {}) => {
+        const response = await api.get('/pedidos_recientes/', { params });
         return response.data;
     },
     getMovimientosInventario: async (filtros = {}) => {
