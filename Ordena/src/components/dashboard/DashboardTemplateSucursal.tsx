@@ -34,6 +34,7 @@ import { useEffect, useMemo } from "react";
 import { useUsuariosStore } from "../../store/useUsuarioStore";
 
 import { Chip } from "@mui/material";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 
 //import { useEffect } from "react";
@@ -260,7 +261,7 @@ export function CountElementSucursal() {
                                             <TableCell component="th" scope="row">
                                                 {solicitud.id_solc}
                                             </TableCell>
-                                            <TableCell align="right">{new Date(solicitud.fecha_creacion).toLocaleDateString()}</TableCell>
+                                            <TableCell align="right">{formatFechaChile(solicitud.fecha_creacion)}</TableCell>
                                             <TableCell align="right">{solicitud.productos?.length ?? 0}</TableCell>
  <TableCell>{getEstadoSolicitud(solicitud.estado)}</TableCell>
                                         </TableRow>

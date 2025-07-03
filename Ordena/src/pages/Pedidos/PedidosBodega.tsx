@@ -317,10 +317,9 @@ export default function PedidosBodega() {
     const fetchSolicitudesTransferidas = useCallback(async () => {
         if (!usuario?.bodega) return;
         try {
-            const solicitudes = await solicitudesService.getSolicitudes({ 
-                bodega_id: usuario.bodega.toString(),
-            });
-
+            const solicitudesResponse = await solicitudesService.getSolicitudes({ bodega_id: usuario.bodega.toString() });
+            const solicitudes = solicitudesResponse.results || [];
+            
             // Filtrar solo solicitudes aprobadas que NO estén despachadas
             const transferidas = solicitudes.filter(
                 (s: any) => s.estado === "aprobada" && !s.despachada
@@ -605,8 +604,8 @@ export default function PedidosBodega() {
             if (!usuario?.bodega) return;
             setLoading(true);
             try {
-                const pedidos = await pedidosService.getPedidos({ bodega_id: usuario.bodega.toString() });
-                setPedidosBackend(pedidos || []);
+                const pedidosResponse = await pedidosService.getPedidos({ bodega_id: usuario.bodega.toString() });
+                setPedidosBackend(pedidosResponse.results || []);
             } catch (error) {
                 setPedidosBackend([]);
             } finally {
@@ -1202,8 +1201,8 @@ export default function PedidosBodega() {
                                     // 6. Refrescar la lista de pedidos desde el backend
                                     try {
                                         setLoading(true);
-                                        const pedidos = await pedidosService.getPedidos({ bodega_id: bodegaId.toString() });
-                                        setPedidosBackend(pedidos);
+                                        const pedidosResponse = await pedidosService.getPedidos({ bodega_id: bodegaId.toString() });
+                                        setPedidosBackend(pedidosResponse.results || []);
                                     } catch (error) {
                                         setPedidosBackend([]);
                                     } finally {

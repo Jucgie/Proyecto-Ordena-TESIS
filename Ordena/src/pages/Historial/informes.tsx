@@ -12,6 +12,7 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
 import { informesService } from "../../services/api";
 import { useAuthStore } from "../../store/useAuthStore";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 interface Informe {
     id_informe: number;
@@ -153,7 +154,7 @@ export default function Informes() {
                         // Generar el acta de recepción
                         generarActaRecepcion({
                             numeroActa: String(informe.id_informe),
-                            fechaRecepcion: contenido.fecha || new Date(informe.fecha_generado).toLocaleDateString('es-ES'),
+                            fechaRecepcion: contenido.fecha || formatFechaChile(informe.fecha_generado),
                             sucursal: {
                                 nombre: "Bodega Central",
                                 direccion: "Camino a Penco 2500, Concepción"
@@ -188,7 +189,7 @@ export default function Informes() {
                         // Generar la guía de despacho con la estructura correcta
                         generarGuiaDespacho({
                             id: String(informe.id_informe),
-                            fecha: contenido.fecha || new Date(informe.fecha_generado).toLocaleDateString('es-ES'),
+                            fecha: contenido.fecha || formatFechaChile(informe.fecha_generado),
                             sucursalDestino: contenido.sucursal?.id || 1,
                             responsable: contenido.responsable || "Responsable de Bodega",
                             productos: contenido.productos || [],
@@ -385,7 +386,7 @@ export default function Informes() {
                                             {getModuloDisplayName(informe.modulo_origen)}
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>
-                                            {formatDate(informe.fecha_generado)}
+                                            {formatFechaChile(informe.fecha_generado)}
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>{informe.archivo_url}</TableCell>
                                         <TableCell>
@@ -511,7 +512,7 @@ export default function Informes() {
                                 />
                                 <TextField
                                     label="Fecha de Generación"
-                                    value={formatDate(informeSeleccionado.fecha_generado)}
+                                    value={formatFechaChile(informeSeleccionado.fecha_generado)}
                                     InputProps={{ readOnly: true }}
                                     size="small"
                                     sx={{

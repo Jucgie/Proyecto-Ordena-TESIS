@@ -35,6 +35,7 @@ import { use, useEffect, useMemo } from "react";
 //import { useEffect } from "react";
 
 import { SUCURSALES } from "../../constants/ubicaciones";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 
 
@@ -306,7 +307,7 @@ export function CountElement() {
                                                 : (proveedores.find(p => p.id_provd == pedidos.proveedor_fk)?.nombres_provd)??'N/A')}
                                         </TableCell>
                                         <TableCell>{pedidos.detalles_pedido?.length || 0}</TableCell>
-                                        <TableCell>{pedidos.fecha_entrega.split('T')[0] ?? 'N/A'}</TableCell>
+                                        <TableCell>{formatFechaChile(pedidos.fecha_entrega)}</TableCell>
                                         <TableCell>{getEstadoPedido(pedidos.estado_pedido_fk)}</TableCell>
 
 

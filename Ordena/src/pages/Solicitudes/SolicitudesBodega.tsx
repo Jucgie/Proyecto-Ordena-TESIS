@@ -17,6 +17,7 @@ import { SUCURSALES } from "../../constants/ubicaciones";
 import { solicitudesService } from "../../services/api";
 import { useInventariosStore } from "../../store/useProductoStore";
 import EstadoBadge from "../../components/EstadoBadge";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 export default function SolicitudesBodega() {
     const {
@@ -321,7 +322,7 @@ export default function SolicitudesBodega() {
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.id_solc}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
-                                            {row.fecha_creacion ? new Date(row.fecha_creacion).toLocaleDateString() : 'N/A'}
+                                            {formatFechaChile(row.fecha_creacion)}
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                         {row.sucursal_nombre || "-"}
@@ -434,11 +435,7 @@ export default function SolicitudesBodega() {
                                     />
                                     <TextField
                                         label="Fecha de emisión"
-                                        value={solicitudSeleccionada.fecha_creacion ? new Date(solicitudSeleccionada.fecha_creacion).toLocaleDateString('es-ES', {
-                                            year: 'numeric',
-                                            month: 'long',
-                                            day: 'numeric'
-                                        }) : 'N/A'}
+                                        value={formatFechaChile(solicitudSeleccionada.fecha_creacion)}
                                         InputProps={{ 
                                             readOnly: true,
                                             sx: { color: "#fff" }

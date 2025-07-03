@@ -9,6 +9,7 @@ import Paper from '@mui/material/Paper';
 import { Box, Typography, Grid, Chip } from '@mui/material';
 import { useHistorialStore } from "../../store/useHistorialStore";
 import type { ProductoSolicitud } from "../../store/useHistorialStore";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 //Definición de Interfaces 
 interface Props {
@@ -21,7 +22,7 @@ export function PedidoDetalle({ id, setDetalle }: Props) {
     const pedido = pedidos.find((p) => p.id_p === id);
     if (!pedido) return null;
     const productos = pedido.solicitud_fk?.productos || [];
-    const fecha = pedido.fecha_entrega ? new Date(pedido.fecha_entrega) : null;
+    const fecha = pedido.fecha_entrega ? formatFechaChile(pedido.fecha_entrega) : null;
     return (
         <Container>
             <div className="cerr">

@@ -18,6 +18,7 @@ import { useAuthStore } from "../../store/useAuthStore";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 interface Props {
     setHistorial: () => void;
@@ -118,8 +119,8 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
         // Prepara los datos para exportar
         const data = movimientosFiltrados.map(mov => ({
             ID: mov.id_mvin,
-            Fecha: new Date(mov.fecha).toLocaleDateString(),
-            Hora: new Date(mov.fecha).toLocaleTimeString(),
+            Fecha: formatFechaChile(mov.fecha),
+            Hora: formatFechaChile(mov.fecha),
             Tipo: mov.tipo_movimiento,
             Producto: mov.producto_nombre,
             Código: mov.producto_codigo,
@@ -148,8 +149,8 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
             head: [["ID", "Fecha", "Hora", "Tipo", "Producto", "Código", "Cantidad", "Stock Actual", "Usuario", "Ubicación"]],
             body: movimientosFiltrados.map(mov => [
                 mov.id_mvin,
-                new Date(mov.fecha).toLocaleDateString(),
-                new Date(mov.fecha).toLocaleTimeString(),
+                formatFechaChile(mov.fecha),
+                formatFechaChile(mov.fecha),
                 mov.tipo_movimiento,
                 mov.producto_nombre,
                 mov.producto_codigo,
@@ -373,10 +374,10 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
                                                     }}
                                                 >
                                                     <TableCell sx={{ color: "#fff" }}>
-                                                        {fecha.toLocaleDateString()}
+                                                        {formatFechaChile(mov.fecha)}
                                                     </TableCell>
                                                     <TableCell sx={{ color: "#fff" }}>
-                                                        {fecha.toLocaleTimeString()}
+                                                        {formatFechaChile(mov.fecha)}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Chip
