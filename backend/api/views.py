@@ -3,7 +3,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes,Pedidos,PersonalEntrega,DetallePedido,EstadoPedido, Informe, SolicitudProductos, Pedidos, DetallePedido, Notificacion, Historial, Stock, EstadoPedido, PersonalEntrega, MovInventario, Proveedor
-from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer, MovInventarioSerializer, NotificacionSerializer
+from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer, MovInventarioSerializer, NotificacionSerializer, BodegaCentralSerializer, ProductoSucursalSerializer, ProductoBodegaSerializer
 from django.db import transaction
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
@@ -911,16 +911,15 @@ class PedidosViewSet(viewsets.ModelViewSet):
                     productos_pedido_fk=sp.producto_fk,
                     pedidos_fk=pedido
                 )
-                # Descontar stock de la bodega y registrar movimiento de salida
+                # Ya NO descontar stock aquí, solo registrar movimiento de inventario tipo SALIDA
                 try:
                     stock_obj, _ = Stock.objects.get_or_create(
                         productos_fk=sp.producto_fk,
                         bodega_fk=solicitud.fk_bodega.id_bdg,
                         defaults={'stock': 0, 'stock_minimo': 0, 'stock_maximo': 0, 'sucursal_fk': None, 'proveedor_fk': None}
                     )
-                    stock_obj.stock = max(stock_obj.stock - sp.cantidad, 0)
-                    stock_obj.save()
-                    # Registrar movimiento de inventario tipo SALIDA
+                    # stock_obj.stock = max(stock_obj.stock - sp.cantidad, 0)  # <--- ELIMINADO EL DESCUENTO AQUÍ
+                    # stock_obj.save()
                     MovInventario.objects.create(
                         cantidad=-abs(sp.cantidad),
                         fecha=timezone.now(),
@@ -2382,10 +2381,14 @@ def buscar_productos_similares_endpoint(request):
             return Response({
                 'error': 'Bodega no encontrada'
             }, status=status.HTTP_404_NOT_FOUND)
-        productos_similares = buscar_productos_similares(nombre, marca, categoria, bodega, codigo_interno, modelo)
+        productos_similares_ids = buscar_productos_similares(nombre, marca, categoria, bodega, codigo_interno, modelo)
+        # Obtener los productos por ID
+        productos_queryset = Productos.objects.filter(codigo_interno__in=[p['codigo_interno'] for p in productos_similares_ids])
+        serializer = ProductoBodegaSerializer(productos_queryset, many=True, context={'request': request})
+        productos_serializados = serializer.data
         return Response({
-            'productos_similares': productos_similares,
-            'total_encontrados': len(productos_similares)
+            'productos_similares': productos_serializados,
+            'total_encontrados': len(productos_serializados)
         })
     except Exception as e:
         logger.error(f"Error en endpoint buscar_productos_similares: {str(e)}")
@@ -2516,3 +2519,33 @@ def pedidos_recientes(request):
         'total': total,
         'pedidos': serializer.data
     })
+
+class BuscarProductosSimilaresSucursalView(APIView):
+    permission_classes = [permissions.AllowAny]
+    def post(self, request):
+        nombre = request.data.get('nombre')
+        sucursal_id = request.data.get('sucursal_id')
+        marca = request.data.get('marca', None)
+        categoria = request.data.get('categoria', None)
+
+        if not nombre or not sucursal_id:
+            return Response({'error': 'Nombre y sucursal_id son requeridos'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Buscar productos que tengan stock en la sucursal, aunque sucursal_fk sea NULL
+        productos_con_stock = Stock.objects.filter(
+            sucursal_fk=sucursal_id,
+            stock__gt=0
+        ).values_list('productos_fk', flat=True)
+
+        queryset = Productos.objects.filter(
+            id_prodc__in=productos_con_stock,
+            nombre_prodc__icontains=nombre
+        )
+        if marca:
+            queryset = queryset.filter(marca_fk__nombre_mprod__icontains=marca)
+        if categoria:
+            queryset = queryset.filter(categoria_fk__nombre__icontains=categoria)
+
+        serializer = ProductoSucursalSerializer(queryset, many=True, context={'request': request})
+        productos_serializados = serializer.data
+        return Response({'productos_similares': productos_serializados}, status=status.HTTP_200_OK)

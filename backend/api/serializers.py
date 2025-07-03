@@ -35,10 +35,12 @@ class CategoriaSerializer(serializers.ModelSerializer):
 class DetallePedidoSerializer(serializers.ModelSerializer):
     producto_nombre = serializers.CharField(source='productos_pedido_fk.nombre_prodc', read_only=True)
     producto_codigo = serializers.CharField(source='productos_pedido_fk.codigo_interno', read_only=True)
+    producto_marca = serializers.CharField(source='productos_pedido_fk.marca_fk.nombre_mprod', read_only=True)
+    producto_categoria = serializers.CharField(source='productos_pedido_fk.categoria_fk.nombre', read_only=True)
     
     class Meta:
         model = DetallePedido
-        fields = ['id', 'cantidad', 'descripcion', 'productos_pedido_fk', 'producto_nombre', 'producto_codigo']
+        fields = ['id', 'cantidad', 'descripcion', 'productos_pedido_fk', 'producto_nombre', 'producto_codigo', 'producto_marca', 'producto_categoria']
 
 class EstadoPedidoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -491,13 +493,17 @@ class ProductoSerializer(serializers.ModelSerializer):
     stock_maximo_write = serializers.IntegerField(write_only=True, required=False, source='stock_maximo')
 
     def get_stock(self, obj):
-        """Obtiene el stock real desde la tabla Stock"""
         try:
             request = self.context.get('request')
             if not request:
                 return 0
-            sucursal_id = request.query_params.get('sucursal_id')
-            bodega_id = request.query_params.get('bodega_id')
+            # Buscar sucursal_id y bodega_id en query params o en el body del request
+            sucursal_id = request.query_params.get('sucursal_id') if hasattr(request, 'query_params') else None
+            bodega_id = request.query_params.get('bodega_id') if hasattr(request, 'query_params') else None
+            if (not sucursal_id or sucursal_id == '') and hasattr(request, 'data'):
+                sucursal_id = request.data.get('sucursal_id')
+            if (not bodega_id or bodega_id == '') and hasattr(request, 'data'):
+                bodega_id = request.data.get('bodega_id')
             if sucursal_id:
                 stock_obj = Stock.objects.filter(
                     productos_fk=obj,
@@ -729,4 +735,58 @@ class ProductoSerializer(serializers.ModelSerializer):
         if not data.get('codigo_interno'):
             raise serializers.ValidationError({"codigo_interno": "Este campo es requerido"})
         return data
+
+# --- SERIALIZER PARA PRODUCTOS EN BODEGA ---
+class ProductoBodegaSerializer(serializers.ModelSerializer):
+    stock = serializers.SerializerMethodField()
+    marca_nombre = serializers.CharField(source='marca_fk.nombre_mprod', read_only=True)
+    categoria_nombre = serializers.CharField(source='categoria_fk.nombre', read_only=True)
+
+    class Meta:
+        model = Productos
+        fields = [
+            'id_prodc', 'nombre_prodc', 'descripcion_prodc', 'codigo_interno',
+            'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre', 'bodega_fk', 'stock'
+        ]
+
+    def get_stock(self, obj):
+        stock_obj = Stock.objects.filter(
+            productos_fk=obj,
+            bodega_fk=obj.bodega_fk.id_bdg if obj.bodega_fk else None
+        ).first()
+        return float(stock_obj.stock) if stock_obj else 0
+
+# --- SERIALIZER PARA PRODUCTOS EN SUCURSAL ---
+class ProductoSucursalSerializer(serializers.ModelSerializer):
+    stock = serializers.SerializerMethodField()
+    marca_nombre = serializers.CharField(source='marca_fk.nombre_mprod', read_only=True)
+    categoria_nombre = serializers.CharField(source='categoria_fk.nombre', read_only=True)
+
+    class Meta:
+        model = Productos
+        fields = [
+            'id_prodc', 'nombre_prodc', 'descripcion_prodc', 'codigo_interno',
+            'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre', 'sucursal_fk', 'stock'
+        ]
+
+    def get_stock(self, obj):
+        request = self.context.get('request')
+        sucursal_id = None
+        if request:
+            sucursal_id = request.query_params.get('sucursal_id') if hasattr(request, 'query_params') else None
+            if (not sucursal_id or sucursal_id == '') and hasattr(request, 'data'):
+                sucursal_id = request.data.get('sucursal_id')
+        if sucursal_id:
+            stock_obj = Stock.objects.filter(
+                productos_fk=obj,
+                sucursal_fk=sucursal_id
+            ).first()
+        elif obj.sucursal_fk:
+            stock_obj = Stock.objects.filter(
+                productos_fk=obj,
+                sucursal_fk=obj.sucursal_fk.id
+            ).first()
+        else:
+            stock_obj = None
+        return float(stock_obj.stock) if stock_obj else 0
     

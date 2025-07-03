@@ -25,7 +25,6 @@ export function generarGuiaDespacho(pedido: any) {
     doc.text(`Dirección bodega: ${bodega.direccion}`, 14, 70);
 
     doc.text(`Responsable del despacho: ${pedido.responsable || "-"}`, 14, 78);
-    doc.text(`Patente vehículo: ${pedido.patenteVehiculo || "-"}`, 14, 86);
     doc.text(`Tipo de traslado: Interno`, 14, 94);
 
     // Tabla de productos

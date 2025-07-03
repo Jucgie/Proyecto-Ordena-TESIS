@@ -58,7 +58,6 @@ interface PersonalEntrega {
   id_psn: number;
   nombre_psn: string;
   descripcion: string;
-  patente: string;
 }
 
 

@@ -192,7 +192,7 @@ export const personalEntregaService = {
     },
 
     // Crear personal de entrega desde usuario
-    crearDesdeUsuario: async (data: { usuario_id: number; patente: string; descripcion?: string }) => {
+    crearDesdeUsuario: async (data: { usuario_id: number; descripcion?: string }) => {
         const response = await api.post('/personal-entrega/crear-desde-usuario/', data);
         return response.data;
     },
@@ -338,9 +338,21 @@ export const buscarProductosSimilares = async (data: {
     nombre: string;
     marca?: string;
     categoria?: string;
-    bodega_id: string;
+    bodega_id?: string;
+    codigo_interno?: string;
 }) => {
     const response = await api.post('/buscar-productos-similares/', data);
+    return response.data;
+};
+
+export const buscarProductosSimilaresSucursal = async (data: {
+    nombre: string;
+    sucursal_id: string;
+    codigo_interno?: string;
+    marca?: string;
+    categoria?: string;
+}) => {
+    const response = await api.post('/buscar-productos-similares-sucursal/', data);
     return response.data;
 };
 

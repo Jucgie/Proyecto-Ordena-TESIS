@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import ( 
     login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, 
     SolicitudesViewSet, UsuarioViewSet, InformeViewSet, PedidosViewSet, 
-    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,generar_qr_producto_view, producto_por_codigo, actualizar_stock_por_codigo, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint, movimientos_inventario, pedidos_recientes, NotificacionViewSet,BodegaCentralViewSet
+    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,generar_qr_producto_view, producto_por_codigo, actualizar_stock_por_codigo, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint, movimientos_inventario, pedidos_recientes, NotificacionViewSet,BodegaCentralViewSet, BuscarProductosSimilaresSucursalView
 )
 
 router = DefaultRouter()
@@ -48,5 +48,6 @@ urlpatterns = [
     path('buscar-productos-similares/', buscar_productos_similares_endpoint, name='buscar_productos_similares_endpoint'),
     path('pedidos_recientes/', pedidos_recientes, name='pedidos_recientes'),
     path('movimientos-inventario/', movimientos_inventario, name='movimientos-inventario'),
+    path('buscar-productos-similares-sucursal/', BuscarProductosSimilaresSucursalView.as_view(), name='buscar_productos_similares_sucursal'),
 ]
 

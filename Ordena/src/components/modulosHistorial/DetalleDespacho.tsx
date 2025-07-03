@@ -88,25 +88,6 @@ export function DespachoDetalle({ id, setDespacho }: Props) {
                 {/*Segunda tarjeta que mostrará la patente vehicular */}
                 </Card>
 
-                <h4>Patente Vehicular</h4>
-                <Card sx={{ minWidth: 10,width:"90%",display:"flex",flexDirection:"row",padding:"0",height:"10vh"}}>
-                    
-                    {/*Recorrido de los datos  */}
-                      {pedido?.personal_entrega_fk && (
-                        <>
-                        <Box sx={{width:"30%",background:"#FFD700",display:"flex",justifyContent:'center',alignItems:"center" }}>
-                        <LocalShippingIcon sx={{fontSize:45, color:"#1E1E1E",marginRight:"2"}}/>
-                        </Box>
-
-                        <Box sx={{width:"70%",display:"flex",background:"#fff",alignItems:"center",justifyContent:"center"}}>
-                            <Typography>
-                           {pedido.personal_entrega_fk.patente}
-                            </Typography>
-                        </Box>
-</>
-                          )}
-                </Card>
-
             </div>
         </Container>
 

@@ -20,17 +20,14 @@ export const historialService ={
         const response = await api.get(`/movimientos-inventario/?${params.toString()}`);
         return response.data; // Ahora retorna { movimientos, estadisticas, filtros_aplicados }
     },
-},
-
-getSolicitudes: async()=>{
-    const response = await api.get('/solicitudes/');
-    return response.data;   
-},
-getBodegas: async () => {
-const response = await api.get('/bodegas/'); // Asegúrate que la URL es correcta
-return response.data;
-},
-
+    getSolicitudes: async()=>{
+        const response = await api.get('/solicitudes/');
+        return response.data;   
+    },
+    getBodegas: async () => {
+        const response = await api.get('/bodegas/'); // Asegúrate que la URL es correcta
+        return response.data;
+    },
 }
 
 export const HistProductService ={

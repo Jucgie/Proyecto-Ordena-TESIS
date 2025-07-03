@@ -71,7 +71,6 @@ interface Pedido {
     bodegaOrigen?: string;
     direccionBodega?: string;
     direccionSucursal?: string;
-    patenteVehiculo?: string;
 }
 
 interface Usuario {
@@ -393,32 +392,27 @@ export default function PedidosBodega() {
     useEffect(() => {
         const cargarMarcasYCategorias = async () => {
             try {
-                
                 // Usar "bodega-central" como ubicacionId para la bodega
                 const ubicacionId = "bodega-central";
-                
                 // Cargar marcas
                 await fetchMarcas(ubicacionId);
                 const marcasData = useInventariosStore.getState().marcas[ubicacionId] || [];
                 const marcasNombres = marcasData.map((marca: any) => marca.nombre || marca.nombre_mprod || marca);
                 setMarcas(marcasNombres);
-                
                 // Cargar categorías
                 await fetchCategorias(ubicacionId);
                 const categoriasData = useInventariosStore.getState().categorias[ubicacionId] || [];
                 const categoriasNombres = categoriasData.map((categoria: any) => categoria.nombre || categoria);
                 setCategorias(categoriasNombres);
-                
             } catch (error) {
                 console.error('Error cargando marcas y categorías:', error);
-                // Establecer valores por defecto que coincidan con el backend
-                setMarcas(['Stanley', 'Bosch', 'Makita', 'Dewalt', 'Black+Decker', 'Einhell', 'Truper', 'Irwin', 'Hilti', '3M']);
-                setCategorias(['planchas', 'tornillos', 'martillo', 'catg_1', 'herramienta', 'Herramientas', 'Materiales']);
+                setMarcas([]);
+                setCategorias([]);
             }
         };
-        
         cargarMarcasYCategorias();
-    }, [fetchMarcas, fetchCategorias]);
+        // eslint-disable-next-line
+    }, []); // Solo ejecutar una vez al montar
 
     const handleSnackbarClick = () => {
         setShowSnackbar(false);
@@ -512,7 +506,6 @@ export default function PedidosBodega() {
                 bodegaOrigen: "Bodega Central",
                 direccionBodega: "Camino a Penco 2500, Concepción",
                 direccionSucursal: SUCURSALES.find(s => s.id === sucursalId)?.direccion || "-",
-                patenteVehiculo: "N/A",
                 estado: "En camino",
                 numRem: "",
                 numGuiaDespacho: "",
@@ -663,25 +656,6 @@ export default function PedidosBodega() {
         setPedidoSeleccionado(null);
     };
 
-    const handleLimpiarRegistros = async () => {
-        const idsParaArchivar = solicitudesTransferidas.map((s: any) => s.id);
-        if (idsParaArchivar.length > 0) {
-            try {
-                await solicitudesService.archivarSolicitudes(idsParaArchivar);
-                
-                // Limpiar el estado local inmediatamente
-                clearSolicitudesTransferidas();
-                
-                // Forzar la recarga de solicitudes transferidas para que se actualice la vista
-                fetchSolicitudesTransferidas();
-            } catch (error) {
-                console.error("Error al archivar las solicitudes:", error);
-                alert("No se pudieron archivar los registros. Inténtelo de nuevo.");
-            }
-        }
-        // No limpiar los pedidos ya que son registros importantes que deben mantenerse
-    };
-
     // Función para extraer modelo/variante desde el nombre (igual que backend)
     const extraerModeloDesdeNombre = (nombre: string) => {
         // Buscar patrones numéricos con unidades (10m, 500ml, 2L, etc.)
@@ -829,14 +803,16 @@ export default function PedidosBodega() {
         let productoFinal;
         
         if (decision === 'existente' && productoExistente) {
-            // Usar producto existente
+            // Usar SIEMPRE los datos exactos del producto existente
             productoFinal = {
-                ...productoExistente,
+                id: productoExistente.id || productoExistente.id_prodc,
+                nombre: productoExistente.nombre_prodc,
+                marca: productoExistente.marca_nombre,
+                categoria: productoExistente.categoria_nombre,
                 cantidad: productoActualValidacion.cantidad,
-                es_producto_existente: true,
-                id: productoExistente.id
+                es_producto_existente: true
             };
-            console.log('🔍 DEBUG - Usando producto existente:', productoFinal);
+            console.log('🔍 DEBUG - Usando producto existente, datos exactos:', productoFinal);
         } else {
             // Crear nuevo producto
             productoFinal = {
@@ -1325,9 +1301,7 @@ export default function PedidosBodega() {
                         {/* ... */}
                     </div>
                 </div>
-                <Button onClick={handleLimpiarRegistros} color="error" variant="contained" >
-                Limpiar registros pendientes
-                </Button>
+
                 {opcion === 'ingresos' ? (
                     <TablaIngresos ingresos={pedidosPaginados} onVerDetalles={handleOpenDetailModal} loading={loading} />
                 ) : (
@@ -1796,13 +1770,6 @@ export default function PedidosBodega() {
                                                 size="small"
                                                 sx={{ "& .MuiInputLabel-root": { color: "#ccc" }, "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: "#444" }, "&:hover fieldset": { borderColor: "#FFD700" } } }}
                                             />
-                                            <TextField
-                                                label="Patente del vehículo"
-                                                value={pedidoSeleccionado.patenteVehiculo || "N/A"}
-                                                InputProps={{ readOnly: true, sx: { color: "#fff" } }}
-                                                size="small"
-                                                sx={{ "& .MuiInputLabel-root": { color: "#ccc" }, "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: "#444" }, "&:hover fieldset": { borderColor: "#FFD700" } } }}
-                                            />
                                         </Box>
                                     </Box>
                                 )}
@@ -1945,13 +1912,13 @@ export default function PedidosBodega() {
                                                         >
                                                             <ListItemText
                                                                 primary={<span style={{ color: '#FFD700', fontWeight: 600 }}>
-                                                                    {producto.nombre === productoActualValidacion.nombre ? <b>{producto.nombre}</b> : producto.nombre}
+                                                                    {producto.nombre_prodc ? <b>{producto.nombre_prodc}</b> : (producto.nombre ? <b>{producto.nombre}</b> : 'Sin nombre')}
                                                                 </span>}
                                                                 secondary={<>
                                                                     <span style={{ color: '#ccc' }}>
-                                                                        Marca: {producto.marca === productoActualValidacion.marca ? <b>{producto.marca}</b> : producto.marca} |
-                                                                        Categoría: {producto.categoria === productoActualValidacion.categoria ? <b>{producto.categoria}</b> : producto.categoria} |
-                                                                        <b>Stock actual:</b> <span style={{ color: producto.stock_actual > 0 ? '#4CAF50' : '#F44336', fontWeight: 600 }}>{producto.stock_actual || 0}</span><br/>
+                                                                        Marca: {producto.marca_nombre ? <b>{producto.marca_nombre}</b> : producto.marca || '-'} |
+                                                                        Categoría: {producto.categoria_nombre ? <b>{producto.categoria_nombre}</b> : producto.categoria || '-'} |
+                                                                        <b>Stock actual:</b> <span style={{ color: producto.stock > 0 ? '#4CAF50' : '#F44336', fontWeight: 600 }}>{producto.stock ?? 0}</span><br/>
                                                                         <b>Código:</b> {producto.codigo_interno || '—'}
                                                                     </span>
                                                                 </>}

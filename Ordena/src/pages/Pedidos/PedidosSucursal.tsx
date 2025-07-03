@@ -16,7 +16,7 @@ import { SUCURSALES } from "../../constants/ubicaciones";
 import { generarActaRecepcion } from "../../utils/pdf/generarActaRecepcion";
 import { generarOCI } from "../../utils/pdf/generarOCI";
 import EstadoBadge from "../../components/EstadoBadge";
-import { pedidosService, informesService } from "../../services/api";
+import { pedidosService, informesService, buscarProductosSimilaresSucursal } from "../../services/api";
 import { useInventariosStore } from "../../store/useProductoStore";
 
 export default function PedidosSucursal() {
@@ -34,7 +34,18 @@ export default function PedidosSucursal() {
 
     const sucursalActualId = usuario?.sucursal || "";
     
-    
+    // --- ESTADOS para validación múltiple de productos ---
+    const [modalValidacionMultiple, setModalValidacionMultiple] = useState(false);
+    const [productosAValidar, setProductosAValidar] = useState<any[]>([]);
+    const [productosValidados, setProductosValidados] = useState<any[]>([]);
+    const [productoActualValidacion, setProductoActualValidacion] = useState<any>(null);
+    const [productosSimilaresActual, setProductosSimilaresActual] = useState<any[]>([]);
+    const [productoSeleccionado, setProductoSeleccionado] = useState<any>(null);
+    const [procesandoIngreso, setProcesandoIngreso] = useState(false);
+    const [datosFormularioPendiente, setDatosFormularioPendiente] = useState<any>(null);
+    // Nuevo estado para pedido pendiente de confirmación
+    const [pedidoPendienteConfirmacion, setPedidoPendienteConfirmacion] = useState<any>(null);
+
     // Cargar pedidos desde la base de datos al montar el componente
     useEffect(() => {
         
@@ -74,7 +85,9 @@ export default function PedidosSucursal() {
                     return {
                         nombre: detalle.producto_nombre || "Producto",
                         cantidad: detalle.cantidad,
-                        codigo: detalle.producto_codigo || ""
+                        codigo: detalle.producto_codigo || "",
+                        marca: detalle.producto_marca || "",
+                        categoria: detalle.producto_categoria || ""
                     };
                 }) || [];
                 
@@ -93,7 +106,6 @@ export default function PedidosSucursal() {
                     bodegaOrigen: pedidoDB.bodega_nombre || "Bodega Central",
                     direccionBodega: pedidoDB.bodega_direccion || "",
                     direccionSucursal: pedidoDB.sucursal_direccion || "",
-                    patenteVehiculo: pedidoDB.personal_entrega_patente || "N/A"
                 };
             });
             
@@ -109,13 +121,6 @@ export default function PedidosSucursal() {
         }
     };
 
-    // Función temporal para limpiar localStorage
-    const handleLimpiarLocalStorage = () => {
-        // Limpiar el store de bodega
-        clearPedidos();
-        // Recargar la página para aplicar los cambios
-        window.location.reload();
-    };
     
     const pedidosFiltrados = useMemo(() => {
         const filtrados = pedidos.filter((row) => {
@@ -134,85 +139,80 @@ export default function PedidosSucursal() {
         paginaActual * PEDIDOS_POR_PAGINA
     );
 
-    const handleConfirmarRecepcion = async (id: number) => {
+    // Nueva función: lógica de confirmación de recepción (extraída)
+    const confirmarRecepcionBackend = async (pedido: any, productosFinales?: any[]) => {
         try {
             // Confirmar recepción usando el nuevo endpoint
-            const resultado = await pedidosService.confirmarRecepcion(id.toString());
+            const resultado = await pedidosService.confirmarRecepcion(pedido.id.toString());
             
-            const pedido = pedidos.find((p: any) => p.id === id);
-            if (pedido) {
-                // Buscar sucursal receptora
-                const sucursal = SUCURSALES.find(s => s.id === pedido.sucursalDestino);
-                // Generar productos recibidos
-                const productos = (pedido.productos || []).map((prod: any, idx: number) => ({
-                    codigo: prod.codigo || `P${idx + 1}`,
-                    descripcion: prod.nombre || prod.descripcion || "-",
-                    cantidad: prod.cantidad || 0,
-                }));
+            // Buscar sucursal receptora
+            const sucursal = SUCURSALES.find(s => s.id === pedido.sucursalDestino);
+            // Generar productos recibidos
+            const productos = (productosFinales || pedido.productos || []).map((prod: any, idx: number) => ({
+                codigo: prod.codigo || `P${idx + 1}`,
+                descripcion: prod.nombre || prod.descripcion || "-",
+                cantidad: prod.cantidad || 0,
+            }));
 
-                generarActaRecepcion({
-                    numeroActa: String(pedido.id),
-                    fechaRecepcion: pedido.fecha,
+            generarActaRecepcion({
+                numeroActa: String(pedido.id),
+                fechaRecepcion: pedido.fecha,
+                sucursal: {
+                    nombre: sucursal?.nombre || pedido.sucursalDestino || "-",
+                    direccion: sucursal?.direccion || pedido.direccionSucursal || "-",
+                },
+                personaRecibe: {
+                    nombre: usuario?.nombre || "-",
+                    cargo: usuario?.rol || "-",
+                },
+                productos,
+                observaciones: pedido.observacion || pedido.observaciones || "",
+                conformidad: "Recibido conforme",
+                responsable: usuario?.nombre || "-",
+            });
+
+            // Crear informe en la base de datos para la confirmación de recepción
+            try {
+                const contenidoInforme = {
+                    pedido_id: pedido.id,
+                    fecha: pedido.fecha,
                     sucursal: {
+                        id: pedido.sucursalDestino,
                         nombre: sucursal?.nombre || pedido.sucursalDestino || "-",
-                        direccion: sucursal?.direccion || pedido.direccionSucursal || "-",
+                        direccion: sucursal?.direccion || pedido.direccionSucursal || "-"
                     },
-                    personaRecibe: {
-                        nombre: usuario?.nombre || "-",
-                        cargo: usuario?.rol || "-",
+                    bodega: {
+                        nombre: pedido.bodegaOrigen || "Bodega Central",
+                        direccion: pedido.direccionBodega || "Camino a Penco 2500, Concepción"
                     },
-                    productos,
+                    productos: productos.map((prod: any) => ({
+                        nombre: prod.descripcion,
+                        codigo: prod.codigo,
+                        cantidad: prod.cantidad
+                    })),
+                    transportista: {
+                        nombre: pedido.asignado || "Sin asignar",
+                    },
                     observaciones: pedido.observacion || pedido.observaciones || "",
-                    conformidad: "Recibido conforme",
                     responsable: usuario?.nombre || "-",
+                    oci_asociada: pedido.ociAsociada || ""
+                };
+
+                await informesService.createInforme({
+                    titulo: `Confirmación de Recepción - Pedido ${pedido.id}`,
+                    descripcion: `Confirmación de recepción del pedido ${pedido.id} en ${sucursal?.nombre || pedido.sucursalDestino}`,
+                    modulo_origen: 'pedidos',
+                    contenido: JSON.stringify(contenidoInforme),
+                    archivo_url: `ConfirmacionRecepcion_${pedido.id}.pdf`,
+                    fecha_generado: new Date().toISOString(),
+                    sucursal_fk: usuario?.sucursal || null,
+                    pedidos_fk: pedido.id
                 });
 
-                // Crear informe en la base de datos para la confirmación de recepción
-                try {
-                    const contenidoInforme = {
-                        pedido_id: pedido.id,
-                        fecha: pedido.fecha,
-                        sucursal: {
-                            id: pedido.sucursalDestino,
-                            nombre: sucursal?.nombre || pedido.sucursalDestino || "-",
-                            direccion: sucursal?.direccion || pedido.direccionSucursal || "-"
-                        },
-                        bodega: {
-                            nombre: pedido.bodegaOrigen || "Bodega Central",
-                            direccion: pedido.direccionBodega || "Camino a Penco 2500, Concepción"
-                        },
-                        productos: productos.map((prod: any) => ({
-                            nombre: prod.descripcion,
-                            codigo: prod.codigo,
-                            cantidad: prod.cantidad
-                        })),
-                        transportista: {
-                            nombre: pedido.asignado || "Sin asignar",
-                            patente: pedido.patenteVehiculo || "N/A"
-                        },
-                        observaciones: pedido.observacion || pedido.observaciones || "",
-                        responsable: usuario?.nombre || "-",
-                        oci_asociada: pedido.ociAsociada || ""
-                    };
-
-                    await informesService.createInforme({
-                        titulo: `Confirmación de Recepción - Pedido ${pedido.id}`,
-                        descripcion: `Confirmación de recepción del pedido ${pedido.id} en ${sucursal?.nombre || pedido.sucursalDestino}`,
-                        modulo_origen: 'pedidos',
-                        contenido: JSON.stringify(contenidoInforme),
-                        archivo_url: `ConfirmacionRecepcion_${pedido.id}.pdf`,
-                        fecha_generado: new Date().toISOString(),
-                        sucursal_fk: usuario?.sucursal || null,
-                        pedidos_fk: pedido.id
-                    });
-
-                    console.log('✅ Informe de confirmación de recepción creado exitosamente');
-                } catch (error) {
-                    console.error('Error al crear informe de confirmación de recepción:', error);
-                    // No mostrar error al usuario, solo log
-                }
+                console.log('✅ Informe de confirmación de recepción creado exitosamente');
+            } catch (error) {
+                console.error('Error al crear informe de confirmación de recepción:', error);
             }
-            
             // Mostrar mensaje de éxito con los productos agregados
             if (resultado.productos_agregados && resultado.productos_agregados.length > 0) {
                 const productosText = resultado.productos_agregados
@@ -222,21 +222,14 @@ export default function PedidosSucursal() {
             } else {
                 alert("¡Recepción confirmada exitosamente!");
             }
-            
             // Actualizar el estado local
-            updatePedido(id, { estado: "Completado" });
-            
+            updatePedido(pedido.id, { estado: "Completado" });
             // Recargar pedidos para sincronizar
             await fetchPedidosSucursal();
             // Refrescar inventario de la sucursal
             if (sucursalActualId) {
-                console.log("🔍 DEBUG - PedidosSucursal - Llamando a fetchProductos con sucursalActualId:", sucursalActualId);
                 await fetchProductos(sucursalActualId.toString());
-                console.log("🔍 DEBUG - PedidosSucursal - fetchProductos completado");
-            } else {
-                console.log("🔍 DEBUG - PedidosSucursal - No hay sucursalActualId, no se refresca inventario");
             }
-            
         } catch (error: any) {
             console.error("Error al confirmar recepción:", error);
             let mensaje = "Error al confirmar la recepción. Por favor, intente de nuevo.";
@@ -245,6 +238,21 @@ export default function PedidosSucursal() {
             }
             alert(mensaje);
         }
+    };
+
+    // Modificar handleConfirmarRecepcion para validar productos antes de confirmar
+    const handleConfirmarRecepcion = async (id: number) => {
+        const pedido = pedidos.find((p: any) => p.id === id);
+        if (!pedido) return;
+        // Validar productos antes de continuar
+        const productosValidados = await validarTodosLosProductos(pedido.productos);
+        if (!productosValidados) {
+            // Hay productos similares, se abrirá el modal
+            setPedidoPendienteConfirmacion(pedido); // Guardar el pedido para después
+            return;
+        }
+        // Si no hay similares, continuar con la lógica actual
+        await confirmarRecepcionBackend(pedido);
     };
     
     const handleOpenModal = (pedido: any) => {
@@ -255,6 +263,139 @@ export default function PedidosSucursal() {
     const handleCloseModal = () => {
         setModalOpen(false);
         setPedidoSeleccionado(null);
+    };
+
+    // --- FUNCIONES de validación múltiple ---
+    const buscarProductosSimilaresLocal = async (producto: any) => {
+        try {
+            const codigo_interno = producto.codigo_interno || producto.codigo || undefined;
+            const sucursal_id = usuario?.sucursal ? String(usuario.sucursal) : undefined;
+            // Solo enviar nombre, sucursal_id y código si existen
+            const payload: any = {
+                nombre: producto.nombre,
+            };
+            if (sucursal_id) payload.sucursal_id = sucursal_id;
+            if (codigo_interno) payload.codigo_interno = codigo_interno;
+            if (producto.marca) payload.marca = producto.marca;
+            if (producto.categoria) payload.categoria = producto.categoria;
+
+            console.log("Payload a buscarProductosSimilaresSucursal:", payload);
+
+            const response = await buscarProductosSimilaresSucursal(payload);
+            console.log("Similares recibidos:", response.productos_similares);
+            if (response.productos_similares && response.productos_similares.length > 0) {
+                setProductosSimilaresActual(response.productos_similares);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error("Error en buscarProductosSimilaresLocal:", error);
+            return false;
+        }
+    };
+
+    const validarTodosLosProductos = async (productos: any[]) => {
+        const productosConSimilares = [];
+        const productosSinSimilares = [];
+        for (const producto of productos) {
+            try {
+                const haySimilares = await buscarProductosSimilaresLocal(producto);
+                if (haySimilares) {
+                    productosConSimilares.push(producto);
+                } else {
+                    productosSinSimilares.push(producto);
+                }
+            } catch (error) {
+                productosSinSimilares.push(producto);
+            }
+        }
+        console.log("Productos con similares:", productosConSimilares);
+        if (productosConSimilares.length > 0) {
+            setProductosAValidar(productosConSimilares);
+            setProductosValidados(productosSinSimilares);
+            setProductoActualValidacion(productosConSimilares[0]);
+            setModalValidacionMultiple(true);
+        }
+        return productosConSimilares.length === 0;
+    };
+
+    const manejarDecisionProducto = async (decision: 'existente' | 'nuevo', productoExistente?: any) => {
+        if (!productoActualValidacion) return;
+        let productoFinal;
+        if (decision === 'existente' && productoExistente) {
+            productoFinal = {
+                ...productoExistente,
+                cantidad: productoActualValidacion.cantidad,
+                es_producto_existente: true,
+                id: productoExistente.id
+            };
+        } else {
+            productoFinal = {
+                ...productoActualValidacion,
+                es_producto_existente: false
+            };
+        }
+        setProductosValidados(prev => [...prev, productoFinal]);
+        const productosRestantes = productosAValidar.filter(p =>
+            !(p.nombre === productoActualValidacion.nombre &&
+              p.marca === productoActualValidacion.marca &&
+              p.categoria === productoActualValidacion.categoria)
+        );
+        setProductosAValidar(productosRestantes);
+        if (productosRestantes.length > 0) {
+            setProductoActualValidacion(productosRestantes[0]);
+            setProductosSimilaresActual([]);
+            setProductoSeleccionado(null);
+        } else {
+            // El useEffect procesará automáticamente
+        }
+    };
+
+    // Adaptar procesarIngresoConProductosValidados para continuar la confirmación
+    const procesarIngresoConProductosValidados = async () => {
+        try {
+            if (!modalValidacionMultiple) return;
+            const productosFinales = [...productosValidados];
+            if (!productosFinales || productosFinales.length === 0) {
+                throw new Error('No hay productos para procesar.');
+            }
+            // Si hay un pedido pendiente de confirmación, continuar la confirmación
+            if (pedidoPendienteConfirmacion) {
+                await confirmarRecepcionBackend(pedidoPendienteConfirmacion, productosFinales);
+                setPedidoPendienteConfirmacion(null);
+            }
+            // Limpiar estados
+            setDatosFormularioPendiente(null);
+            setModalValidacionMultiple(false);
+            setProductosAValidar([]);
+            setProductosValidados([]);
+            setProductoActualValidacion(null);
+            setProductosSimilaresActual([]);
+            setProcesandoIngreso(false);
+        } catch (error) {
+            setProcesandoIngreso(false);
+        }
+    };
+
+    // Efecto para procesar automáticamente cuando todos los productos han sido validados
+    useEffect(() => {
+        if (productosAValidar.length === 0 && productosValidados.length > 0 && modalValidacionMultiple && !procesandoIngreso) {
+            setProcesandoIngreso(true);
+            procesarIngresoConProductosValidados();
+        }
+    }, [productosAValidar.length, productosValidados.length, modalValidacionMultiple, procesandoIngreso]);
+
+    const handleCrearIngresoSucursal = async (data: any) => {
+        // data.productos debe ser el array de productos a ingresar
+        const productosValidados = await validarTodosLosProductos(data.productos);
+        if (!productosValidados) {
+            // Guardar los datos del formulario para usarlos después
+            setDatosFormularioPendiente(data);
+            return; // El modal de validación múltiple se abrirá
+        }
+        // Si llegamos aquí, todos los productos están validados
+        // Crear el pedido/ingreso en el backend usando data y data.productos
+        // ... tu lógica de creación aquí ...
     };
 
     return (
@@ -280,18 +421,6 @@ export default function PedidosSucursal() {
                     <h2 style={{ color: "#FFD700", margin: 0 }}>Pedidos asignados a mi sucursal</h2>
                     {/* Filtros */}
                     <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-                        {/* Botón temporal para limpiar localStorage */}
-                        <Button
-                            variant="outlined"
-                            onClick={handleLimpiarLocalStorage}
-                            style={{
-                                borderColor: "#ff4444",
-                                color: "#ff4444",
-                                fontWeight: 600
-                            }}
-                        >
-                            Limpiar Cache
-                        </Button>
                         <FormControl
                             size="small"
                             variant="outlined"
@@ -591,22 +720,6 @@ export default function PedidosSucursal() {
                                                 }
                                             }}
                                 />
-                                <TextField
-                                            label="Patente del vehículo"
-                                            value={pedidoSeleccionado.patenteVehiculo || "N/A"}
-                                            InputProps={{ 
-                                                readOnly: true,
-                                                sx: { color: "#fff" }
-                                            }}
-                                    size="small"
-                                            sx={{
-                                                "& .MuiInputLabel-root": { color: "#ccc" },
-                                                "& .MuiOutlinedInput-root": {
-                                                    "& fieldset": { borderColor: "#444" },
-                                                    "&:hover fieldset": { borderColor: "#FFD700" }
-                                                }
-                                            }}
-                                        />
                                     </Box>
                                 </Box>
 
@@ -639,7 +752,7 @@ export default function PedidosSucursal() {
                                                         {pedidoSeleccionado.productos.map((prod: any, idx: number) => (
                                                             <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
                                                                 <TableCell sx={{ color: "#fff" }}>
-                                                                    {prod.nombre || 'N/A'}
+                                                                    {prod.nombre || prod.nombre_prodc}
                                                                 </TableCell>
                                                                 <TableCell align="right" sx={{ color: "#FFD700", fontWeight: 600 }}>
                                                                     {prod.cantidad || 0}
@@ -791,6 +904,131 @@ export default function PedidosSucursal() {
                             variant="outlined"
                         >
                             Cerrar
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+                {/* --- MODAL de validación múltiple --- */}
+                {console.log("Render modalValidacionMultiple:", modalValidacionMultiple, "Producto actual:", productoActualValidacion, "Similares:", productosSimilaresActual)}
+                <Dialog 
+                    open={modalValidacionMultiple} 
+                    onClose={() => setModalValidacionMultiple(false)}
+                    maxWidth="md"
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            bgcolor: '#1a1a1a',
+                            color: '#fff',
+                            borderRadius: 3,
+                            boxShadow: 24,
+                            p: 0,
+                        }
+                    }}
+                >
+                    <DialogTitle sx={{ 
+                        bgcolor: '#232323', 
+                        color: '#FFD700', 
+                        fontWeight: 700, 
+                        fontSize: 22, 
+                        borderBottom: '1px solid #333',
+                        display: 'flex', 
+                        alignItems: 'center',
+                        gap: 2
+                    }}>
+                        <span style={{fontSize: 28}}>🔎</span> ¿Qué hacer con este producto?
+                    </DialogTitle>
+                    <DialogContent sx={{ bgcolor: '#1a1a1a', p: 3 }}>
+                        {productoActualValidacion && (
+                            <Box>
+                                <Typography variant="h6" sx={{ color: '#FFD700', fontWeight: 700, mb: 1 }}>
+                                    Ya existe un producto similar en el inventario
+                                </Typography>
+                                <Typography variant="body1" sx={{ color: '#ccc', mb: 3 }}>
+                                    Puedes <b>sumar la cantidad</b> al stock existente o <b>registrar como producto nuevo</b> si es diferente.<br/>
+                                    <span style={{ color: '#FF9800', fontWeight: 500 }}>Revisa bien los datos antes de decidir.</span>
+                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 2 }}>
+                                    {/* Producto a ingresar */}
+                                    <Box sx={{ bgcolor: '#232323', borderRadius: 2, p: 2, mb: 2, boxShadow: 2, flex: 1 }}>
+                                        <Typography variant="h6" sx={{ mb: 1, color: '#fff' }}>Producto a ingresar</Typography>
+                                        <Typography variant="body1" sx={{ color: '#bbb' }}>
+                                            <b>Nombre:</b> {productoActualValidacion.nombre}
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ color: '#bbb' }}>
+                                            <b>Marca:</b> {productoActualValidacion.marca}
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ color: '#bbb' }}>
+                                            <b>Categoría:</b> {productoActualValidacion.categoria}
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ color: '#bbb' }}>
+                                            <b>Cantidad:</b> {productoActualValidacion.cantidad}
+                                        </Typography>
+                                    </Box>
+                                    {/* Productos similares */}
+                                    <Box sx={{ bgcolor: '#232323', borderRadius: 2, border: '1px solid #444', p: 2, flex: 1 }}>
+                                        <Typography variant="subtitle2" sx={{ color: '#FFD700', fontWeight: 600, mb: 1 }}>
+                                            Productos similares en inventario
+                                        </Typography>
+                                        {productosSimilaresActual.length > 0 ? (
+                                            <ul style={{ listStyle: 'none', padding: 0 }}>
+                                                {productosSimilaresActual.map((producto, index) => (
+                                                    <li 
+                                                        key={index}
+                                                        style={{
+                                                            border: productoSeleccionado?.id === producto.id ? '2px solid #FFD700' : '1px solid #444',
+                                                            borderRadius: 8,
+                                                            marginBottom: 8,
+                                                            cursor: 'pointer',
+                                                            background: productoSeleccionado?.id === producto.id ? '#FFD70022' : '#232323',
+                                                            padding: 8
+                                                        }}
+                                                        onClick={() => setProductoSeleccionado(producto)}
+                                                    >
+                                                        <span style={{ color: '#FFD700', fontWeight: 600 }}>{producto.nombre || producto.nombre_prodc}</span><br/>
+                                                        <span style={{ color: '#ccc' }}>
+                                                            Marca: {producto.marca_nombre || producto.marca} | Categoría: {producto.categoria_nombre || producto.categoria} | <b>Stock actual:</b> <span style={{ color: producto.stock > 0 ? '#4CAF50' : '#F44336', fontWeight: 600 }}>{producto.stock ?? 0}</span>
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <Typography variant="body2" sx={{ color: '#ccc' }}>
+                                                No se encontraron productos similares. Se creará como nuevo producto.
+                                            </Typography>
+                                        )}
+                                    </Box>
+                                </Box>
+                                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mt: 3 }}>
+                                    <Button 
+                                        onClick={() => manejarDecisionProducto('nuevo')}
+                                        variant="contained"
+                                        sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, borderRadius: 2, px: 4, boxShadow: 2, '&:hover': { bgcolor: '#FFC700' } }}
+                                    >
+                                        Crear como producto nuevo
+                                    </Button>
+                                    <Button 
+                                        onClick={() => manejarDecisionProducto('existente', productoSeleccionado)}
+                                        variant="contained"
+                                        disabled={!productoSeleccionado}
+                                        sx={{ bgcolor: '#4CAF50', color: '#fff', fontWeight: 700, borderRadius: 2, px: 4, boxShadow: 2, '&:hover': { bgcolor: '#43a047' }, '&:disabled': { bgcolor: '#666', color: '#ccc' } }}
+                                    >
+                                        Sumar al stock existente
+                                    </Button>
+                                </Box>
+                                <Box sx={{ mt: 4, textAlign: 'center' }}>
+                                    <Typography variant="caption" sx={{ color: '#888' }}>
+                                        Si tienes dudas, consulta con tu supervisor o revisa la documentación interna.
+                                    </Typography>
+                                </Box>
+                            </Box>
+                        )}
+                    </DialogContent>
+                    <DialogActions sx={{ bgcolor: '#1a1a1a', borderTop: '1px solid #333', p: 2 }}>
+                        <Button 
+                            onClick={() => setModalValidacionMultiple(false)} 
+                            sx={{ color: '#FFD700', borderColor: '#FFD700', fontWeight: 600, borderRadius: 2, '&:hover': { bgcolor: 'rgba(255, 215, 0, 0.1)' } }}
+                            variant="outlined"
+                        >
+                            Cancelar
                         </Button>
                     </DialogActions>
                 </Dialog>

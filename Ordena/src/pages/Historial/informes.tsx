@@ -34,7 +34,6 @@ export default function Informes() {
     const [modalLimpiezaOpen, setModalLimpiezaOpen] = useState(false);
     const [informeSeleccionado, setInformeSeleccionado] = useState<Informe | null>(null);
     const [loading, setLoading] = useState(true);
-    const [limpiando, setLimpiando] = useState(false);
     const usuario = useAuthStore(state => state.usuario);
 
     // Estados para filtros
@@ -192,7 +191,6 @@ export default function Informes() {
                             fecha: contenido.fecha || new Date(informe.fecha_generado).toLocaleDateString('es-ES'),
                             sucursalDestino: contenido.sucursal?.id || 1,
                             responsable: contenido.responsable || "Responsable de Bodega",
-                            patenteVehiculo: contenido.patente || "No especificada",
                             productos: contenido.productos || [],
                             ociAsociada: contenido.oci_asociada || informe.pedidos_fk,
                             observaciones: contenido.observaciones || informe.descripcion
@@ -241,33 +239,6 @@ export default function Informes() {
         setFiltroFecha("");
     };
 
-    const handleLimpiarHuerfanos = () => {
-        setModalLimpiezaOpen(true);
-    };
-
-    const handleConfirmarLimpieza = async () => {
-        try {
-            setLimpiando(true);
-            const response = await informesService.limpiarHuerfanos();
-            
-            alert(`Limpieza completada. ${response.informes_eliminados} informes huérfanos eliminados.`);
-            
-            // Refrescar la lista de informes
-            await fetchInformes();
-            
-            setModalLimpiezaOpen(false);
-        } catch (error) {
-            console.error("Error al limpiar informes huérfanos:", error);
-            alert("Error al limpiar informes huérfanos. Por favor, intente de nuevo.");
-        } finally {
-            setLimpiando(false);
-        }
-    };
-
-    const handleCancelarLimpieza = () => {
-        setModalLimpiezaOpen(false);
-    };
-
     return (
         <Layout>
             <div style={{
@@ -292,14 +263,6 @@ export default function Informes() {
                         <Typography variant="body2" style={{ color: "#8A8A8A" }}>
                             {informesFiltrados.length} informes encontrados
                         </Typography>
-                        <Button
-                            variant="outlined"
-                            startIcon={<CleaningServicesIcon />}
-                            onClick={handleLimpiarHuerfanos}
-                            style={{ borderColor: "#ff6b6b", color: "#ff6b6b" }}
-                        >
-                            Limpiar Huérfanos
-                        </Button>
                         <Button
                             variant="outlined"
                             startIcon={<FilterListIcon />}
@@ -586,37 +549,6 @@ export default function Informes() {
                                 Descargar
                             </Button>
                         )}
-                    </DialogActions>
-                </Dialog>
-
-                {/* Modal de confirmación de limpieza de informes huérfanos */}
-                <Dialog open={modalLimpiezaOpen} onClose={handleCancelarLimpieza}>
-                    <DialogTitle>Confirmar limpieza de informes huérfanos</DialogTitle>
-                    <DialogContent>
-                        <p>¿Está seguro de que desea limpiar los informes huérfanos?</p>
-                        <p style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
-                            Esta acción eliminará permanentemente:
-                        </p>
-                        <ul>
-                            <li>Informes de solicitudes que ya no existen</li>
-                            <li>Informes con contenido JSON inválido</li>
-                            <li>Documentos OCIs de solicitudes eliminadas</li>
-                        </ul>
-                        <p style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
-                            Esta acción no se puede deshacer.
-                        </p>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelarLimpieza} style={{ color: "#FFD700" }}>
-                            Cancelar
-                        </Button>
-                        <Button 
-                            onClick={handleConfirmarLimpieza} 
-                            disabled={limpiando}
-                            style={{ color: "#ffffff", background: "#ff6b6b", fontWeight: 600 }}
-                        >
-                            {limpiando ? "Limpiando..." : "Limpiar informes huérfanos"}
-                        </Button>
                     </DialogActions>
                 </Dialog>
             </div>

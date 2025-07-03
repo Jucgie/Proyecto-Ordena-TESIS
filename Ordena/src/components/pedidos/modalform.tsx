@@ -129,13 +129,13 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
 
     // Validar productos cuando cambian las categorías
     useEffect(() => {
-        if (categorias.length > 0 && productos.length > 0) {
+        if (open && categorias.length > 0 && productos.length > 0) {
             const productosValidados = validarCategorias(productos);
             if (JSON.stringify(productosValidados) !== JSON.stringify(productos)) {
                 setProductos(productosValidados);
             }
         }
-    }, [categorias]);
+    }, [open]); // Solo depende de open, así solo se ejecuta al abrir el modal
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
