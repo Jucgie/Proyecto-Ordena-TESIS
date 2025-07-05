@@ -19,6 +19,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 ChartJS.register(
   CategoryScale,
@@ -87,7 +88,7 @@ export function Grafics_b() {
   //Se obtiene la cantidad de pedidos según el día.
   pedidosMostrados.forEach(p => {
     if (p.fecha_entrega){
-      const fecha = new Date(p.fecha_entrega);
+      const fecha = formatFechaChile(p.fecha_entrega);
 
       const dia = (fecha.getDay() + 6) % 7; // 
       pedidosPorDia[dia]++;

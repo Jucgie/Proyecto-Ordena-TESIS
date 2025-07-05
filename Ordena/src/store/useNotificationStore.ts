@@ -24,7 +24,8 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   fetchNotificaciones: async () => {
     set({ loading: true });
     const data = await getNotificaciones();
-    set({ notificaciones: data, loading: false });
+    const notificacionesArr = data.results || data;
+    set({ notificaciones: notificacionesArr, loading: false });
   },
   marcarComoLeida: async (id: number) => {
     await marcarLeida(id);

@@ -8,6 +8,7 @@ import InfoIcon from "@mui/icons-material/Info";
 import WarningIcon from "@mui/icons-material/Warning";
 import ErrorIcon from "@mui/icons-material/Error";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 const iconByType = {
   info: <InfoIcon color="info" />,
@@ -72,15 +73,7 @@ export default function NotificationCenter() {
                       <Typography component="span" sx={{ color: "#ccc", fontSize: 14 }}>{n.descripcion}</Typography>
                       <Typography component="span" sx={{ color: "#888", fontSize: 12, mt: 0.5 }}>
                         {n.fecha_hora_ntd &&
-                          new Date(n.fecha_hora_ntd).toLocaleString("es-CL", {
-                            timeZone: "America/Santiago",
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit"
-                          })}
+                          formatFechaChile(n.fecha_hora_ntd)}
                       </Typography>
                       {n.link && (
                         <Button

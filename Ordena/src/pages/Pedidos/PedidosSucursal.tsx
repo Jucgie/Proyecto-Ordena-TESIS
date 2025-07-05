@@ -18,6 +18,7 @@ import { generarOCI } from "../../utils/pdf/generarOCI";
 import EstadoBadge from "../../components/EstadoBadge";
 import { pedidosService, informesService, buscarProductosSimilaresSucursal } from "../../services/api";
 import { useInventariosStore } from "../../store/useProductoStore";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 export default function PedidosSucursal() {
     const { pedidos, updatePedido, addPedido, clearPedidos } = useBodegaStore();
@@ -94,7 +95,7 @@ export default function PedidosSucursal() {
                 return {
                     id: pedidoDB.id_p,
                     tipo: "salida",
-                    fecha: new Date(pedidoDB.fecha_entrega).toISOString().slice(0, 10),
+                    fecha: formatFechaChile(pedidoDB.fecha_entrega),
                     responsable: pedidoDB.usuario_nombre || "Responsable Bodega",
                     productos: productos,
                     sucursalDestino: pedidoDB.sucursal_fk?.toString() || "",

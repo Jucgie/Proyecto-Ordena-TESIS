@@ -10,6 +10,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import { historialService } from "../../services/historialService";
 import { useAuthStore } from "../../store/useAuthStore";
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Box, Typography, Chip } from "@mui/material";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 
 
@@ -130,7 +131,7 @@ export function HistorialTemplate() {
                                 ) : movimientos.map((mov, idx) => (
                                     <TableRow key={idx} sx={{ borderBottom: '1px solid #333', '&:last-child td': { borderBottom: 0 }, '&:hover': { bgcolor: '#292929' } }}>
                                         <TableCell sx={{ color: mov.tipo === 'Inventario' ? '#4CAF50' : '#2196F3', fontWeight: 700 }}>{mov.tipo}</TableCell>
-                                        <TableCell sx={{ color: '#fff' }}>{mov.fecha ? new Date(mov.fecha).toLocaleString() : '—'}</TableCell>
+                                        <TableCell sx={{ color: '#fff' }}>{formatFechaChile(mov.fecha)}</TableCell>
                                         <TableCell sx={{ color: '#fff' }}>{mov.descripcion}</TableCell>
                                         <TableCell sx={{ color: '#fff' }}>{mov.usuario}</TableCell>
                                     </TableRow>

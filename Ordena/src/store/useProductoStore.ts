@@ -60,10 +60,11 @@ export const useInventariosStore = create<InventariosState>()(
             fetchProductos: async (ubicacionId: string) => {
                 console.log("🔍 DEBUG - Store - fetchProductos llamado con ubicacionId:", ubicacionId);
                 try {
-                    const productos = await productoService.getProductosActivos(ubicacionId);
-                    console.log("🔍 DEBUG - Store - Respuesta del backend:", productos);
+                    const productosResp = await productoService.getProductosActivos(ubicacionId);
+                    const productosArr = productosResp.results || productosResp;
+                    console.log("🔍 DEBUG - Store - Respuesta del backend:", productosArr);
                     // Usamos el helper para mapear
-                    const productosMapeados = productos.map(mapBackendToFrontend);
+                    const productosMapeados = productosArr.map(mapBackendToFrontend);
                     console.log("🔍 DEBUG - Store - Productos mapeados:", productosMapeados);
                     set(state => ({
                         inventarios: {
@@ -79,8 +80,9 @@ export const useInventariosStore = create<InventariosState>()(
 
             fetchMarcas: async (ubicacionId: string) => {
                 try {
-                    const marcas = await productoService.getMarcas();
-                    const marcasMapeadas = marcas.map((m: any) => ({
+                    const marcasResp = await productoService.getMarcas();
+                    const marcasArr = marcasResp.results || marcasResp;
+                    const marcasMapeadas = marcasArr.map((m: any) => ({
                         id: m.id_mprod,
                         nombre: m.nombre_mprod
                     }));
@@ -96,8 +98,9 @@ export const useInventariosStore = create<InventariosState>()(
 
             fetchCategorias: async (ubicacionId: string) => {
                 try {
-                    const categorias = await productoService.getCategorias();
-                    const categoriasMapeadas = categorias.map((c: any) => ({
+                    const categoriasResp = await productoService.getCategorias();
+                    const categoriasArr = categoriasResp.results || categoriasResp;
+                    const categoriasMapeadas = categoriasArr.map((c: any) => ({
                         id: c.id,
                         nombre: c.nombre
                     }));

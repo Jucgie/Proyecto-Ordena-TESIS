@@ -18,6 +18,7 @@ import { BODEGA_CENTRAL } from "../../constants/ubicaciones";
 import sin_imagen from "../../assets/sin_imagen.png";
 import { solicitudesService } from "../../services/api";
 import EstadoBadge from "../../components/EstadoBadge";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 interface Usuario {
     id: number;
@@ -490,7 +491,7 @@ export default function SolicitudesSucursal() {
                                     <TableRow key={`${row.id_solc}-${index}`}>
                                         <TableCell style={{ color: "#fff" }}>{row.id_solc}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
-                                            {row.fecha_creacion ? new Date(row.fecha_creacion).toLocaleDateString() : 'N/A'}
+                                            {formatFechaChile(row.fecha_creacion)}
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.usuario_nombre || 'N/A'}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
@@ -575,11 +576,7 @@ export default function SolicitudesSucursal() {
                                 />
                                 <TextField
                                     label="Fecha de emisión"
-                                        value={solicitudSeleccionada.fecha_creacion ? new Date(solicitudSeleccionada.fecha_creacion).toLocaleDateString('es-ES', {
-                                            year: 'numeric',
-                                            month: 'long',
-                                            day: 'numeric'
-                                        }) : 'N/A'}
+                                        value={formatFechaChile(solicitudSeleccionada.fecha_creacion)}
                                         InputProps={{ 
                                             readOnly: true,
                                             sx: { color: "#fff" }

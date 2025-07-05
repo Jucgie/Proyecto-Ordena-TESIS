@@ -36,6 +36,7 @@ import { use, useEffect, useMemo, useState } from "react";
 //import { useEffect } from "react";
 
 import { SUCURSALES } from "../../constants/ubicaciones";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 import PedidoDetalleModal from "../pedidos/pedidoDetalle";
 
@@ -417,7 +418,7 @@ export function CountElement() {
                                                 : (proveedoresMap.get(pedidos.proveedor_fk)??'N/A'))}
                                         </TableCell>
                                         <TableCell>{pedidos.detalles_pedido?.length || 0}</TableCell>
-                                        <TableCell>{pedidos.fecha_entrega.split('T')[0] ?? 'N/A'}</TableCell>
+                                        <TableCell>{formatFechaChile(pedidos.fecha_entrega)}</TableCell>
                                         <TableCell>{getEstadoPedido(pedidos.estado_pedido_fk)}</TableCell>
 
 
