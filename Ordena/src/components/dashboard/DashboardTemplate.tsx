@@ -3,6 +3,7 @@ import styled from "styled-components";
 {/* Se importan los componentes de los graficos*/}
 import { Grafics_b } from "../graficos/Grafics_bar";
 import { Grafics_Pie } from "../graficos/Grafics_pie";
+import { PedidosSucursal } from "../graficos/sucursalespedidos";
 {/* Fin importaciones de componentes graficos */}
 
 import Table from '@mui/material/Table';
@@ -30,25 +31,30 @@ import { useUsuariosStore } from "../../store/useUsuarioStore";
 import { useAuthStore } from "../../store/useAuthStore";
 
 import stockImage  from '../../assets/en-stock.png';
-import { use, useEffect, useMemo } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 
 //import { useEffect } from "react";
 
 import { SUCURSALES } from "../../constants/ubicaciones";
 
-
+import PedidoDetalleModal from "../pedidos/pedidoDetalle";
 
 export function CountElement() {
 
     //Obtención perfil de usuario
     const {usuario} = useAuthStore();
 
+
+    // Estado para el modal de detalles
+    const [modalOpen, setModalOpen] = useState(false);
+    const [pedidoSeleccionado, setPedidoSeleccionado] = useState<any>(null);
+
     //Definición de constante para obtener datos 
 
     const {pedidos,fetchPedidos, loading:loadingPedidos} = useHistorialStore();
     const {productos, fetchProducts,loading:loadingProducto} = useHistProductStore();
     const {usuarios,fetchUsuarios, loading:loadingUsuarios} = useUsuariosStore();
-    const {proveedores,fetchProveedores,loading:loadingProveedor} = useProveedoresStore();
+    const {proveedores,fetchDashbProveedores,loading:loadingProveedor} = useProveedoresStore();
 
     const isLoading = loadingPedidos || loadingProducto || loadingProveedor || loadingUsuarios;
 
@@ -57,12 +63,13 @@ export function CountElement() {
   //  const prodcts = Object.values(prodct).flat();
   // Cargar los datos cuando el componente se monta
     useEffect(() => {
-        fetchPedidos();
-        fetchProducts();
+        const bodegaId = usuario?.tipo === 'bodega' && usuario.bodega ? String(usuario.bodega) : undefined;
+        fetchPedidos({ bodega_id: bodegaId });
+        fetchProducts({bodega_id:bodegaId});
         fetchUsuarios();
-        fetchProveedores();
+        fetchDashbProveedores();
 
-    }, [fetchPedidos, fetchProducts,fetchUsuarios,fetchProveedores]);   
+    }, [usuario,fetchPedidos, fetchProducts,fetchUsuarios,fetchDashbProveedores]);   
 
 
  
@@ -71,22 +78,25 @@ export function CountElement() {
     //let inventarioMostrados = productos;
 
     //filtrar datos según el perfil bodega
-    const {pedidosMostrados, inventarioMostrados} = useMemo(() => {
+    /*const {inventarioMostrados} = useMemo(() => {
         if (usuario?.tipo === 'bodega' && usuario.bodega){
 
             const bodegaId = String(usuario.bodega);
 
-            const pedidosFiltrados = pedidos.filter(p => String(p.bodega_fk)=== bodegaId);
+            //const pedidosFiltrados = pedidos.filter(p => String(p.bodega_fk)=== bodegaId);
 
             const inventarioFiltrados = productos.filter(p => String(p.bodega_fk) === bodegaId);
             
-            return {pedidosMostrados: pedidosFiltrados, inventarioMostrados: inventarioFiltrados};
+            return {inventarioMostrados: inventarioFiltrados};
 
         }
         return {pedidosMostrados: pedidos, inventarioMostrados: productos}
 
 
-    },[usuario, pedidos, productos]);
+    },[usuario, pedidos, productos]);*/
+
+    const pedidosMostrados = pedidos;
+    const inventarioMostrados = productos;
 
     //Se obtiene los pedidos según el id del estado_pedido
     const pedidosActivos = useMemo(()=>
@@ -110,11 +120,66 @@ export function CountElement() {
     );
 
     //Se obtiene los ultimos pedidos por fecha y se muestran solo los cinco "ultimos"
-    const ultimosPedidos = useMemo(() => {
+   const ultimosPedidos = useMemo(() => {
         return [...(pedidosMostrados || [])]
             .sort((a, b) => new Date(b.fecha_entrega).getTime() - new Date(a.fecha_entrega).getTime())
             .slice(0, 5);
     }, [pedidosMostrados]);
+
+    //producto más pedido
+    const productoMasPedido = useMemo(() => {
+        if(!pedidosMostrados || pedidosMostrados.length === 0){
+            return {nombre:'N/A', cantidad:0};
+        }
+
+        //mapa para contar la cantidad total
+        const contadorProductos = new Map<string,number>();
+
+        pedidosMostrados.forEach(pedido => {
+            pedido.detalles_pedido?.forEach(detalle => {
+                const cantidad = parseInt(detalle.cantidad,10);
+                if(detalle.producto_nombre && !isNaN(cantidad)){
+                    const totalActual = contadorProductos.get(detalle.producto_nombre) || 0;
+                    contadorProductos.set(detalle.producto_nombre,totalActual + cantidad);
+                }
+            });
+        });
+
+        if (contadorProductos.size === 0){
+            return {nombre:'N/A', cantidad:0};
+        }
+        //encontrar cantidad maxima
+        const [nombre, cantidad] = [...contadorProductos.entries()].reduce((max,current) => current[1] > max[1] ? current : max);
+
+        return {nombre,cantidad};
+    },[pedidosMostrados]);
+
+    //sucursal con más pedidos
+    const SucursalMasPedidos = useMemo(() => {
+        if(!pedidosMostrados || pedidosMostrados.length === 0){
+            return {nombre: 'N/A',cantidad:0};
+        }
+
+        const contadorSucursales = new Map<number,{nombre:string,cantidad:number}>();
+
+        pedidosMostrados.forEach(pedido => {
+            //contar pedido solo de sucursales
+            if (pedido.sucursal_fk?.id && pedido.sucursal_fk?.nombre_sucursal){
+                const sucursalId = pedido.sucursal_fk.id;
+                const sucursalNombre = pedido.sucursal_fk.nombre_sucursal;
+
+                const sucursal = contadorSucursales.get(sucursalId);
+                if (sucursal){
+                    sucursal.cantidad++;
+                }else{
+                    contadorSucursales.set(sucursalId,{nombre:sucursalNombre,cantidad:1});
+                }
+            }
+        });
+        if (contadorSucursales.size === 0) return {nombre: 'N/A', cantidad: 0};
+
+        return  [...contadorSucursales.values()].reduce((max, current)=> (current.cantidad > max.cantidad ? current:max));
+    },[pedidosMostrados]);
 
     //se obtiene el total de productos
     const totalProducts = inventarioMostrados.length;
@@ -126,6 +191,17 @@ export function CountElement() {
         return 0;
     }, [usuarios, usuario]);
 
+    //Se obtiene a los proveedores
+    const proveedoresMap = useMemo(() => {
+        const map = new Map<number, string>();
+        if (proveedores) {
+            proveedores.forEach(p => {
+                if (p.id_provd) map.set(p.id_provd, p.nombres_provd);
+            });
+        }
+        return map;
+    }, [proveedores]);
+
     const getEstadoPedido = (id_estado: number) => {
         switch (id_estado) {
             case 1:
@@ -134,9 +210,21 @@ export function CountElement() {
                 return <Chip label="Completado" color="success" size="small" sx={{ color: 'white', backgroundColor: '#4CAF50' }} />;
             case 3:
                 return <Chip label="Pendiente" color="warning" size="small" sx={{ color: 'white', backgroundColor: '#FF9800' }} />;
+            default:
+                return <Chip label="Desconocido" size="small" />;
+
         }
     };
 
+    const handleOpenModal = (pedido: any) => {
+        setPedidoSeleccionado(pedido);
+        setModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setModalOpen(false);
+        setPedidoSeleccionado(null);
+    };
    if (isLoading) {
         return (
                 <Loader>
@@ -150,7 +238,7 @@ export function CountElement() {
     }
     return (
         <Contenedor_Dashboard>
-            <h1 className="titulo_bn">Bienvenido, {usuario?.nombre || 'usuario'} </h1>
+            <h1 className="titulo_bn">Bienvenido {usuario?.rol}, {usuario?.nombre || 'usuario'} </h1>
 
             {/* container para los cuadrados resumen */}
             <Container>
@@ -163,7 +251,7 @@ export function CountElement() {
                     <h1 className="numero">{totalProducts}</h1>
                 </ul>
                 <ul className="cuadroEstd">
-                    <p className="titulo">Entregas Pendientes</p>
+                    <p className="titulo">Pedidos Pendientes</p>
                     <h1 className="numero">{pedidosPendientes}</h1>
                 </ul>
                 {/*cuadros segun el rol */}
@@ -208,10 +296,11 @@ export function CountElement() {
                             component={Paper}
                             sx={{
                                 maxHeight:270,
+                                maxWidth:290,
                                 background: '#232323',
                                 '& .MuiTableRow-root': { height: "2vh",
                                 '& .MuiTableCell-root': {
-                                    padding: '7px 18px',
+                                    padding: '7px 9px',
                                     color: 'white',
                                     textAlign: 'center' } } }}
                         >
@@ -226,7 +315,8 @@ export function CountElement() {
                                     <TableRow>
                                         <TableCell>Id</TableCell>
                                         <TableCell>Producto</TableCell>
-                                        <TableCell align="right">Stock</TableCell>
+                                        <TableCell align="right">Stock Actual</TableCell>
+                                        <TableCell> Stock Mínimo </TableCell>
                                     </TableRow>
                                 </TableHead>
 
@@ -242,6 +332,7 @@ export function CountElement() {
                                             </TableCell>
                                             <TableCell align="right">{row.nombre_prodc}</TableCell>
                                             <TableCell align="right">{row.stock}</TableCell>
+                                            <TableCell align="right">{row.stock_minimo}</TableCell>
 
                                         </TableRow>
                                     ))}
@@ -249,7 +340,26 @@ export function CountElement() {
                             </Table>
                         </TableContainer>
                     )}
+                
                 </section>
+                <section className="datos-importantes">
+                    <section className="cuadroProductPedido">
+                   <ul >
+                    <h3 className="tituloProductoPedido">Producto más Pedido</h3>
+                    <h4>{productoMasPedido.nombre}</h4>
+                    <p> {productoMasPedido.cantidad} unidades</p> 
+
+                    </ul> 
+                    </section>
+                    <section className="cuadroProductPedido">
+                    <ul >
+                    <h3 className="tituloProductoPedido">Sucursal con más pedidos</h3>
+                       <h4> {SucursalMasPedidos.nombre} </h4>
+                        <p>{SucursalMasPedidos.cantidad} Pedidos</p>
+                    </ul>
+                    </section>
+                </section>
+                                    <PedidosSucursal pedidos={pedidosMostrados}/>
             </section>
 
             {/* Sección para el gráfico de estado de pedidos y tabla de últimos pedidos */}    
@@ -296,19 +406,19 @@ export function CountElement() {
                                 {ultimosPedidos.map((pedidos) => (
                                     <TableRow
                                         key={pedidos.id_p}
-                                        sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                                        sx={{ '&:last-child td, &:last-child th': { border: 0 },cursor:'pointer' }}
+                                        onClick={() => handleOpenModal(pedidos)}
                                     >
                                         <TableCell component="th" scope="row">
                                             {pedidos.id_p} </TableCell>
                                         <TableCell component="th" scope="row">
                                             {(pedidos.sucursal_fk
                                                 ? SUCURSALES.find(s => s.id == pedidos.sucursal_fk)?.nombre
-                                                : (proveedores.find(p => p.id_provd == pedidos.proveedor_fk)?.nombres_provd)??'N/A')}
+                                                : (proveedoresMap.get(pedidos.proveedor_fk)??'N/A'))}
                                         </TableCell>
                                         <TableCell>{pedidos.detalles_pedido?.length || 0}</TableCell>
                                         <TableCell>{pedidos.fecha_entrega.split('T')[0] ?? 'N/A'}</TableCell>
                                         <TableCell>{getEstadoPedido(pedidos.estado_pedido_fk)}</TableCell>
-
 
 
                                     </TableRow>
@@ -318,6 +428,11 @@ export function CountElement() {
                     </TableContainer>
                 </div>
             </section>
+            <PedidoDetalleModal
+                open={modalOpen}
+                onClose={handleCloseModal}
+                pedido={pedidoSeleccionado}
+            />
         </Contenedor_Dashboard>
 
     );
@@ -343,18 +458,19 @@ const Container = styled.div`
     padding: 10px;
     margin:20px;
     width:160px;
-    height: auto;
+    height: 8vw;
     display:flex;
     flex-direction:column;
     align-items:start;
     border: 1px solid rgb(36, 34, 34);
     color: yellow;
     box-sizing:border-box;
+    border-radius:10px;
     background-color:rgb(20, 20, 20);
     }
 
     .numero{
-        font-size:40px;
+        font-size:4vw;
         position:relative;
         color:white;
         align-items:center;
@@ -362,7 +478,7 @@ const Container = styled.div`
     }
     .titulo{
         display:flex;
-        font-size:14px;
+        font-size:1.1vw;
 
 
     }
@@ -383,9 +499,9 @@ const Container = styled.div`
 
     .resumen{
         display: grid;
-        grid-template-columns: auto auto;
+        grid-template-columns: auto auto auto;
         aling-items:start;
-        gap:150px;
+        gap:50px;
         justify-content: center;
         max-width:100%;
         heigth:50vh;
@@ -397,6 +513,7 @@ const Container = styled.div`
         margin:0;
         background-color: rgb(20, 20, 20);
         border: 1px solid rgb(36, 34, 34);
+        border-radius:10px;
 
         
     }
@@ -405,6 +522,7 @@ const Container = styled.div`
         margin:0;
         border: 1px solid rgb(36, 34, 34);
         background-color: rgb(20, 20, 20);
+        border-radius:10px;
     }
     .grafico_b{
         border:1px solid #5B5B5B;
@@ -420,6 +538,28 @@ const Container = styled.div`
         box-shadow:1px 1px 1px 1px rgba(91, 91, 91, 0.31);
     }
 
+    .datos-importantes{
+        display:grid;
+        grid-template-columns: auto;
+        align-items: start;
+        gap:1;
+        
+    }
+    .cuadroProductPedido{
+        padding:20px;
+        background-color: rgb(20, 20, 20);
+        box-shadow:1px 1px 1px 1px rgba(91, 91, 91, 0.31);
+        border: 1px solid rgb(36, 34, 34);
+        border-radius:10px;
+
+        .tituloProductoPedido{
+            color:yellow;
+            
+        }
+        h4{
+         font-size:20px;
+        }
+    }
     .table{
         border: 1px solid;
         width: 20vw;
@@ -432,6 +572,7 @@ const Container = styled.div`
         text-align:;
         justify-content:center;  
         width: 50%;   
+
     }
     .u_pedido{
         display:flex;
@@ -461,6 +602,7 @@ const Container = styled.div`
         border: 1px solid rgb(36, 34, 34);
         background-color: rgb(20, 20, 20);
         padding: 0px;
+        border-radius:10px;
     }
     .table_u_p{
         width: 60%;
@@ -470,6 +612,8 @@ const Container = styled.div`
         border: 1px solid rgb(36, 34, 34);
         background-color: rgb(20, 20, 20);
         padding: 10px;
+        border-radius:10px;
+
         }
 
     .titulo_u{
@@ -530,7 +674,7 @@ const Loader = styled.div`
     background: rgba(0, 0, 0, 0.52);
     z-index: 1000;
     right:0;
-    top: 0;
+    top: 5;
     width: 85.5%;
     height: 100%;
 
