@@ -1,15 +1,16 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status, permissions
-from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes,Pedidos,PersonalEntrega,DetallePedido,EstadoPedido, Informe, SolicitudProductos, Pedidos, DetallePedido, Notificacion, Historial, Stock, EstadoPedido, PersonalEntrega, MovInventario, Proveedor
-from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer, MovInventarioSerializer, NotificacionSerializer, BodegaCentralSerializer, ProductoSucursalSerializer, ProductoBodegaSerializer
+from rest_framework import status, permissions, generics
+from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes,Pedidos,PersonalEntrega,DetallePedido,EstadoPedido, Informe, SolicitudProductos, Pedidos, DetallePedido, Notificacion, Historial, Stock, EstadoPedido, PersonalEntrega, MovInventario, Proveedor, UsuarioNotificacion
+from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer, MovInventarioSerializer, NotificacionSerializer, UsuarioNotificacionSerializer, BodegaCentralSerializer, ProductoSucursalSerializer, ProductoBodegaSerializer
 from django.db import transaction
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from django.utils import timezone
+from datetime import timezone as datetime_timezone
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 from rest_framework import serializers
@@ -178,11 +179,50 @@ class ProductoViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         try:
             logger.info(f"Actualizando producto {kwargs.get('id_prodc')} con datos: {request.data}")
+            logger.info(f"🔍 DEBUG - request.data completo: {request.data}")
+            logger.info(f"🔍 DEBUG - request.data.keys(): {list(request.data.keys())}")
+            logger.info(f"🔍 DEBUG - motivo en request.data: {request.data.get('motivo', 'NO ENCONTRADO')}")
             partial = kwargs.pop('partial', False)
             instance = self.get_object()
+            
+            # --- CORRECCIÓN: Obtener el stock anterior desde la tabla Stock ---
+            bodega_id = request.data.get('bodega_fk') or (instance.bodega_fk.id_bdg if instance.bodega_fk else None)
+            sucursal_id = request.data.get('sucursal_fk') or (instance.sucursal_fk.id if instance.sucursal_fk else None)
+            
+            if bodega_id:
+                stock_obj = Stock.objects.filter(productos_fk=instance, bodega_fk=bodega_id).first()
+            elif sucursal_id:
+                stock_obj = Stock.objects.filter(productos_fk=instance, sucursal_fk=sucursal_id).first()
+            else:
+                stock_obj = None
+                
+            stock_anterior = float(stock_obj.stock) if stock_obj else 0
+            # ---------------------------------------------------------------
+            
             serializer = self.get_serializer(instance, data=request.data, partial=partial)
             serializer.is_valid(raise_exception=True)
+            logger.info(f"🔍 DEBUG - motivo en serializer.context: {serializer.context.get('motivo', 'NO ENCONTRADO')}")
             self.perform_update(serializer)
+            
+            # --- MEJORADO: Guardar en historial SIEMPRE que cambie el stock ---
+            stock_nuevo = request.data.get('stock_write')
+            # Obtener el motivo del contexto del serializer
+            # Solo actualizar el stock sin crear movimientos automáticamente
+            # Los movimientos se crearán solo cuando se use específicamente la función de actualizar stock
+            if stock_nuevo is not None:
+                stock_nuevo = float(stock_nuevo)
+                if stock_nuevo != stock_anterior:
+                    # Actualizar el stock en la tabla Stock
+                    if stock_obj:
+                        stock_obj.stock = stock_nuevo
+                        stock_obj.save()
+                    
+                    logger.info(f"✅ Stock actualizado: {stock_anterior}→{stock_nuevo} (sin movimiento automático)")
+                else:
+                    logger.info(f"ℹ️ No se actualizó stock: no cambió ({stock_anterior})")
+            else:
+                logger.warning(f"⚠️ No se recibió stock_write en la actualización")
+            
             return Response(serializer.data)
         except Productos.DoesNotExist:
             logger.error(f"Producto {kwargs.get('id_prodc')} no encontrado")
@@ -1226,7 +1266,7 @@ class PersonalEntregaViewSet(viewsets.ModelViewSet):
         try:
             usuario_id = request.data.get('usuario_id')
             patente = request.data.get('patente')
-            descripcion = request.data.get('descripcion', 'Transportista')
+            descripcion = request.data.get('descripcion_psn', 'Transportista')
             
             if not usuario_id:
                 return Response({'error': 'usuario_id es requerido'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1243,7 +1283,7 @@ class PersonalEntregaViewSet(viewsets.ModelViewSet):
             personal_entrega = PersonalEntrega.objects.create(
                 usuario_fk=usuario,
                 nombre_psn=usuario.nombre,
-                descripcion=descripcion,
+                descripcion_psn=descripcion,
                 patente=patente
             )
             
@@ -1456,6 +1496,22 @@ class NotificacionViewSet(viewsets.ModelViewSet):
         notificacion.leida = True
         notificacion.save()
         return Response({'status': 'notificación marcada como leída'})
+
+class UsuarioNotificacionListView(generics.ListAPIView):
+    serializer_class = UsuarioNotificacionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Ajusta esto si usas el modelo de usuario de Django
+        return UsuarioNotificacion.objects.filter(usuario=self.request.user, eliminada=False).order_by('-fecha_recibida')
+
+class UsuarioNotificacionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = UsuarioNotificacionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'id_ntf_us'
+
+    def get_queryset(self):
+        return UsuarioNotificacion.objects.filter(usuario=self.request.user)
 
 MARCAS = [
     'Stanley', 'Bosch', 'Makita', 'Dewalt', 'Black+Decker', 'Einhell', 'Truper', 'Irwin', 'Hilti', '3M'
@@ -1744,33 +1800,23 @@ def producto_por_codigo(request, codigo_interno):
             'detalle': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+# FUNCIÓN ELIMINADA: actualizar_stock_por_codigo
+# Esta función causaba duplicación de movimientos
+# Ahora se usa actualizar_stock_con_movimiento que es más específica
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def actualizar_stock_por_codigo(request):
-    """Endpoint para actualizar stock por código de producto (usado en escaneo móvil)"""
+def actualizar_stock_con_movimiento(request, producto_id):
+    """
+    Endpoint específico para actualizar stock y crear movimiento de inventario
+    """
     try:
-        codigo_interno = request.data.get('codigo_interno')
-        nueva_cantidad = request.data.get('cantidad')
-        tipo_movimiento = request.data.get('tipo_movimiento', 'AJUSTE')  # ENTRADA, SALIDA, AJUSTE
+        nueva_cantidad = request.data.get('stock_write')
+        motivo = request.data.get('motivo', 'Sin motivo especificado')
         
-        if not codigo_interno or nueva_cantidad is None:
+        if nueva_cantidad is None:
             return Response({
-                'error': 'Código interno y cantidad son requeridos',
-                'datos_recibidos': {
-                    'codigo_interno': codigo_interno,
-                    'cantidad': nueva_cantidad,
-                    'tipo_movimiento': tipo_movimiento
-                }
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Limpiar el código interno
-        codigo_limpio = codigo_interno.strip().upper()
-        
-        # Validar tipo de movimiento
-        if tipo_movimiento not in ['ENTRADA', 'SALIDA', 'AJUSTE']:
-            return Response({
-                'error': 'Tipo de movimiento inválido',
-                'tipos_validos': ['ENTRADA', 'SALIDA', 'AJUSTE']
+                'error': 'Stock es requerido'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Validar cantidad
@@ -1785,39 +1831,55 @@ def actualizar_stock_por_codigo(request):
                 'error': 'La cantidad debe ser un número válido'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        producto = Productos.objects.get(codigo_interno=codigo_limpio, activo=True)
-        stock_obj, created = Stock.objects.get_or_create(
-            productos_fk=producto,
-            defaults={'stock': 0, 'stock_minimo': 0}
-        )
+        # Obtener producto
+        try:
+            producto = Productos.objects.get(id_prodc=producto_id, activo=True)
+        except Productos.DoesNotExist:
+            return Response({
+                'error': 'Producto no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)
         
-        # Calcular nueva cantidad según tipo de movimiento
+        # Obtener stock actual - manejar múltiples registros
+        try:
+            stock_obj = Stock.objects.get(productos_fk=producto)
+        except Stock.MultipleObjectsReturned:
+            # Si hay múltiples registros, usar el más reciente
+            stock_obj = Stock.objects.filter(productos_fk=producto).order_by('-id').first()
+            logger.warning(f"⚠️ Múltiples registros de Stock encontrados para producto {producto.id_prodc}. Usando el más reciente (ID: {stock_obj.id})")
+        except Stock.DoesNotExist:
+            # Si no existe, crear uno nuevo
+            stock_obj = Stock.objects.create(
+                productos_fk=producto,
+                stock=0,
+                stock_minimo=0
+            )
+            logger.info(f"✅ Nuevo registro de Stock creado para producto {producto.id_prodc}")
+        
         cantidad_actual = float(stock_obj.stock)
         
-        if tipo_movimiento == 'ENTRADA':
-            stock_final = cantidad_actual + cantidad_nueva
-        elif tipo_movimiento == 'SALIDA':
-            if cantidad_actual < cantidad_nueva:
-                return Response({
-                    'error': 'Stock insuficiente para realizar la salida',
-                    'stock_disponible': cantidad_actual,
-                    'cantidad_solicitada': cantidad_nueva
-                }, status=status.HTTP_400_BAD_REQUEST)
-            stock_final = cantidad_actual - cantidad_nueva
-        else:  # AJUSTE
-            stock_final = cantidad_nueva
-        
-        # Actualizar stock
-        stock_obj.stock = stock_final
-        stock_obj.save()
-        
-        # Registrar movimiento en historial
-        MovInventario.objects.create(
-            cantidad=cantidad_nueva,
-            fecha=timezone.now(),
-            productos_fk=producto,
-            usuario_fk=request.user
-        )
+        # Solo crear movimiento si hay cambio en el stock
+        if cantidad_nueva != cantidad_actual:
+            # Calcular la cantidad del movimiento
+            cantidad_movimiento = cantidad_nueva - cantidad_actual
+            
+            logger.info(f"🔍 DEBUG - Creando movimiento: Stock actual={cantidad_actual}, Stock nuevo={cantidad_nueva}, Cantidad movimiento={cantidad_movimiento}")
+            
+            # Crear el movimiento de inventario
+            movimiento = MovInventario.objects.create(
+                cantidad=cantidad_movimiento,
+                fecha=timezone.now(),
+                productos_fk=producto,
+                usuario_fk=request.user,
+                motivo=motivo
+            )
+            
+            # Actualizar stock
+            stock_obj.stock = cantidad_nueva
+            stock_obj.save()
+            
+            logger.info(f"✅ Movimiento registrado: ID={movimiento.id_mvin}, Stock {cantidad_actual}→{cantidad_nueva}, Cantidad={cantidad_movimiento}, Motivo='{motivo}', Usuario={request.user.nombre}")
+        else:
+            logger.info(f"ℹ️ No se creó movimiento: stock no cambió ({cantidad_actual})")
         
         return Response({
             'mensaje': 'Stock actualizado correctamente',
@@ -1826,20 +1888,15 @@ def actualizar_stock_por_codigo(request):
                 'nombre': producto.nombre_prodc,
                 'codigo_interno': producto.codigo_interno,
                 'stock_anterior': cantidad_actual,
-                'stock_nuevo': stock_final,
-                'movimiento': tipo_movimiento,
-                'cantidad_movida': cantidad_nueva,
-                'fecha_actualizacion': timezone.now().isoformat()
+                'stock_nuevo': cantidad_nueva,
+                'movimiento_creado': cantidad_nueva != cantidad_actual,
+                'fecha_actualizacion': timezone.now().isoformat(),
+                'motivo': motivo
             }
         })
         
-    except Productos.DoesNotExist:
-        return Response({
-            'error': 'Producto no encontrado',
-            'codigo_buscado': codigo_interno,
-            'sugerencia': 'Verifique que el código sea correcto y que el producto esté activo'
-        }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        logger.error(f"Error actualizando stock con movimiento: {str(e)}")
         return Response({
             'error': 'Error interno del servidor',
             'detalle': str(e)
@@ -2549,3 +2606,316 @@ class BuscarProductosSimilaresSucursalView(APIView):
         serializer = ProductoSucursalSerializer(queryset, many=True, context={'request': request})
         productos_serializados = serializer.data
         return Response({'productos_similares': productos_serializados}, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def historial_producto(request, producto_id):
+    """
+    Obtiene el historial completo de un producto específico.
+    Incluye movimientos de inventario, estadísticas y evolución del stock.
+    """
+    try:
+        # Verificar que el producto existe
+        try:
+            producto = Productos.objects.get(id_prodc=producto_id)
+        except Productos.DoesNotExist:
+            return Response({
+                'error': 'Producto no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Obtener movimientos de inventario del producto ordenados por fecha (más reciente primero)
+        movimientos = MovInventario.objects.filter(
+            productos_fk=producto
+        ).select_related(
+            'usuario_fk', 'productos_fk__bodega_fk', 'productos_fk__sucursal_fk'
+        ).order_by('-fecha', '-id_mvin')  # Ordenar por fecha descendente y luego por ID descendente
+
+        # Serializar movimientos
+        movimientos_serializer = MovInventarioSerializer(movimientos, many=True)
+
+        # Calcular estadísticas del producto
+        total_movimientos = movimientos.count()
+        entradas = movimientos.filter(cantidad__gt=0).count()
+        salidas = movimientos.filter(cantidad__lt=0).count()
+        ajustes = movimientos.filter(cantidad=0).count()
+        
+        suma_entradas = movimientos.filter(cantidad__gt=0).aggregate(
+            total=models.Sum('cantidad')
+        )['total'] or 0
+        suma_salidas = abs(movimientos.filter(cantidad__lt=0).aggregate(
+            total=models.Sum('cantidad')
+        )['total'] or 0)
+
+        # Obtener stock actual
+        stock_actual = 0
+        if producto.bodega_fk:
+            try:
+                # Usar el ID de la bodega, no el objeto completo
+                bodega_id = producto.bodega_fk.id_bdg if hasattr(producto.bodega_fk, 'id_bdg') else producto.bodega_fk
+                stock_obj = Stock.objects.filter(
+                    productos_fk=producto,
+                    bodega_fk=bodega_id
+                ).first()
+            except AttributeError:
+                stock_obj = None
+        elif producto.sucursal_fk:
+            try:
+                # Usar el ID de la sucursal, no el objeto completo
+                sucursal_id = producto.sucursal_fk.id if hasattr(producto.sucursal_fk, 'id') else producto.sucursal_fk
+                stock_obj = Stock.objects.filter(
+                    productos_fk=producto,
+                    sucursal_fk=sucursal_id
+                ).first()
+            except AttributeError:
+                stock_obj = None
+        else:
+            stock_obj = None
+
+        if stock_obj:
+            stock_actual = float(stock_obj.stock)
+
+        # Crear timeline de cambios con cálculo simplificado y más robusto
+        timeline = []
+        
+        # Ordenar movimientos cronológicamente (más antiguos primero)
+        movimientos_ordenados = movimientos.order_by('fecha', 'id_mvin')
+        
+        logger.info(f"🔍 DEBUG - Historial: Stock actual en BD={stock_actual}, Total movimientos={len(movimientos_ordenados)}")
+        
+        # Calcular timeline de forma simple: empezar desde 0 y acumular
+        stock_acumulado = 0  # Empezar desde 0
+        
+        for mov in movimientos_ordenados:
+            stock_antes = stock_acumulado
+            stock_acumulado += mov.cantidad  # Sumar la cantidad del movimiento
+            
+            logger.info(f"🔍 DEBUG - Timeline: Movimiento {mov.id_mvin}, cantidad={mov.cantidad}, stock_antes={stock_antes}, stock_despues={stock_acumulado}")
+            
+            timeline.append({
+                'fecha': mov.fecha.isoformat(),
+                'tipo': 'ENTRADA' if mov.cantidad > 0 else 'SALIDA' if mov.cantidad < 0 else 'AJUSTE',
+                'cantidad': abs(mov.cantidad),
+                'motivo': mov.motivo or 'Sin motivo especificado',
+                'usuario': mov.usuario_fk.nombre,
+                'stock_antes': stock_antes,
+                'stock_despues': stock_acumulado,
+                'icono': '📥' if mov.cantidad > 0 else '📤' if mov.cantidad < 0 else '⚙️',
+                'color': '#4CAF50' if mov.cantidad > 0 else '#F44336' if mov.cantidad < 0 else '#FF9800'
+            })
+        
+        # Revertir el timeline para mostrar los más recientes primero
+        timeline.reverse()
+        
+        # El stock actual debe ser el stock_despues del último movimiento (más reciente)
+        stock_actual_final = timeline[0]['stock_despues'] if timeline else 0
+        
+        logger.info(f"📊 Timeline generado para producto {producto.id_prodc}: {len(timeline)} movimientos, stock final: {stock_actual_final}")
+
+        # Información del producto
+        producto_info = {
+            'id_prodc': producto.id_prodc,
+            'nombre_prodc': producto.nombre_prodc,
+            'codigo_interno': producto.codigo_interno,
+            'descripcion_prodc': producto.descripcion_prodc,
+            'marca': producto.marca_fk.nombre_mprod if producto.marca_fk else 'Sin marca',
+            'categoria': producto.categoria_fk.nombre if producto.categoria_fk else 'Sin categoría',
+            'fecha_creacion': producto.fecha_creacion.isoformat() if producto.fecha_creacion else None,
+            'ubicacion': f"Bodega: {producto.bodega_fk.nombre_bdg}" if producto.bodega_fk else f"Sucursal: {producto.sucursal_fk.nombre_sucursal}" if producto.sucursal_fk else "Sin ubicación",
+            'stock_actual': stock_actual_final,  # Usar el stock del último movimiento del timeline
+            'stock_minimo': float(stock_obj.stock_minimo) if stock_obj and stock_obj.stock_minimo else 0,
+            'stock_maximo': float(stock_obj.stock_maximo) if stock_obj and stock_obj.stock_maximo else 0,
+        }
+
+        # Estadísticas del producto
+        estadisticas_producto = {
+            'total_movimientos': total_movimientos,
+            'entradas': {
+                'cantidad': entradas,
+                'unidades': suma_entradas
+            },
+            'salidas': {
+                'cantidad': salidas,
+                'unidades': suma_salidas
+            },
+            'ajustes': {
+                'cantidad': ajustes,
+                'unidades': 0
+            },
+            'balance_total': suma_entradas - suma_salidas,
+            'promedio_movimientos_mes': total_movimientos / max(1, 30) if producto.fecha_creacion else 0
+        }
+
+        return Response({
+            'producto': producto_info,
+            'movimientos': movimientos_serializer.data,
+            'timeline': timeline,
+            'estadisticas': estadisticas_producto
+        })
+
+    except Exception as e:
+        logger.error(f"Error obteniendo historial del producto {producto_id}: {str(e)}")
+        return Response({
+            'error': 'Error interno del servidor'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def productos_con_movimientos_recientes(request):
+    """
+    Obtiene productos que han tenido movimientos recientes, agrupados por producto.
+    Muestra información resumida de cada producto con sus últimos movimientos.
+    """
+    try:
+        # Parámetros de filtrado
+        dias_atras = int(request.GET.get('dias', 7))  # Por defecto últimos 7 días
+        limit = int(request.GET.get('limit', 10))  # Por defecto 10 productos
+        bodega_id = request.GET.get('bodega_id')
+        sucursal_id = request.GET.get('sucursal_id')
+        
+        # Calcular fecha límite
+        fecha_limite = timezone.now() - timezone.timedelta(days=dias_atras)
+        
+        # Obtener productos con movimientos recientes
+        movimientos_query = MovInventario.objects.filter(fecha__gte=fecha_limite)
+        
+        # Filtrar por ubicación si se especifica
+        if bodega_id:
+            movimientos_query = movimientos_query.filter(
+                productos_fk__bodega_fk=bodega_id
+            )
+            logger.info(f"Filtrando por bodega_id: {bodega_id}")
+        elif sucursal_id:
+            movimientos_query = movimientos_query.filter(
+                productos_fk__sucursal_fk=sucursal_id
+            )
+            logger.info(f"Filtrando por sucursal_id: {sucursal_id}")
+        
+        # Obtener productos únicos con movimientos
+        productos_con_movimientos = movimientos_query.values('productos_fk').distinct()
+        logger.info(f"Productos con movimientos encontrados: {productos_con_movimientos.count()}")
+        
+        # Obtener los productos
+        productos_ids = [item['productos_fk'] for item in productos_con_movimientos]
+        productos = Productos.objects.filter(
+            id_prodc__in=productos_ids,
+            activo=True
+        ).select_related('marca_fk', 'categoria_fk', 'bodega_fk', 'sucursal_fk')
+        
+        # Limitar cantidad de productos
+        productos = productos[:limit]
+        
+        resultado = []
+        
+        logger.info(f"Procesando {productos.count()} productos")
+        
+        for producto in productos:
+            try:
+                logger.info(f"Procesando producto: {producto.id_prodc} - {producto.nombre_prodc}")
+                
+                # Obtener movimientos recientes del producto
+                movimientos_recientes_query = MovInventario.objects.filter(
+                    productos_fk=producto,
+                    fecha__gte=fecha_limite
+                ).select_related('usuario_fk').order_by('-fecha')
+            
+                # Calcular estadísticas del período ANTES del slice
+                total_entradas = movimientos_recientes_query.filter(cantidad__gt=0).aggregate(
+                    total=models.Sum('cantidad')
+                )['total'] or 0
+                total_salidas = abs(movimientos_recientes_query.filter(cantidad__lt=0).aggregate(
+                    total=models.Sum('cantidad')
+                )['total'] or 0)
+                
+                # Ahora aplicar el slice para obtener solo los últimos 5 movimientos
+                movimientos_recientes = movimientos_recientes_query[:5]
+                
+                # Obtener stock actual
+                stock_actual = 0
+                stock_obj = None
+                
+                if producto.bodega_fk:
+                    try:
+                        # Usar el ID de la bodega, no el objeto completo
+                        bodega_id = producto.bodega_fk.id_bdg if hasattr(producto.bodega_fk, 'id_bdg') else producto.bodega_fk
+                        stock_obj = Stock.objects.filter(
+                            productos_fk=producto,
+                            bodega_fk=bodega_id
+                        ).first()
+                    except AttributeError:
+                        # Si bodega_fk es None o no tiene id_bdg
+                        stock_obj = None
+                elif producto.sucursal_fk:
+                    try:
+                        # Usar el ID de la sucursal, no el objeto completo
+                        sucursal_id = producto.sucursal_fk.id if hasattr(producto.sucursal_fk, 'id') else producto.sucursal_fk
+                        stock_obj = Stock.objects.filter(
+                            productos_fk=producto,
+                            sucursal_fk=sucursal_id
+                        ).first()
+                    except AttributeError:
+                        # Si sucursal_fk es None o no tiene id
+                        stock_obj = None
+                else:
+                    stock_obj = None
+
+                if stock_obj:
+                    stock_actual = float(stock_obj.stock)
+                
+                # Último movimiento
+                ultimo_movimiento = movimientos_recientes.first()
+                
+                # Serializar movimientos recientes
+                movimientos_serializer = MovInventarioSerializer(movimientos_recientes, many=True)
+                
+                producto_data = {
+                    'id_prodc': producto.id_prodc,
+                    'nombre_prodc': producto.nombre_prodc,
+                    'codigo_interno': producto.codigo_interno,
+                    'marca': producto.marca_fk.nombre_mprod if producto.marca_fk and hasattr(producto.marca_fk, 'nombre_mprod') else 'Sin marca',
+                    'categoria': producto.categoria_fk.nombre if producto.categoria_fk and hasattr(producto.categoria_fk, 'nombre') else 'Sin categoría',
+                    'ubicacion': f"Bodega: {producto.bodega_fk.nombre_bdg}" if producto.bodega_fk and hasattr(producto.bodega_fk, 'nombre_bdg') else f"Sucursal: {producto.sucursal_fk.nombre_sucursal}" if producto.sucursal_fk and hasattr(producto.sucursal_fk, 'nombre_sucursal') else "Sin ubicación",
+                    'stock_actual': stock_actual,
+                    'stock_minimo': float(stock_obj.stock_minimo) if stock_obj and stock_obj.stock_minimo else 0,
+                    'stock_maximo': float(stock_obj.stock_maximo) if stock_obj and stock_obj.stock_maximo else 0,
+                    'estadisticas_periodo': {
+                        'entradas': total_entradas,
+                        'salidas': total_salidas,
+                        'balance': total_entradas - total_salidas,
+                        'total_movimientos': movimientos_recientes.count()
+                    },
+                    'ultimo_movimiento': {
+                        'fecha': ultimo_movimiento.fecha.isoformat() if ultimo_movimiento else None,
+                        'tipo': 'ENTRADA' if ultimo_movimiento and ultimo_movimiento.cantidad > 0 else 'SALIDA' if ultimo_movimiento and ultimo_movimiento.cantidad < 0 else 'AJUSTE',
+                        'cantidad': abs(ultimo_movimiento.cantidad) if ultimo_movimiento else 0,
+                        'usuario': ultimo_movimiento.usuario_fk.nombre if ultimo_movimiento else None,
+                        'motivo': ultimo_movimiento.motivo if ultimo_movimiento else None
+                    },
+                    'movimientos_recientes': movimientos_serializer.data
+                }
+                
+                resultado.append(producto_data)
+            except Exception as e:
+                logger.error(f"Error procesando producto {producto.id_prodc}: {str(e)}")
+                continue
+        
+        # Ordenar por fecha del último movimiento (más reciente primero)
+        resultado.sort(key=lambda x: x['ultimo_movimiento']['fecha'] or '', reverse=True)
+        
+        return Response({
+            'productos': resultado,
+            'filtros_aplicados': {
+                'dias_atras': dias_atras,
+                'limit': limit,
+                'bodega_id': bodega_id,
+                'sucursal_id': sucursal_id
+            },
+            'total_productos': len(resultado)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo productos con movimientos recientes: {str(e)}")
+        import traceback
+        logger.error(f"Traceback completo: {traceback.format_exc()}")
+        return Response({
+            'error': f'Error interno del servidor: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -143,6 +143,9 @@ export default function SolicitudesSucursal() {
     const [cantidadEditando, setCantidadEditando] = useState<number>(1);
     const [loading, setLoading] = useState(false);
 
+    // Siempre trabajar con un array seguro
+    const solicitudesArray = Array.isArray(solicitudes) ? solicitudes : (solicitudes?.results || []);
+
     // Memoizamos la sucursal del usuario
     const sucursalData = useMemo(() => {
         const sucursalId = usuario?.sucursalId?.toString(); // Convertimos a string si es número
@@ -480,14 +483,14 @@ export default function SolicitudesSucursal() {
                                         Cargando solicitudes...
                                     </TableCell>
                                 </TableRow>
-                            ) : solicitudes.length === 0 ? (
+                            ) : solicitudesArray.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} align="center" style={{ color: "#8A8A8A" }}>
                                         No hay solicitudes para mostrar.
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                solicitudes.map((row: any, index: number) => (
+                                solicitudesArray.map((row: any, index: number) => (
                                     <TableRow key={`${row.id_solc}-${index}`}>
                                         <TableCell style={{ color: "#fff" }}>{row.id_solc}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>

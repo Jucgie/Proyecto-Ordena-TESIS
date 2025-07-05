@@ -46,13 +46,15 @@ export const productoService = {
     },
 
     createProducto: async (producto: ProductInt, ubicacionId?: string) => {
-        
         // Buscar los IDs de marca y categoría por nombre
         const marcas = await api.get('/marcas/');
         const categorias = await api.get('/categorias/');
         
-        const marcaObj = marcas.data.find((m: any) => m.nombre_mprod === producto.brand);
-        const categoriaObj = categorias.data.find((c: any) => c.nombre === producto.category);
+        const marcasArray = Array.isArray(marcas.data) ? marcas.data : (marcas.data.results || []);
+        const categoriasArray = Array.isArray(categorias.data) ? categorias.data : (categorias.data.results || []);
+        
+        const marcaObj = marcasArray.find((m: any) => m.nombre_mprod === producto.brand);
+        const categoriaObj = categoriasArray.find((c: any) => c.nombre === producto.category);
         
         if (!marcaObj || !categoriaObj) {
             throw new Error('Marca o categoría no encontrada');
@@ -74,21 +76,27 @@ export const productoService = {
         if (ubicacionId === "bodega_central") {
             data.bodega_fk = 2; // ID de la bodega central (según el cambio que hiciste)
             data.sucursal_fk = null;
-        } else {
+        } else if (ubicacionId) {
             data.bodega_fk = null;
             data.sucursal_fk = parseInt(ubicacionId);
+        } else {
+            data.bodega_fk = null;
+            data.sucursal_fk = null;
         }
 
         const response = await api.post('/productos/', data);
         return response.data;
     },
 
-    updateProducto: async (id: string, producto: ProductInt, ubicacionId?: string) => {
+    updateProducto: async (id: string, producto: ProductInt, ubicacionId?: string, motivo?: string) => {
         const marcas = await api.get('/marcas/');
         const categorias = await api.get('/categorias/');
         
-        const marcaObj = marcas.data.find((m: any) => m.nombre_mprod === producto.brand);
-        const categoriaObj = categorias.data.find((c: any) => c.nombre === producto.category);
+        const marcasArray = Array.isArray(marcas.data) ? marcas.data : (marcas.data.results || []);
+        const categoriasArray = Array.isArray(categorias.data) ? categorias.data : (categorias.data.results || []);
+        
+        const marcaObj = marcasArray.find((m: any) => m.nombre_mprod === producto.brand);
+        const categoriaObj = categoriasArray.find((c: any) => c.nombre === producto.category);
         
         if (!marcaObj || !categoriaObj) {
             throw new Error('Marca o categoría no encontrada');
@@ -105,6 +113,15 @@ export const productoService = {
             stock_maximo_write: producto.stock_maximo,
         };
     
+        if (motivo) {
+            data.motivo = motivo;
+            console.log("🔍 DEBUG - Service - Agregando motivo al data:", motivo);
+        } else {
+            console.log("🔍 DEBUG - Service - No se recibió motivo");
+        }
+        
+        console.log("🔍 DEBUG - Service - Data completo a enviar:", data);
+    
         // Si el ubicacionId es "bodega_central", usar bodega_fk, sino sucursal_fk
         if (ubicacionId === "bodega_central") {
             data.bodega_fk = 2;
@@ -114,9 +131,21 @@ export const productoService = {
             data.sucursal_fk = ubicacionId ? parseInt(ubicacionId) : null;
         }
     
-
-        const response = await api.put(`/productos/${id}/`, data);
-        return response.data;
+        // Si hay motivo, usar el endpoint específico para actualizar stock con movimiento
+        if (motivo) {
+            const stockData = {
+                stock_write: producto.stock,
+                motivo: motivo
+            };
+            console.log("🔍 DEBUG - Service - Usando endpoint específico para actualizar stock con movimiento");
+            const response = await api.post(`/productos/${id}/actualizar-stock/`, stockData);
+            return response.data;
+        } else {
+            // Si no hay motivo, usar el endpoint normal de actualización
+            console.log("🔍 DEBUG - Service - Usando endpoint normal de actualización");
+            const response = await api.put(`/productos/${id}/`, data);
+            return response.data;
+        }
     },
 
     // Cambio de eliminar a desactivar
@@ -128,6 +157,32 @@ export const productoService = {
     // Función para reactivar un producto (si es necesario en el futuro)
     reactivarProducto: async (id: string) => {
         const response = await api.patch(`/productos/${id}/`, { activo: true });
+        return response.data;
+    },
+
+    // Nueva función para obtener el historial completo de un producto
+    getHistorialProducto: async (productoId: string) => {
+        console.log("🔍 DEBUG - Service - getHistorialProducto llamado con productoId:", productoId);
+        const response = await api.get(`/productos/${productoId}/historial/`);
+        console.log("🔍 DEBUG - Service - Respuesta del historial:", response.data);
+        return response.data;
+    },
+
+    // Nueva función para obtener productos con movimientos recientes
+    getProductosConMovimientosRecientes: async (ubicacionId?: string, dias: number = 7, limit: number = 20) => {
+        console.log("🔍 DEBUG - Service - getProductosConMovimientosRecientes llamado");
+        const params = new URLSearchParams();
+        params.append('dias', dias.toString());
+        params.append('limit', limit.toString());
+        
+        if (ubicacionId === "bodega_central") {
+            params.append('bodega_id', '2');
+        } else if (ubicacionId) {
+            params.append('sucursal_id', ubicacionId);
+        }
+        
+        const response = await api.get('/productos-con-movimientos-recientes/', { params });
+        console.log("🔍 DEBUG - Service - Respuesta productos con movimientos:", response.data);
         return response.data;
     },
 

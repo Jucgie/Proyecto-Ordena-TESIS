@@ -3,15 +3,19 @@ import sin_imagen from "../../assets/sin_imagen.png"
 import { BtnProd} from "../button/ButtonProd";
 import { useState } from "react";
 import EditIcon from '@mui/icons-material/Edit';
+import History from '@mui/icons-material/History';
 import type { ProductInt } from "../../pages/inventario/inventario";
 import { MenuItem, Select } from "@mui/material";
-
+import React, { useEffect } from 'react';
+import { COLORS } from '../../constants/colors';
 
 interface Props {
     setProd: () => void;
     product: ProductInt;
     onSave?:(product:ProductInt) => void;
 }
+
+
 
 export function ProductDetails({ setProd, product, onSave}: Props) {
 
@@ -24,6 +28,7 @@ export function ProductDetails({ setProd, product, onSave}: Props) {
         if (onSave) onSave(producto);
         console.log("Datos guardados:", producto);
     };
+
 
 
     return (
@@ -155,6 +160,16 @@ export function ProductDetails({ setProd, product, onSave}: Props) {
                     </div>
                 </div>
             </section>
+            <div className="historial">
+                <BtnProd 
+                    titulo={<>
+                        <History
+                        sx={{ fontSize: 25, marginRight: 1 }}
+                        />Ver en Historial
+                    </>} 
+                    background="#0087ff"
+                    funcion={() => window.location.href = '/historial'} />
+            </div>
         </Container>
     );
 }
@@ -302,6 +317,13 @@ const Container = styled.div`
     }
   }
 
+  .historial{
+    position:absolute;
+    bottom:0;
+    right:0;
+    margin:20px;
+  }
+
   `
 const Input = styled.input`
   font-size: 18px;
@@ -326,3 +348,4 @@ const Textarea = styled.textarea`
     height:100px;
     width:100%;
 `
+

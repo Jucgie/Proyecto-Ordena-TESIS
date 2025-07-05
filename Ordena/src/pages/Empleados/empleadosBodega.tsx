@@ -111,7 +111,7 @@ export default function EmpleadosBodega() {
     };
 
     // Solo empleados de la bodega del supervisor
-    const empleadosBodega = usuarios.filter(
+    const empleadosBodega = (Array.isArray(usuarios) ? usuarios : []).filter(
         (emp: Usuario) => emp.bodeg_fk == usuario.bodega
     );
 

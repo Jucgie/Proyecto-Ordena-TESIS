@@ -97,7 +97,10 @@ export const useHistorialStore = create<HistorialState>()(
             fetchPedidos: async (params = {}) => {
                 set({ loading: true, error: null });
                 try {
-                    const data = await historialService.getPedidos(params);
+                    const dataRaw = await historialService.getPedidos(params);
+                    const data = Array.isArray(dataRaw)
+                        ? dataRaw
+                        : dataRaw.results || [];
                     set({ pedidos: data, loading: false });
                 } catch (error: unknown) {
                     let errorMessage ="Error al obtener pedidos";

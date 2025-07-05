@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import ( 
     login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, 
     SolicitudesViewSet, UsuarioViewSet, InformeViewSet, PedidosViewSet, 
-    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,generar_qr_producto_view, producto_por_codigo, actualizar_stock_por_codigo, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint, movimientos_inventario, pedidos_recientes, NotificacionViewSet,BodegaCentralViewSet, BuscarProductosSimilaresSucursalView
+    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,generar_qr_producto_view, producto_por_codigo, actualizar_stock_con_movimiento, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint, movimientos_inventario, pedidos_recientes, NotificacionViewSet,BodegaCentralViewSet, BuscarProductosSimilaresSucursalView, UsuarioNotificacionListView, UsuarioNotificacionDetailView, historial_producto, productos_con_movimientos_recientes
 )
 
 router = DefaultRouter()
@@ -41,13 +41,18 @@ urlpatterns = [
     path('qr/producto/<int:producto_id>/', generar_qr_producto_view, name='generar_qr_producto'),
     path('qr/producto-codigo/<str:codigo_interno>/', producto_por_codigo, name='producto_por_codigo'),
     path('qr/validar-codigo/<str:codigo_interno>/', validar_codigo_producto, name='validar_codigo_producto'),
-    path('qr/actualizar-stock/', actualizar_stock_por_codigo, name='actualizar_stock_por_codigo'),
+    # URL eliminada: actualizar_stock_por_codigo (causaba duplicación de movimientos)
     path('qr/lista-productos/', lista_productos_qr, name='lista_productos_qr'),
     path('verificar-producto/', verificar_producto_existente, name='verificar_producto_existente'),
     path('producto-codigo-unico/<str:codigo_interno>/', producto_por_codigo_unico, name='producto_por_codigo_unico'),
     path('buscar-productos-similares/', buscar_productos_similares_endpoint, name='buscar_productos_similares_endpoint'),
     path('pedidos_recientes/', pedidos_recientes, name='pedidos_recientes'),
     path('movimientos-inventario/', movimientos_inventario, name='movimientos-inventario'),
+    path('productos/<int:producto_id>/historial/', historial_producto, name='historial_producto'),
+    path('productos/<int:producto_id>/actualizar-stock/', actualizar_stock_con_movimiento, name='actualizar_stock_con_movimiento'),
+    path('productos-con-movimientos-recientes/', productos_con_movimientos_recientes, name='productos_con_movimientos_recientes'),
     path('buscar-productos-similares-sucursal/', BuscarProductosSimilaresSucursalView.as_view(), name='buscar_productos_similares_sucursal'),
+    path('usuario-notificaciones/', UsuarioNotificacionListView.as_view(), name='usuario-notificaciones-list'),
+    path('usuario-notificaciones/<int:id_ntf_us>/', UsuarioNotificacionDetailView.as_view(), name='usuario-notificaciones-detail'),
 ]
 

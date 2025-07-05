@@ -30,6 +30,8 @@ interface Informe {
 
 export default function Informes() {
     const [informes, setInformes] = useState<Informe[]>([]);
+    // Siempre trabajar con un array seguro
+    const informesArray = Array.isArray(informes) ? informes : (informes?.results || []);
     const [informesFiltrados, setInformesFiltrados] = useState<Informe[]>([]);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalLimpiezaOpen, setModalLimpiezaOpen] = useState(false);
@@ -79,7 +81,7 @@ export default function Informes() {
     };
 
     const aplicarFiltros = () => {
-        let filtrados = [...informes];
+        let filtrados = [...informesArray];
 
         // Filtro por búsqueda de texto
         if (searchTerm) {

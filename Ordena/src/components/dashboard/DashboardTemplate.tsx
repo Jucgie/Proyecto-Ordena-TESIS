@@ -51,6 +51,10 @@ export function CountElement() {
     const {usuarios,fetchUsuarios, loading:loadingUsuarios} = useUsuariosStore();
     const {proveedores,fetchProveedores,loading:loadingProveedor} = useProveedoresStore();
 
+    // Siempre trabajar con un array seguro
+    const usuariosArray = Array.isArray(usuarios) ? usuarios : (usuarios?.results || []);
+    const productosArray = Array.isArray(productos) ? productos : (productos?.results || []);
+
     const isLoading = loadingPedidos || loadingProducto || loadingProveedor || loadingUsuarios;
 
 
@@ -74,20 +78,13 @@ export function CountElement() {
     //filtrar datos según el perfil bodega
     const {pedidosMostrados, inventarioMostrados} = useMemo(() => {
         if (usuario?.tipo === 'bodega' && usuario.bodega){
-
             const bodegaId = String(usuario.bodega);
-
             const pedidosFiltrados = pedidos.filter(p => String(p.bodega_fk)=== bodegaId);
-
-            const inventarioFiltrados = productos.filter(p => String(p.bodega_fk) === bodegaId);
-            
+            const inventarioFiltrados = productosArray.filter(p => String(p.bodega_fk) === bodegaId);
             return {pedidosMostrados: pedidosFiltrados, inventarioMostrados: inventarioFiltrados};
-
         }
-        return {pedidosMostrados: pedidos, inventarioMostrados: productos}
-
-
-    },[usuario, pedidos, productos]);
+        return {pedidosMostrados: pedidos, inventarioMostrados: productosArray}
+    },[usuario, pedidos, productosArray]);
 
     //Se obtiene los pedidos según el id del estado_pedido
     const pedidosActivos = useMemo(()=>
@@ -122,10 +119,10 @@ export function CountElement() {
 
     const totalEmpleadosActivos = useMemo(() => {
         if (usuario?.rol === 'supervisor' && usuario.bodega) {
-            return usuarios.filter(emp => emp.bodeg_fk == usuario.bodega && emp.is_active).length;
+            return usuariosArray.filter(emp => emp.bodeg_fk == usuario.bodega && emp.is_active).length;
         }
         return 0;
-    }, [usuarios, usuario]);
+    }, [usuariosArray, usuario]);
 
     const getEstadoPedido = (id_estado: number) => {
         switch (id_estado) {

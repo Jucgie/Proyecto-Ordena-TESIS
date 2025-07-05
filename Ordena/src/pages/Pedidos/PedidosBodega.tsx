@@ -464,10 +464,12 @@ export default function PedidosBodega() {
             }
 
             // Buscar el personal de entrega correspondiente al transportista
-            const personalEntrega = await personalEntregaService.getPersonalEntrega({ 
+            const personalEntregaRaw = await personalEntregaService.getPersonalEntrega({ 
                 bodega_id: usuario?.bodega?.toString() 
             });
-            
+            const personalEntrega = Array.isArray(personalEntregaRaw)
+                ? personalEntregaRaw
+                : personalEntregaRaw.results || [];
             let personalEncontrado = personalEntrega.find((p: any) => p.usuario_fk === transportista.id_us || p.usuario_fk === transportista.id);
             
             if (!personalEncontrado) {
@@ -475,8 +477,8 @@ export default function PedidosBodega() {
                
                 const nuevoPersonal = await personalEntregaService.crearDesdeUsuario({
                     usuario_id: parseInt(transportista.id_us || transportista.id),
-                    patente: 'N/A', // Se puede mejorar para pedir la patente
-                    descripcion: 'Transportista asignado'
+                    patente: 'N/A',
+                    descripcion_psn: 'Transportista asignado' // <--- usa el nombre correcto
                 });
                 personalEncontrado = nuevoPersonal.personal_entrega;
             }
