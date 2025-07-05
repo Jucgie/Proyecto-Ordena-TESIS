@@ -26,6 +26,7 @@ from django.http import HttpResponse
 from django.conf import settings
 from django.db import models
 from api.utils.notificaciones import crear_notificacion
+from django.db.models import Min
 
 logger = logging.getLogger(__name__)
 
@@ -2517,6 +2518,15 @@ def movimientos_inventario(request):
         total=models.Sum('cantidad')
     )['total'] or 0)
 
+    # --- FILTRAR DUPLICADOS: dejar solo el movimiento más antiguo por grupo clave ---
+    # Agrupar por producto, cantidad, fecha (día), usuario y motivo, y obtener el id_mvin más bajo (más antiguo)
+    ids_unicos = queryset.values(
+        'productos_fk', 'cantidad', 'fecha', 'usuario_fk', 'motivo'
+    ).annotate(
+        min_id=Min('id_mvin')
+    ).values_list('min_id', flat=True)
+    queryset = queryset.filter(id_mvin__in=ids_unicos)
+
     # --- Solo aquí aplica el slicing para la respuesta ---
     queryset = queryset.order_by('-fecha')[offset:offset + limit]
 
@@ -2674,23 +2684,15 @@ def historial_producto(request, producto_id):
         if stock_obj:
             stock_actual = float(stock_obj.stock)
 
-        # Crear timeline de cambios con cálculo simplificado y más robusto
+        # --- MODIFICACIÓN: Calcular timeline desde el stock real actual ---
         timeline = []
+        movimientos_ordenados = list(movimientos.order_by('-fecha', '-id_mvin'))  # Más recientes primero
         
-        # Ordenar movimientos cronológicamente (más antiguos primero)
-        movimientos_ordenados = movimientos.order_by('fecha', 'id_mvin')
-        
-        logger.info(f"🔍 DEBUG - Historial: Stock actual en BD={stock_actual}, Total movimientos={len(movimientos_ordenados)}")
-        
-        # Calcular timeline de forma simple: empezar desde 0 y acumular
-        stock_acumulado = 0  # Empezar desde 0
-        
+        # Calcular el stock acumulado hacia atrás
+        stock_acumulado = stock_actual  # Partimos del stock real actual
         for mov in movimientos_ordenados:
-            stock_antes = stock_acumulado
-            stock_acumulado += mov.cantidad  # Sumar la cantidad del movimiento
-            
-            logger.info(f"🔍 DEBUG - Timeline: Movimiento {mov.id_mvin}, cantidad={mov.cantidad}, stock_antes={stock_antes}, stock_despues={stock_acumulado}")
-            
+            stock_despues = stock_acumulado
+            stock_antes = stock_despues - mov.cantidad
             timeline.append({
                 'fecha': mov.fecha.isoformat(),
                 'tipo': 'ENTRADA' if mov.cantidad > 0 else 'SALIDA' if mov.cantidad < 0 else 'AJUSTE',
@@ -2698,18 +2700,14 @@ def historial_producto(request, producto_id):
                 'motivo': mov.motivo or 'Sin motivo especificado',
                 'usuario': mov.usuario_fk.nombre,
                 'stock_antes': stock_antes,
-                'stock_despues': stock_acumulado,
+                'stock_despues': stock_despues,
                 'icono': '📥' if mov.cantidad > 0 else '📤' if mov.cantidad < 0 else '⚙️',
                 'color': '#4CAF50' if mov.cantidad > 0 else '#F44336' if mov.cantidad < 0 else '#FF9800'
             })
-        
-        # Revertir el timeline para mostrar los más recientes primero
-        timeline.reverse()
-        
-        # El stock actual debe ser el stock_despues del último movimiento (más reciente)
+            stock_acumulado = stock_antes
+        # El timeline ya está en orden de más reciente a más antiguo
+        # Si quieres mostrarlo de más antiguo a más reciente, haz: timeline.reverse()
         stock_actual_final = timeline[0]['stock_despues'] if timeline else 0
-        
-        logger.info(f"📊 Timeline generado para producto {producto.id_prodc}: {len(timeline)} movimientos, stock final: {stock_actual_final}")
 
         # Información del producto
         producto_info = {
