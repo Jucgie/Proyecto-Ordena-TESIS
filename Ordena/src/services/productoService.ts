@@ -160,10 +160,54 @@ export const productoService = {
         return response.data;
     },
 
+    // ===== FUNCIONES PARA PRODUCTOS DESACTIVADOS =====
+    
+    // Obtener productos desactivados
+    getProductosDesactivados: async (ubicacionId?: string, search?: string) => {
+        const params = new URLSearchParams();
+        
+        if (ubicacionId === "bodega_central") {
+            params.append('bodega_id', '2');
+        } else if (ubicacionId) {
+            params.append('sucursal_id', ubicacionId);
+        }
+        
+        if (search) {
+            params.append('search', search);
+        }
+        
+        const response = await api.get('/productos-desactivados/', { params });
+        return response.data;
+    },
+
+    // Reactivar múltiples productos
+    reactivarProductos: async (productoIds: string[]) => {
+        const response = await api.post('/reactivar-productos/', {
+            producto_ids: productoIds
+        });
+        return response.data;
+    },
+
+    // Reactivar un producto individual
+    reactivarProductoIndividual: async (productoId: string) => {
+        const response = await api.post(`/reactivar-producto/${productoId}/`);
+        return response.data;
+    },
+
     // Nueva función para obtener el historial completo de un producto
-    getHistorialProducto: async (productoId: string) => {
-        console.log("🔍 DEBUG - Service - getHistorialProducto llamado con productoId:", productoId);
-        const response = await api.get(`/productos/${productoId}/historial/`);
+    getHistorialProducto: async ({ productoId, sucursalId, bodegaId }: { productoId: string, sucursalId?: string | number, bodegaId?: string | number }) => {
+        console.log("🔍 DEBUG - Service - getHistorialProducto llamado con:", { productoId, sucursalId, bodegaId });
+        let url = `/productos/${productoId}/historial/`;
+        const params = new URLSearchParams();
+        if (bodegaId) {
+            params.append('bodega_id', String(bodegaId));
+        } else if (sucursalId) {
+            params.append('sucursal_id', String(sucursalId));
+        }
+        if ([...params].length > 0) {
+            url += `?${params.toString()}`;
+        }
+        const response = await api.get(url);
         console.log("🔍 DEBUG - Service - Respuesta del historial:", response.data);
         return response.data;
     },
@@ -220,5 +264,18 @@ export const productoService = {
 
     deleteCategoria: async (id: string) => {
         await api.delete(`/categorias/${id}/`);
+    },
+
+    // Generar código automático
+    generarCodigoAutomatico: async (data: {
+        nombre: string;
+        marca: string;
+        categoria: string;
+        modelo?: string;
+        ubicacion_id: string;
+        es_bodega: boolean;
+    }) => {
+        const response = await api.post('/generar-codigo-automatico/', data);
+        return response.data;
     }
 };

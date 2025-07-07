@@ -25,9 +25,11 @@ interface ProductProps {
     onAddProduct: (product: ProductInt) => void;
     onUpdateProduct: (product: ProductInt) => void;
     onDesactivarProduct: (code: string[]) => void;
+    ubicacionId?: string;
+    esBodega?: boolean;
 }
 
-export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onDesactivarProduct }: ProductProps) {
+export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onDesactivarProduct, ubicacionId, esBodega }: ProductProps) {
 
     const [state, setState] = useState(false);
     const [prod, setProd] = useState<ProductInt | null>(null);
@@ -111,6 +113,8 @@ export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onD
                                 onAddProduct={onAddProduct}
                                 marcas={[]}
                                 categorias={[]}
+                                ubicacionId={ubicacionId}
+                                esBodega={esBodega}
                             />
                         </>
                     )}
@@ -236,7 +240,7 @@ export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onD
                             <CardActionArea className="card_a">
                                 <CardMedia
                                     component="img"
-                                    image={product.im ? URL.createObjectURL(product.im) : sin_imagen}
+                                    image={product.im && typeof product.im !== 'string' ? URL.createObjectURL(product.im) : (typeof product.im === 'string' ? product.im : sin_imagen)}
                                     alt={product.name}
                                     sx={
                                         {

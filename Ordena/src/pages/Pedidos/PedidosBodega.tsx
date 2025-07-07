@@ -23,7 +23,7 @@ import { SUCURSALES } from "../../constants/ubicaciones";
 import { useBodegaStore } from "../../store/useBodegaStore";
 import ModalFormularioPedido from "../../components/pedidos/modalform";
 import { useUsuariosStore } from "../../store/useUsuarioStore";
-import { useProveedoresStore } from "../../store/useProveedorStore";
+// El historial del proveedor se maneja automáticamente en el backend
 import { useInventariosStore } from "../../store/useProductoStore";
 import { usuarioService } from "../../services/usuarioService";
 import { solicitudesService, pedidosService, personalEntregaService, informesService } from "../../services/api";
@@ -247,7 +247,7 @@ export default function PedidosBodega() {
     } = useBodegaStore();
 
     const usuario = useAuthStore((state: any) => state.usuario);
-    const addProveedor = useProveedoresStore.getState().addProveedor;
+    // El historial del proveedor se maneja automáticamente en el backend
     const [showSnackbar, setShowSnackbar] = useState(transferencias > 0);
     const [snackbarMessage, setSnackbarMessage] = useState("");
     const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error" | "warning" | "info">("success");
@@ -268,8 +268,7 @@ export default function PedidosBodega() {
     // Obtener funciones del store de inventario
     const { fetchMarcas, fetchCategorias, fetchProductos } = useInventariosStore();
     
-    // Obtener funciones del store de proveedores
-    const { addIngresoProveedor } = useProveedoresStore();
+    // El historial del proveedor se maneja automáticamente en el backend
 
     const [loading, setLoading] = useState(false);
     const [pedidosBackend, setPedidosBackend] = useState<any[]>([]);
@@ -708,12 +707,17 @@ export default function PedidosBodega() {
             console.log('🔍 DEBUG - Buscando productos similares para:', producto);
             console.log('🔍 DEBUG - Bodega ID:', usuario?.bodega);
             
-            // Enviar también el código interno si está disponible
+            // Prioridad 1: Buscar por código interno exacto si está disponible
             const codigo_interno = producto.codigo_interno || producto.codigo || undefined;
+            
+            // Prioridad 2: Buscar por nombre exacto (sin marca/categoría para dar máxima prioridad al nombre)
             const response = await buscarProductosSimilares({
                 nombre: producto.nombre,
-                marca: producto.marca,
-                categoria: producto.categoria,
+                // Solo enviar marca y categoría si NO hay código interno
+                ...(codigo_interno ? {} : {
+                    marca: producto.marca,
+                    categoria: producto.categoria
+                }),
                 bodega_id: usuario?.bodega,
                 ...(codigo_interno ? { codigo_interno } : {})
             });
@@ -759,6 +763,7 @@ export default function PedidosBodega() {
     // Función para validar todos los productos del formulario
     const validarTodosLosProductos = async (productos: any[]) => {
         console.log('🔍 DEBUG - Validando todos los productos:', productos);
+        console.log('🔍 DEBUG - Usuario bodega:', usuario?.bodega);
         
         const productosConSimilares = [];
         const productosSinSimilares = [];
@@ -766,7 +771,9 @@ export default function PedidosBodega() {
         // Validar cada producto
         for (const producto of productos) {
             try {
+                console.log('🔍 DEBUG - Validando producto:', producto);
                 const haySimilares = await buscarProductosSimilaresLocal(producto);
+                console.log('🔍 DEBUG - ¿Hay similares?', haySimilares);
                 if (haySimilares) {
                     productosConSimilares.push(producto);
                 } else {
@@ -783,13 +790,16 @@ export default function PedidosBodega() {
         
         if (productosConSimilares.length > 0) {
             // Hay productos que necesitan validación
+            console.log('🔍 DEBUG - Abriendo modal de validación múltiple');
             setProductosAValidar(productosConSimilares);
             setProductosValidados(productosSinSimilares);
             setProductoActualValidacion(productosConSimilares[0]);
             setModalValidacionMultiple(true);
+            console.log('🔍 DEBUG - Modal de validación múltiple abierto');
             return false; // No continuar con el procesamiento
         }
         
+        console.log('🔍 DEBUG - No hay productos similares, continuando con el procesamiento');
         return true; // Continuar con el procesamiento
     };
 
@@ -904,17 +914,8 @@ export default function PedidosBodega() {
             const pedidoIdReal = resultado.pedido_id;
             if (!pedidoIdReal) throw new Error('No se pudo obtener el ID real del pedido creado');
 
-            // Agregar el ingreso al historial del proveedor
-            await addIngresoProveedor(datosFormulario.proveedor, {
-                fecha: datosFormulario.fecha,
-                productos: productosFinales,
-                documentos: {
-                    numRem: datosFormulario.numRem || '',
-                    numGuiaDespacho: datosFormulario.numGuiaDespacho || '',
-                    archivoGuia: datosFormulario.nombreArchivo || ''
-                },
-                observaciones: datosFormulario.observacionesRecepcion || ''
-            });
+            // El historial del proveedor se maneja automáticamente en el backend
+            // No es necesario llamar a addIngresoProveedor aquí
 
             // Recargar productos para mostrar el stock actualizado
             await fetchProductos(bodegaId);
@@ -1072,6 +1073,30 @@ export default function PedidosBodega() {
                     >
                         Nuevo Ingreso
                     </BotonAccion>
+                    <Button
+                        variant="outlined"
+                        onClick={() => {
+                            // Probar el modal de validación múltiple
+                            const productoEjemplo = {
+                                nombre: "Martillo de Acero",
+                                marca: "Stanley",
+                                categoria: "Herramientas",
+                                cantidad: 5
+                            };
+                            setProductosAValidar([productoEjemplo]);
+                            setProductosValidados([]);
+                            setProductoActualValidacion(productoEjemplo);
+                            setModalValidacionMultiple(true);
+                        }}
+                        style={{
+                            borderColor: "#4CAF50",
+                            color: "#4CAF50",
+                            fontWeight: 600,
+                            marginLeft: 8
+                        }}
+                    >
+                        Probar Modal
+                    </Button>
                     <ModalFormularioPedido
                         open={isModalOpen}
                         onClose={() => {
@@ -1135,17 +1160,8 @@ export default function PedidosBodega() {
                                     const pedidoIdReal = resultado.pedido_id;
                                     if (!pedidoIdReal) throw new Error('No se pudo obtener el ID real del pedido creado');
 
-                                    // 3. Agregar el ingreso al historial del proveedor
-                                    await addIngresoProveedor(data.proveedor, {
-                                        fecha: data.fecha,
-                                        productos: data.productos,
-                                        documentos: {
-                                            numRem: data.numRem || '',
-                                            numGuiaDespacho: data.numGuiaDespacho || '',
-                                            archivoGuia: data.nombreArchivo || ''
-                                        },
-                                        observaciones: data.observacionesRecepcion || ''
-                                    });
+                                    // 3. El historial del proveedor se maneja automáticamente en el backend
+                                    // No es necesario llamar a addIngresoProveedor aquí
 
                                     // 4. Recargar productos para mostrar el stock actualizado
                                     await fetchProductos(bodegaId);

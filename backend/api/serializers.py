@@ -3,7 +3,8 @@ from django.utils import timezone
 from .models import (
     BodegaCentral, Categoria, DetallePedido, EstadoPedido, Historial, Informe,
     Marca, Modulos, MovInventario, Notificacion, Pedidos, Permisos,
-    PersonalEntrega, Productos, Proveedor, Rol, Solicitudes, Stock, Sucursal, Usuario, Stock, SolicitudProductos, UsuarioNotificacion
+    PersonalEntrega, Productos, Proveedor, Rol, Solicitudes, Stock, Sucursal, Usuario, Stock, SolicitudProductos, UsuarioNotificacion,
+    HistorialEstadoPedido
 )
 import random
 
@@ -116,12 +117,14 @@ class MovInventarioSerializer(serializers.ModelSerializer):
     icono_movimiento = serializers.SerializerMethodField()
     color_movimiento = serializers.SerializerMethodField()
     descripcion_movimiento = serializers.SerializerMethodField()
+    ubicacion_nombre = serializers.ReadOnlyField()
 
     class Meta:
         model = MovInventario
         fields = [
             'id_mvin', 'cantidad', 'fecha', 'productos_fk', 'producto_nombre', 'producto_codigo', 'producto_id',
-            'usuario_fk', 'usuario_nombre', 'tipo_movimiento', 'stock_actual', 'stock_antes', 'stock_despues', 'motivo', 'ubicacion',
+            'usuario_fk', 'usuario_nombre', 'tipo_movimiento', 'stock_actual', 'stock_antes', 'stock_despues', 'motivo',
+            'ubicacion', 'ubicacion_nombre',  # <-- Agregado
             'icono_movimiento', 'color_movimiento', 'descripcion_movimiento'
         ]
     
@@ -169,53 +172,66 @@ class MovInventarioSerializer(serializers.ModelSerializer):
             return 0
 
     def get_stock_antes(self, obj):
-        """Obtiene el stock antes del movimiento calculando desde el stock actual hacia atrás"""
+        """
+        Calcula el stock antes del movimiento SOLO considerando la ubicación (stock_fk).
+        """
         try:
-            from api.models import MovInventario, Stock
-            
-            # Obtener el stock actual del producto
-            stock_actual = self.get_stock_actual(obj)
-            
-            # Obtener todos los movimientos del producto ordenados cronológicamente
+            from api.models import MovInventario
             movimientos = MovInventario.objects.filter(
-                productos_fk=obj.productos_fk
-            ).order_by('fecha', 'id_mvin')
-            
-            # Empezar desde el stock actual
-            stock_calculado = stock_actual
-            
-            # Recorrer todos los movimientos en orden inverso hasta encontrar el actual
-            for mov in reversed(list(movimientos)):
+                productos_fk=obj.productos_fk,
+                stock_fk=obj.stock_fk
+            ).order_by('-fecha', '-id_mvin')
+            stock_actual = float(obj.stock_fk.stock) if obj.stock_fk and hasattr(obj.stock_fk, 'stock') else 0
+            stock_acumulado = stock_actual
+            for mov in movimientos:
                 if mov.id_mvin == obj.id_mvin:
-                    # Encontramos el movimiento actual, retornar el stock calculado
-                    return stock_calculado
-                # Restar la cantidad del movimiento (invertir el efecto)
-                stock_calculado -= mov.cantidad
-            
-            # Si no encontramos el movimiento, retornar el stock calculado
-            return stock_calculado
-            
+                    stock_despues = stock_acumulado
+                    stock_antes = stock_despues - mov.cantidad
+                    return stock_antes
+                stock_acumulado -= mov.cantidad
+            return 0
         except Exception as e:
-            print(f"Error calculando stock antes: {e}")
+            print(f"Error calculando stock antes (ubicación): {e}")
             return 0
 
     def get_stock_despues(self, obj):
-        """Obtiene el stock después del movimiento actual"""
+        """
+        Calcula el stock después del movimiento SOLO considerando la ubicación (stock_fk).
+        """
         try:
-            stock_antes = self.get_stock_antes(obj)
-            # Simplemente sumar la cantidad (puede ser positiva o negativa)
-            return stock_antes + obj.cantidad
+            from api.models import MovInventario
+            movimientos = MovInventario.objects.filter(
+                productos_fk=obj.productos_fk,
+                stock_fk=obj.stock_fk
+            ).order_by('-fecha', '-id_mvin')
+            stock_actual = float(obj.stock_fk.stock) if obj.stock_fk and hasattr(obj.stock_fk, 'stock') else 0
+            stock_acumulado = stock_actual
+            for mov in movimientos:
+                if mov.id_mvin == obj.id_mvin:
+                    return stock_acumulado
+                stock_acumulado -= mov.cantidad
+            return 0
         except Exception as e:
-            print(f"Error calculando stock después: {e}")
+            print(f"Error calculando stock despues (ubicación): {e}")
             return 0
 
     def get_ubicacion(self, obj):
-        """Obtiene la ubicación (bodega o sucursal) del producto"""
-        producto = obj.productos_fk
-        if producto.bodega_fk:
-            return f"Bodega: {producto.bodega_fk.nombre_bdg}"
-        elif producto.sucursal_fk:
-            return f"Sucursal: {producto.sucursal_fk.nombre_sucursal}"
+        """Obtiene la ubicación (bodega o sucursal) REAL del movimiento usando stock_fk"""
+        stock = getattr(obj, 'stock_fk', None)
+        if stock:
+            # Si es un ID, busca la instancia
+            bodega = getattr(stock, 'bodega_fk', None)
+            sucursal = getattr(stock, 'sucursal_fk', None)
+            if isinstance(bodega, int):
+                from api.models import BodegaCentral
+                bodega = BodegaCentral.objects.filter(id_bdg=bodega).first()
+            if isinstance(sucursal, int):
+                from api.models import Sucursal
+                sucursal = Sucursal.objects.filter(id=sucursal).first()
+            if bodega:
+                return f"Bodega: {bodega.nombre_bdg}"
+            elif sucursal:
+                return f"Sucursal: {sucursal.nombre_sucursal}"
         return "Sin ubicación"
 
     def get_icono_movimiento(self, obj):
@@ -322,6 +338,9 @@ class PersonalEntregaSerializer(serializers.ModelSerializer):
         fields = ['id_psn', 'usuario_fk', 'usuario_nombre', 'usuario_correo', 'nombre_psn', 'descripcion_psn', 'patente']
 
 class ProductosSerializer(serializers.ModelSerializer):
+    # Hacer la descripción opcional
+    descripcion_prodc = serializers.CharField(required=False, allow_blank=True)
+    
     class Meta:
         model = Productos
         fields = [
@@ -569,6 +588,9 @@ class ProductoSerializer(serializers.ModelSerializer):
     stock_maximo = serializers.SerializerMethodField()
     stock_maximo_write = serializers.IntegerField(write_only=True, required=False, source='stock_maximo')
     motivo = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    
+    # Hacer la descripción opcional
+    descripcion_prodc = serializers.CharField(required=False, allow_blank=True)
 
     def get_stock(self, obj):
         try:
@@ -694,26 +716,64 @@ class ProductoSerializer(serializers.ModelSerializer):
         read_only_fields = ['id_prodc', 'fecha_creacion']
 
     def create(self, validated_data):
-        # Validar unicidad de nombre y código
+        # Validar unicidad de nombre y código (solo productos activos)
         nombre = validated_data.get('nombre_prodc')
         codigo = validated_data.get('codigo_interno')
-        if Productos.objects.filter(nombre_prodc=nombre).exists():
-            raise serializers.ValidationError({'nombre_prodc': 'Ya existe un producto con este nombre.'})
-        if Productos.objects.filter(codigo_interno=codigo).exists():
-            raise serializers.ValidationError({'codigo_interno': 'Ya existe un producto con este código.'})
+        
+        # Verificar si existe un producto desactivado con el mismo nombre
+        producto_desactivado = Productos.objects.filter(nombre_prodc=nombre, activo=False).first()
+        if producto_desactivado:
+            # Si existe un producto desactivado, reactivarlo y actualizarlo
+            producto_desactivado.activo = True
+            producto_desactivado.descripcion_prodc = validated_data.get('descripcion_prodc', '')
+            producto_desactivado.marca_fk = validated_data.get('marca_fk')
+            producto_desactivado.categoria_fk = validated_data.get('categoria_fk')
+            producto_desactivado.bodega_fk = validated_data.get('bodega_fk')
+            producto_desactivado.sucursal_fk = validated_data.get('sucursal_fk')
+            producto_desactivado.save()
+            
+            # Actualizar o crear el stock
+            stock_data = validated_data.pop('stock', 0)
+            stock_minimo_data = validated_data.pop('stock_minimo', 5)
+            stock_maximo_data = validated_data.pop('stock_maximo', 100)
+            
+            stock_obj, created = Stock.objects.get_or_create(
+                productos_fk=producto_desactivado,
+                bodega_fk=producto_desactivado.bodega_fk.id_bdg if producto_desactivado.bodega_fk else None,
+                sucursal_fk=producto_desactivado.sucursal_fk.id if producto_desactivado.sucursal_fk else None,
+                defaults={
+                    'stock': stock_data,
+                    'stock_minimo': stock_minimo_data,
+                    'stock_maximo': stock_maximo_data,
+                    'proveedor_fk': None
+                }
+            )
+            
+            if not created:
+                stock_obj.stock = stock_data
+                stock_obj.stock_minimo = stock_minimo_data
+                stock_obj.stock_maximo = stock_maximo_data
+                stock_obj.save()
+            
+            return producto_desactivado
+        
+        # Si no hay producto desactivado, verificar que no exista uno activo
+        if Productos.objects.filter(nombre_prodc=nombre, activo=True).exists():
+            raise serializers.ValidationError({'nombre_prodc': 'Ya existe un producto activo con este nombre.'})
+        if Productos.objects.filter(codigo_interno=codigo, activo=True).exists():
+            raise serializers.ValidationError({'codigo_interno': 'Ya existe un producto activo con este código.'})
         # Generar código automáticamente si no se provee
         if not codigo:
             # Ejemplo: usar prefijo de categoría, marca y un contador
             categoria = validated_data.get('categoria_fk')
             marca = validated_data.get('marca_fk')
-            from datetime import datetime
-            fecha = datetime.now().strftime('%Y%m')
+            fecha = timezone.now().strftime('%Y%m')
             prefijo_cat = str(categoria.id) if categoria else 'GEN'
             prefijo_marca = str(marca.id_mprod) if marca else 'GEN'
-            contador = Productos.objects.count() + 1
+            contador = Productos.objects.filter(activo=True).count() + 1
             codigo = f"PROD-{prefijo_cat}-{prefijo_marca}-{fecha}-{contador:03d}"
-            # Asegurar unicidad
-            while Productos.objects.filter(codigo_interno=codigo).exists():
+            # Asegurar unicidad (solo productos activos)
+            while Productos.objects.filter(codigo_interno=codigo, activo=True).exists():
                 contador += 1
                 codigo = f"PROD-{prefijo_cat}-{prefijo_marca}-{fecha}-{contador:03d}"
             validated_data['codigo_interno'] = codigo
@@ -824,6 +884,9 @@ class ProductoBodegaSerializer(serializers.ModelSerializer):
     stock = serializers.SerializerMethodField()
     marca_nombre = serializers.CharField(source='marca_fk.nombre_mprod', read_only=True)
     categoria_nombre = serializers.CharField(source='categoria_fk.nombre', read_only=True)
+    
+    # Hacer la descripción opcional
+    descripcion_prodc = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Productos
@@ -844,6 +907,9 @@ class ProductoSucursalSerializer(serializers.ModelSerializer):
     stock = serializers.SerializerMethodField()
     marca_nombre = serializers.CharField(source='marca_fk.nombre_mprod', read_only=True)
     categoria_nombre = serializers.CharField(source='categoria_fk.nombre', read_only=True)
+    
+    # Hacer la descripción opcional
+    descripcion_prodc = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Productos
@@ -872,4 +938,17 @@ class ProductoSucursalSerializer(serializers.ModelSerializer):
         else:
             stock_obj = None
         return float(stock_obj.stock) if stock_obj else 0
-    
+
+class HistorialEstadoPedidoSerializer(serializers.ModelSerializer):
+    estado_anterior_nombre = serializers.CharField(source='estado_anterior.nombre', read_only=True)
+    estado_nuevo_nombre = serializers.CharField(source='estado_nuevo.nombre', read_only=True)
+    usuario_nombre = serializers.CharField(source='usuario_fk.nombre', read_only=True)
+
+    class Meta:
+        model = HistorialEstadoPedido
+        fields = [
+            'id_hist_ped', 'pedido_fk', 'estado_anterior', 'estado_anterior_nombre',
+            'estado_nuevo', 'estado_nuevo_nombre', 'usuario_fk', 'usuario_nombre',
+            'fecha', 'comentario'
+        ]
+        read_only_fields = ['id_hist_ped', 'fecha']

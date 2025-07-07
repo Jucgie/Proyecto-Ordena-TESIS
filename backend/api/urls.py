@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import ( 
     login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, 
     SolicitudesViewSet, UsuarioViewSet, InformeViewSet, PedidosViewSet, 
-    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,generar_qr_producto_view, producto_por_codigo, actualizar_stock_con_movimiento, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint, movimientos_inventario, pedidos_recientes, NotificacionViewSet,BodegaCentralViewSet, BuscarProductosSimilaresSucursalView, UsuarioNotificacionListView, UsuarioNotificacionDetailView, historial_producto, productos_con_movimientos_recientes
+    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,generar_qr_producto_view, producto_por_codigo, actualizar_stock_con_movimiento, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint, movimientos_inventario, pedidos_recientes, NotificacionViewSet,BodegaCentralViewSet, BuscarProductosSimilaresSucursalView, UsuarioNotificacionListView, UsuarioNotificacionDetailView, historial_producto, productos_con_movimientos_recientes, generar_codigo_automatico, productos_desactivados, reactivar_productos, reactivar_producto_individual, HistorialEstadoPedidoView
 )
 
 router = DefaultRouter()
@@ -36,11 +36,7 @@ urlpatterns = [
     path('extraer-productos-pdf/', ExtraerProductosPDF.as_view(), name='extraer_productos_pdf'),
     path('pedidos/', PedidosViewSet.as_view({'get':'pedidos'}),name='pedidos'),
     
-    
-    # URLs para códigos QR
-    path('qr/producto/<int:producto_id>/', generar_qr_producto_view, name='generar_qr_producto'),
-    path('qr/producto-codigo/<str:codigo_interno>/', producto_por_codigo, name='producto_por_codigo'),
-    path('qr/validar-codigo/<str:codigo_interno>/', validar_codigo_producto, name='validar_codigo_producto'),
+    path('pedidos/<int:pedido_id>/historial-estado/', HistorialEstadoPedidoView.as_view(), name='historial-estado-pedido'),
     # URL eliminada: actualizar_stock_por_codigo (causaba duplicación de movimientos)
     path('qr/lista-productos/', lista_productos_qr, name='lista_productos_qr'),
     path('verificar-producto/', verificar_producto_existente, name='verificar_producto_existente'),
@@ -54,5 +50,11 @@ urlpatterns = [
     path('buscar-productos-similares-sucursal/', BuscarProductosSimilaresSucursalView.as_view(), name='buscar_productos_similares_sucursal'),
     path('usuario-notificaciones/', UsuarioNotificacionListView.as_view(), name='usuario-notificaciones-list'),
     path('usuario-notificaciones/<int:id_ntf_us>/', UsuarioNotificacionDetailView.as_view(), name='usuario-notificaciones-detail'),
+    path('generar-codigo-automatico/', generar_codigo_automatico, name='generar_codigo_automatico'),
+    
+    # URLs para productos desactivados
+    path('productos-desactivados/', productos_desactivados, name='productos_desactivados'),
+    path('reactivar-productos/', reactivar_productos, name='reactivar_productos'),
+    path('reactivar-producto/<int:producto_id>/', reactivar_producto_individual, name='reactivar_producto_individual'),
 ]
 

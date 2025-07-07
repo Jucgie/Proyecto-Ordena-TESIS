@@ -11,6 +11,7 @@ import {
 } from '@mui/icons-material';
 import { productoService } from '../../services/productoService';
 import { formatFechaChile } from '../../utils/formatFechaChile';
+import { useAuthStore } from '../../store/useAuthStore';
 
 interface ProductoHistorialDetalleProps {
     open: boolean;
@@ -61,6 +62,7 @@ export default function ProductoHistorialDetalle({ open, productoId, onClose }: 
         timeline: TimelineItem[];
         estadisticas: Estadisticas;
     } | null>(null);
+    const usuario = useAuthStore(state => state.usuario);
 
     useEffect(() => {
         if (open && productoId) {
@@ -75,7 +77,16 @@ export default function ProductoHistorialDetalle({ open, productoId, onClose }: 
         setError(null);
         try {
             console.log('🔄 Cargando historial para producto:', productoId);
-            const response = await productoService.getHistorialProducto(productoId);
+            let sucursalId = undefined;
+            let bodegaId = undefined;
+            if (usuario?.bodega === 'bodega_central' || usuario?.bodega === 2 || usuario?.bodega === '2') {
+                bodegaId = 2;
+            } else if (usuario?.sucursalId) {
+                sucursalId = usuario.sucursalId;
+            } else if (usuario?.sucursal) {
+                sucursalId = usuario.sucursal;
+            }
+            const response = await productoService.getHistorialProducto({ productoId: String(productoId), sucursalId, bodegaId });
             console.log('✅ Historial cargado:', response);
             setData(response);
         } catch (err: any) {

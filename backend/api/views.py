@@ -127,8 +127,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
         bodega_id = self.request.query_params.get('bodega_id')
         sucursal_id = self.request.query_params.get('sucursal_id')
         
-        logger.info(f"DEBUG - Parámetros recibidos: bodega_id={bodega_id}, sucursal_id={sucursal_id}")
-        logger.info(f"DEBUG - Productos totales: {queryset.count()}")
+        
         
         if bodega_id:
             # Filtrar productos que tienen stock en la bodega
@@ -137,7 +136,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
                 stock__gt=0
             ).values_list('productos_fk', flat=True)
             queryset = queryset.filter(id_prodc__in=productos_con_stock)
-            logger.info(f"DEBUG - Productos filtrados por bodega {bodega_id}: {queryset.count()}")
+            
         elif sucursal_id:
             # Filtrar productos que tienen stock en la sucursal
             productos_con_stock = Stock.objects.filter(
@@ -145,9 +144,6 @@ class ProductoViewSet(viewsets.ModelViewSet):
                 stock__gt=0
             ).values_list('productos_fk', flat=True)
             queryset = queryset.filter(id_prodc__in=productos_con_stock)
-            logger.info(f"DEBUG - Productos filtrados por sucursal {sucursal_id}: {queryset.count()}")
-            
-        logger.info(f"DEBUG - Productos finales a devolver: {queryset.count()}")
         return queryset
 
     def perform_create(self, serializer):
@@ -158,23 +154,76 @@ class ProductoViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def create(self, request, *args, **kwargs):
+        import logging
+        logger = logging.getLogger(__name__)
         try:
-            logger.info(f"Creando producto con datos: {request.data}")
-            logger.info(f"Tipo de marca_fk: {type(request.data.get('marca_fk'))}, valor: {request.data.get('marca_fk')}")
-            logger.info(f"Tipo de categoria_fk: {type(request.data.get('categoria_fk'))}, valor: {request.data.get('categoria_fk')}")
-            logger.info(f"Stock recibido: {request.data.get('stock')}, tipo: {type(request.data.get('stock'))}")
-            
+            logger.info(f"[CREAR PRODUCTO] Datos recibidos: {request.data}")
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            logger.info(f"Datos validados: {serializer.validated_data}")
-            
+            logger.info(f"[CREAR PRODUCTO] Datos validados: {serializer.validated_data}")
             self.perform_create(serializer)
+            producto = serializer.instance
+
+            # --- LOG: Usuario autenticado ---
+            logger.info(f"[CREAR PRODUCTO] Usuario autenticado: {request.user} (ID: {getattr(request.user, 'id_us', None)})")
+
+            # --- NUEVO: Crear stock si no existe y movimiento inicial ---
+            stock_inicial = serializer.validated_data.get('stock')
+            motivo = request.data.get('motivo') or 'Creación de producto'
+            usuario = request.user
+            bodega_id = request.data.get('bodega_fk')
+            sucursal_id = request.data.get('sucursal_fk')
+            from api.models import Stock, MovInventario
+            stock_obj = None
+            logger.info(f"[CREAR PRODUCTO] bodega_id={bodega_id}, sucursal_id={sucursal_id}, stock_inicial={stock_inicial}, motivo={motivo}")
+            if bodega_id:
+                stock_obj, created = Stock.objects.get_or_create(
+                    productos_fk=producto,
+                    bodega_fk=bodega_id,
+                    defaults={'stock': stock_inicial or 0, 'stock_minimo': 0, 'stock_maximo': 0}
+                )
+                logger.info(f"[CREAR PRODUCTO] Stock bodega creado={created}, id={stock_obj.id_stock}, stock={stock_obj.stock}")
+            elif sucursal_id:
+                stock_obj, created = Stock.objects.get_or_create(
+                    productos_fk=producto,
+                    sucursal_fk=sucursal_id,
+                    defaults={'stock': stock_inicial or 0, 'stock_minimo': 0, 'stock_maximo': 0}
+                )
+                logger.info(f"[CREAR PRODUCTO] Stock sucursal creado={created}, id={stock_obj.id_stock}, stock={stock_obj.stock}")
+            else:
+                logger.warning(f"[CREAR PRODUCTO] No se especificó bodega ni sucursal para el stock inicial")
+            # Si el stock ya existía, actualiza el valor si corresponde
+            if stock_obj and stock_inicial is not None:
+                try:
+                    stock_inicial = float(stock_inicial)
+                    if stock_obj.stock != stock_inicial:
+                        stock_obj.stock = stock_inicial
+                        stock_obj.save()
+                        logger.info(f"[CREAR PRODUCTO] Stock actualizado a {stock_inicial}")
+                    # Solo crear movimiento si el stock inicial es mayor a 0 y no existe ya un movimiento para este producto
+                    existe_mov = MovInventario.objects.filter(productos_fk=producto).exists()
+                    logger.info(f"[CREAR PRODUCTO] ¿Ya existe movimiento para este producto? {existe_mov}")
+                    if stock_inicial > 0 and not existe_mov:
+                        mov = MovInventario.objects.create(
+                            cantidad=stock_inicial,
+                            fecha=producto.fecha_creacion,
+                            productos_fk=producto,
+                            usuario_fk=usuario,
+                            motivo=motivo
+                        )
+                        logger.info(f"[CREAR PRODUCTO] ✅ Movimiento inicial creado: id={mov.id_mvin}, cantidad={stock_inicial}, motivo='{motivo}', usuario={usuario}")
+                except Exception as e:
+                    logger.error(f"[CREAR PRODUCTO] Error creando movimiento inicial: {str(e)}")
+            else:
+                logger.warning(f"[CREAR PRODUCTO] No se creó movimiento inicial: stock_obj={stock_obj}, stock_inicial={stock_inicial}")
+            # --- FIN NUEVO ---
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except serializers.ValidationError as e:
-            logger.error(f"Error de validación al crear producto: {str(e)}")
+            logger.error(f"[CREAR PRODUCTO] Error de validación: {str(e)}")
             return Response({'error': e.detail}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error al crear producto: {str(e)}")
+            logger.error(f"[CREAR PRODUCTO] Error general: {str(e)}")
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, *args, **kwargs):
@@ -798,12 +847,7 @@ class PedidosViewSet(viewsets.ModelViewSet):
         bodega_id = self.request.query_params.get('bodega_id')
         sucursal_id = self.request.query_params.get('sucursal_id')
         estado = self.request.query_params.get('estado')
-        
-        logger.info(f"DEBUG - PedidosViewSet.get_queryset - Parámetros recibidos:")
-        logger.info(f"  - bodega_id: {bodega_id}")
-        logger.info(f"  - sucursal_id: {sucursal_id}")
-        logger.info(f"  - estado: {estado}")
-        logger.info(f"  - Pedidos totales antes de filtros: {queryset.count()}")
+
         
         if bodega_id:
             queryset = queryset.filter(bodega_fk=bodega_id)
@@ -965,7 +1009,8 @@ class PedidosViewSet(viewsets.ModelViewSet):
                         cantidad=-abs(sp.cantidad),
                         fecha=timezone.now(),
                         productos_fk=sp.producto_fk,
-                        usuario_fk=request.user
+                        usuario_fk=request.user,
+                        motivo='Salida por pedido a sucursal'
                     )
                 except Exception as e:
                     logger.error(f"Error registrando salida de inventario para producto {sp.producto_fk}: {str(e)}")
@@ -1041,9 +1086,9 @@ class PedidosViewSet(viewsets.ModelViewSet):
                     cantidad=detalle.cantidad,
                     fecha=timezone.now(),
                     productos_fk=detalle.productos_pedido_fk,
-                    usuario_fk=request.user
+                    usuario_fk=request.user,
+                    motivo='Ingreso por pedido'
                 )
-                
                 productos_agregados.append({
                     'producto': detalle.productos_pedido_fk.nombre_prodc,
                     'cantidad': float(detalle.cantidad),
@@ -1072,8 +1117,7 @@ class PedidosViewSet(viewsets.ModelViewSet):
         Crea un pedido de ingreso para la bodega y agrega los productos al inventario
         """
         try:
-            # Debug: log de datos recibidos
-            logger.info(f"DEBUG - Datos recibidos en crear_ingreso_bodega: {request.data}")
+
             
             # Obtener datos del request
             fecha = request.data.get('fecha')
@@ -1841,21 +1885,27 @@ def actualizar_stock_con_movimiento(request, producto_id):
             }, status=status.HTTP_404_NOT_FOUND)
         
         # Obtener stock actual - manejar múltiples registros
-        try:
-            stock_obj = Stock.objects.get(productos_fk=producto)
-        except Stock.MultipleObjectsReturned:
-            # Si hay múltiples registros, usar el más reciente
-            stock_obj = Stock.objects.filter(productos_fk=producto).order_by('-id').first()
-            logger.warning(f"⚠️ Múltiples registros de Stock encontrados para producto {producto.id_prodc}. Usando el más reciente (ID: {stock_obj.id})")
-        except Stock.DoesNotExist:
-            # Si no existe, crear uno nuevo
+        stock_obj = None
+        sucursal_id = getattr(request.user, 'sucursal_fk_id', None) or request.data.get('sucursal_id')
+        bodega_id = getattr(request.user, 'bodeg_fk_id', None) or request.data.get('bodega_id')
+        if sucursal_id:
+            stock_obj = Stock.objects.filter(productos_fk=producto, sucursal_fk=sucursal_id).order_by('-id_stock').first()
+        elif bodega_id:
+            stock_obj = Stock.objects.filter(productos_fk=producto, bodega_fk=bodega_id).order_by('-id_stock').first()
+        else:
+            # Fallback: buscar cualquier stock del producto
+            stock_obj = Stock.objects.filter(productos_fk=producto).order_by('-id_stock').first()
+        if not stock_obj:
+            # Si no existe, crear uno nuevo para la sucursal o bodega correspondiente
             stock_obj = Stock.objects.create(
                 productos_fk=producto,
                 stock=0,
-                stock_minimo=0
+                stock_minimo=0,
+                stock_maximo=0,
+                sucursal_fk=sucursal_id if sucursal_id else None,
+                bodega_fk=bodega_id if bodega_id else None
             )
-            logger.info(f"✅ Nuevo registro de Stock creado para producto {producto.id_prodc}")
-        
+            logger.info(f"✅ Nuevo registro de Stock creado para producto {producto.id_prodc} en sucursal {sucursal_id} o bodega {bodega_id}")
         cantidad_actual = float(stock_obj.stock)
         
         # Solo crear movimiento si hay cambio en el stock
@@ -1871,7 +1921,8 @@ def actualizar_stock_con_movimiento(request, producto_id):
                 fecha=timezone.now(),
                 productos_fk=producto,
                 usuario_fk=request.user,
-                motivo=motivo
+                motivo=motivo,
+                stock_fk=stock_obj  # <-- NUEVO: referencia al stock de la ubicación
             )
             
             # Actualizar stock
@@ -2219,7 +2270,8 @@ def procesar_producto_ingreso(producto_data, bodega, proveedor, request):
         cantidad=cantidad,
         fecha=timezone.now(),
         productos_fk=producto,
-        usuario_fk=request.user
+        usuario_fk=request.user,
+        motivo='Ingreso por pedido'
     )
     
     return {
@@ -2245,6 +2297,80 @@ def generate_codigo_interno(producto, bodega):
         '',  # Sin modelo para compatibilidad
         bodega
     )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generar_codigo_automatico(request):
+    """Endpoint para generar código automático basado en características del producto"""
+    try:
+        data = request.data
+        nombre = data.get('nombre', '').strip()
+        marca = data.get('marca', '').strip()
+        categoria = data.get('categoria', '').strip()
+        modelo = data.get('modelo', '').strip()
+        ubicacion_id = data.get('ubicacion_id')
+        es_bodega = data.get('es_bodega', False)
+        
+        if not nombre or not marca or not categoria:
+            return Response({
+                'error': 'Nombre, marca y categoría son obligatorios'
+            }, status=400)
+        
+        # Determinar bodega o sucursal
+        bodega = None
+        sucursal = None
+        
+        if es_bodega:
+            try:
+                # Convertir ubicacion_id a entero si es necesario
+                ubicacion_id_int = int(ubicacion_id) if ubicacion_id else 2
+                bodega = BodegaCentral.objects.get(id_bdg=ubicacion_id_int)
+            except (ValueError, BodegaCentral.DoesNotExist):
+                # Si no se puede convertir o no existe, usar la bodega central por defecto
+                try:
+                    bodega = BodegaCentral.objects.get(id_bdg=2)
+                except BodegaCentral.DoesNotExist:
+                    return Response({
+                        'error': 'Bodega central no encontrada'
+                    }, status=404)
+        else:
+            try:
+                # Convertir ubicacion_id a entero si es necesario
+                ubicacion_id_int = int(ubicacion_id) if ubicacion_id else None
+                if ubicacion_id_int:
+                    sucursal = Sucursal.objects.get(id_suc=ubicacion_id_int)
+                else:
+                    return Response({
+                        'error': 'ID de sucursal requerido'
+                    }, status=400)
+            except (ValueError, Sucursal.DoesNotExist):
+                return Response({
+                    'error': 'Sucursal no encontrada'
+                }, status=404)
+        
+        # Generar código único
+        codigo_generado = generate_codigo_unico(
+            nombre=nombre,
+            marca=marca,
+            categoria=categoria,
+            modelo=modelo,
+            bodega=bodega,
+            sucursal=sucursal
+        )
+        
+        return Response({
+            'codigo': codigo_generado,
+            'nombre': nombre,
+            'marca': marca,
+            'categoria': categoria,
+            'modelo': modelo
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generando código automático: {str(e)}")
+        return Response({
+            'error': 'Error interno del servidor'
+        }, status=500)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -2333,16 +2459,19 @@ def producto_por_codigo_unico(request, codigo_interno):
 
 def buscar_productos_similares(nombre, marca, categoria, bodega, codigo_interno=None, modelo=None):
     """
-    Busca productos similares basándose en código interno (exacto) y, si no hay coincidencia, por nombre, marca, categoría y modelo/variante
-    Retorna productos ordenados por similitud
+    Busca productos similares con prioridad correcta:
+    1. Coincidencia exacta por código interno (máxima prioridad)
+    2. Coincidencia exacta por nombre (alta prioridad)
+    3. Coincidencia por nombre, marca y categoría (baja prioridad)
     """
     try:
         queryset = Productos.objects.filter(bodega_fk=bodega, activo=True)
-        # 1. Buscar por código interno exacto si se proporciona
+        productos_con_stock = []
+        
+        # 1. PRIORIDAD MÁXIMA: Buscar por código interno exacto si se proporciona
         if codigo_interno:
             productos_similares = queryset.filter(codigo_interno=codigo_interno)
             if productos_similares.exists():
-                productos_con_stock = []
                 for producto in productos_similares[:10]:
                     try:
                         stock_obj = Stock.objects.get(productos_fk=producto, bodega_fk=bodega.id_bdg)
@@ -2366,51 +2495,68 @@ def buscar_productos_similares(nombre, marca, categoria, bodega, codigo_interno=
                         'fecha_creacion': producto.fecha_creacion.isoformat() if producto.fecha_creacion else None
                     })
                 return productos_con_stock
-        # 2. Si no hay coincidencia por código, buscar por nombre/marca/categoría
+        
+        # 2. PRIORIDAD ALTA: Coincidencia exacta por nombre (sin importar marca/categoría)
+        nombre_normalizado = nombre.strip().lower()
         productos_similares = queryset.filter(
-            models.Q(nombre_prodc__icontains=nombre) |
-            models.Q(nombre_prodc__icontains=nombre.split()[0])
+            nombre_prodc__iexact=nombre_normalizado
         )
-        if marca:
-            productos_similares = productos_similares.filter(
-                marca_fk__nombre_mprod__icontains=marca
+        
+        # Si encontramos productos con el mismo nombre, los retornamos
+        if productos_similares.exists():
+            for producto in productos_similares[:10]:
+                try:
+                    stock_obj = Stock.objects.get(productos_fk=producto, bodega_fk=bodega.id_bdg)
+                    stock_actual = float(stock_obj.stock)
+                    stock_minimo = float(stock_obj.stock_minimo) if stock_obj.stock_minimo else 0
+                    stock_maximo = float(stock_obj.stock_maximo) if stock_obj.stock_maximo else 0
+                except Stock.DoesNotExist:
+                    stock_actual = 0
+                    stock_minimo = 0
+                    stock_maximo = 0
+                productos_con_stock.append({
+                    'id': producto.id_prodc,
+                    'nombre': producto.nombre_prodc,
+                    'codigo_interno': producto.codigo_interno,
+                    'marca': producto.marca_fk.nombre_mprod,
+                    'categoria': producto.categoria_fk.nombre,
+                    'descripcion': producto.descripcion_prodc,
+                    'stock_actual': stock_actual,
+                    'stock_minimo': stock_minimo,
+                    'stock_maximo': stock_maximo,
+                    'fecha_creacion': producto.fecha_creacion.isoformat() if producto.fecha_creacion else None
+                })
+            return productos_con_stock
+        
+        # 3. PRIORIDAD BAJA: Solo si no encontramos por nombre, buscar por marca y categoría
+        if marca and categoria:
+            productos_similares = queryset.filter(
+                marca_fk__nombre_mprod__iexact=marca.strip().lower(),
+                categoria_fk__nombre__iexact=categoria.strip().lower()
             )
-        if categoria:
-            productos_similares = productos_similares.filter(
-                categoria_fk__nombre__icontains=categoria
-            )
-        # --- FILTRO POR MODELO/VARIANTE ---
-        if modelo and modelo.strip() != '':
-            modelo_normalizado = modelo.strip().lower()
-            productos_similares = productos_similares.filter(
-                models.Q(descripcion_prodc__icontains=modelo_normalizado) |
-                models.Q(nombre_prodc__icontains=modelo_normalizado) |
-                models.Q(codigo_interno__icontains=modelo_normalizado) |
-                models.Q(descripcion_prodc__isnull=True) | models.Q(descripcion_prodc='')
-            )
-        productos_con_stock = []
-        for producto in productos_similares[:10]:
-            try:
-                stock_obj = Stock.objects.get(productos_fk=producto, bodega_fk=bodega.id_bdg)
-                stock_actual = float(stock_obj.stock)
-                stock_minimo = float(stock_obj.stock_minimo) if stock_obj.stock_minimo else 0
-                stock_maximo = float(stock_obj.stock_maximo) if stock_obj.stock_maximo else 0
-            except Stock.DoesNotExist:
-                stock_actual = 0
-                stock_minimo = 0
-                stock_maximo = 0
-            productos_con_stock.append({
-                'id': producto.id_prodc,
-                'nombre': producto.nombre_prodc,
-                'codigo_interno': producto.codigo_interno,
-                'marca': producto.marca_fk.nombre_mprod,
-                'categoria': producto.categoria_fk.nombre,
-                'descripcion': producto.descripcion_prodc,
-                'stock_actual': stock_actual,
-                'stock_minimo': stock_minimo,
-                'stock_maximo': stock_maximo,
-                'fecha_creacion': producto.fecha_creacion.isoformat() if producto.fecha_creacion else None
-            })
+            for producto in productos_similares[:10]:
+                try:
+                    stock_obj = Stock.objects.get(productos_fk=producto, bodega_fk=bodega.id_bdg)
+                    stock_actual = float(stock_obj.stock)
+                    stock_minimo = float(stock_obj.stock_minimo) if stock_obj.stock_minimo else 0
+                    stock_maximo = float(stock_obj.stock_maximo) if stock_obj.stock_maximo else 0
+                except Stock.DoesNotExist:
+                    stock_actual = 0
+                    stock_minimo = 0
+                    stock_maximo = 0
+                productos_con_stock.append({
+                    'id': producto.id_prodc,
+                    'nombre': producto.nombre_prodc,
+                    'codigo_interno': producto.codigo_interno,
+                    'marca': producto.marca_fk.nombre_mprod,
+                    'categoria': producto.categoria_fk.nombre,
+                    'descripcion': producto.descripcion_prodc,
+                    'stock_actual': stock_actual,
+                    'stock_minimo': stock_minimo,
+                    'stock_maximo': stock_maximo,
+                    'fecha_creacion': producto.fecha_creacion.isoformat() if producto.fecha_creacion else None
+                })
+        
         return productos_con_stock
     except Exception as e:
         logger.error(f"Error buscando productos similares: {str(e)}")
@@ -2482,10 +2628,13 @@ def movimientos_inventario(request):
     )
 
     # Aplicar filtros
-    if bodega_id:
-        queryset = queryset.filter(productos_fk__bodega_fk=bodega_id)
     if sucursal_id:
-        queryset = queryset.filter(productos_fk__sucursal_fk=sucursal_id)
+        stocks_en_sucursal = Stock.objects.filter(sucursal_fk=sucursal_id).values_list('id_stock', flat=True)
+        queryset = queryset.filter(stock_fk__in=stocks_en_sucursal)
+    elif bodega_id:
+        stocks_en_bodega = Stock.objects.filter(bodega_fk=bodega_id).values_list('id_stock', flat=True)
+        queryset = queryset.filter(stock_fk__in=stocks_en_bodega)
+    queryset = queryset.exclude(stock_fk__isnull=True)
     if producto_id:
         queryset = queryset.filter(productos_fk__id_prodc=producto_id)
     if usuario_id:
@@ -2594,6 +2743,7 @@ class BuscarProductosSimilaresSucursalView(APIView):
         sucursal_id = request.data.get('sucursal_id')
         marca = request.data.get('marca', None)
         categoria = request.data.get('categoria', None)
+        codigo_interno = request.data.get('codigo_interno', None)
 
         if not nombre or not sucursal_id:
             return Response({'error': 'Nombre y sucursal_id son requeridos'}, status=status.HTTP_400_BAD_REQUEST)
@@ -2604,25 +2754,41 @@ class BuscarProductosSimilaresSucursalView(APIView):
             stock__gt=0
         ).values_list('productos_fk', flat=True)
 
-        queryset = Productos.objects.filter(
-            id_prodc__in=productos_con_stock,
-            nombre_prodc__icontains=nombre
-        )
-        if marca:
-            queryset = queryset.filter(marca_fk__nombre_mprod__icontains=marca)
-        if categoria:
-            queryset = queryset.filter(categoria_fk__nombre__icontains=categoria)
-
-        serializer = ProductoSucursalSerializer(queryset, many=True, context={'request': request})
-        productos_serializados = serializer.data
-        return Response({'productos_similares': productos_serializados}, status=status.HTTP_200_OK)
+        queryset = Productos.objects.filter(id_prodc__in=productos_con_stock)
+        
+        # PRIORIDAD 1: Buscar por código interno exacto
+        if codigo_interno:
+            productos_similares = queryset.filter(codigo_interno=codigo_interno)
+            if productos_similares.exists():
+                serializer = ProductoSucursalSerializer(productos_similares, many=True, context={'request': request})
+                return Response({'productos_similares': serializer.data}, status=status.HTTP_200_OK)
+        
+        # PRIORIDAD 2: Buscar por nombre exacto (sin importar marca/categoría)
+        nombre_normalizado = nombre.strip().lower()
+        productos_similares = queryset.filter(nombre_prodc__iexact=nombre_normalizado)
+        if productos_similares.exists():
+            serializer = ProductoSucursalSerializer(productos_similares, many=True, context={'request': request})
+            return Response({'productos_similares': serializer.data}, status=status.HTTP_200_OK)
+        
+        # PRIORIDAD 3: Solo si no encontramos por nombre, buscar por marca y categoría
+        if marca and categoria:
+            productos_similares = queryset.filter(
+                nombre_prodc__icontains=nombre,
+                marca_fk__nombre_mprod__icontains=marca,
+                categoria_fk__nombre__icontains=categoria
+            )
+            serializer = ProductoSucursalSerializer(productos_similares, many=True, context={'request': request})
+            return Response({'productos_similares': serializer.data}, status=status.HTTP_200_OK)
+        
+        # Si no encontramos nada, retornar lista vacía
+        return Response({'productos_similares': []}, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def historial_producto(request, producto_id):
     """
-    Obtiene el historial completo de un producto específico.
-    Incluye movimientos de inventario, estadísticas y evolución del stock.
+    Obtiene el historial completo de un producto específico para una ubicación (sucursal o bodega).
+    Incluye movimientos de inventario, estadísticas y evolución del stock SOLO para esa ubicación.
     """
     try:
         # Verificar que el producto existe
@@ -2633,63 +2799,49 @@ def historial_producto(request, producto_id):
                 'error': 'Producto no encontrado'
             }, status=status.HTTP_404_NOT_FOUND)
 
-        # Obtener movimientos de inventario del producto ordenados por fecha (más reciente primero)
-        movimientos = MovInventario.objects.filter(
-            productos_fk=producto
-        ).select_related(
-            'usuario_fk', 'productos_fk__bodega_fk', 'productos_fk__sucursal_fk'
-        ).order_by('-fecha', '-id_mvin')  # Ordenar por fecha descendente y luego por ID descendente
+        # Obtener parámetros de ubicación
+        sucursal_id = request.GET.get('sucursal_id')
+        bodega_id = request.GET.get('bodega_id')
+        stock_obj = None
+        stock_filter = {'productos_fk': producto}
+        ubicacion_str = "Sin ubicación"
 
-        # Serializar movimientos
+        if bodega_id:
+            stock_filter['bodega_fk'] = int(bodega_id)
+            ubicacion_str = f"Bodega: {BodegaCentral.objects.get(id_bdg=bodega_id).nombre_bdg}"
+        elif sucursal_id:
+            stock_filter['sucursal_fk'] = int(sucursal_id)
+            ubicacion_str = f"Sucursal: {Sucursal.objects.get(id=sucursal_id).nombre_sucursal}"
+        # Buscar el registro de stock para la ubicación
+        stock_obj = Stock.objects.filter(**stock_filter).first()
+        if not stock_obj:
+            return Response({'error': 'No existe stock para este producto en la ubicación indicada'}, status=404)
+
+        # Filtrar movimientos SOLO de esa ubicación (por stock_fk)
+        movimientos = MovInventario.objects.filter(
+            productos_fk=producto,
+            stock_fk=stock_obj
+        ).select_related('usuario_fk').order_by('-fecha', '-id_mvin')
+
         movimientos_serializer = MovInventarioSerializer(movimientos, many=True)
 
-        # Calcular estadísticas del producto
+        # Calcular estadísticas SOLO de esa ubicación
         total_movimientos = movimientos.count()
         entradas = movimientos.filter(cantidad__gt=0).count()
         salidas = movimientos.filter(cantidad__lt=0).count()
         ajustes = movimientos.filter(cantidad=0).count()
-        
-        suma_entradas = movimientos.filter(cantidad__gt=0).aggregate(
-            total=models.Sum('cantidad')
-        )['total'] or 0
-        suma_salidas = abs(movimientos.filter(cantidad__lt=0).aggregate(
-            total=models.Sum('cantidad')
-        )['total'] or 0)
+        suma_entradas = movimientos.filter(cantidad__gt=0).aggregate(total=models.Sum('cantidad'))['total'] or 0
+        suma_salidas = abs(movimientos.filter(cantidad__lt=0).aggregate(total=models.Sum('cantidad'))['total'] or 0)
 
-        # Obtener stock actual
-        stock_actual = 0
-        if producto.bodega_fk:
-            try:
-                # Usar el ID de la bodega, no el objeto completo
-                bodega_id = producto.bodega_fk.id_bdg if hasattr(producto.bodega_fk, 'id_bdg') else producto.bodega_fk
-                stock_obj = Stock.objects.filter(
-                    productos_fk=producto,
-                    bodega_fk=bodega_id
-                ).first()
-            except AttributeError:
-                stock_obj = None
-        elif producto.sucursal_fk:
-            try:
-                # Usar el ID de la sucursal, no el objeto completo
-                sucursal_id = producto.sucursal_fk.id if hasattr(producto.sucursal_fk, 'id') else producto.sucursal_fk
-                stock_obj = Stock.objects.filter(
-                    productos_fk=producto,
-                    sucursal_fk=sucursal_id
-                ).first()
-            except AttributeError:
-                stock_obj = None
-        else:
-            stock_obj = None
+        # Stock actual de la ubicación
+        stock_actual = float(stock_obj.stock)
+        stock_minimo = float(stock_obj.stock_minimo) if stock_obj.stock_minimo else 0
+        stock_maximo = float(stock_obj.stock_maximo) if stock_obj.stock_maximo else 0
 
-        if stock_obj:
-            stock_actual = float(stock_obj.stock)
-
-        # --- MODIFICACIÓN: Calcular timeline desde el stock real actual ---
+        # Timeline SOLO con movimientos de esa ubicación
         timeline = []
-        movimientos_ordenados = list(movimientos.order_by('-fecha', '-id_mvin'))  # Más recientes primero
-        
-        # Calcular el stock acumulado hacia atrás
-        stock_acumulado = stock_actual  # Partimos del stock real actual
+        movimientos_ordenados = list(movimientos.order_by('-fecha', '-id_mvin'))
+        stock_acumulado = stock_actual
         for mov in movimientos_ordenados:
             stock_despues = stock_acumulado
             stock_antes = stock_despues - mov.cantidad
@@ -2705,11 +2857,8 @@ def historial_producto(request, producto_id):
                 'color': '#4CAF50' if mov.cantidad > 0 else '#F44336' if mov.cantidad < 0 else '#FF9800'
             })
             stock_acumulado = stock_antes
-        # El timeline ya está en orden de más reciente a más antiguo
-        # Si quieres mostrarlo de más antiguo a más reciente, haz: timeline.reverse()
-        stock_actual_final = timeline[0]['stock_despues'] if timeline else 0
+        stock_actual_final = timeline[0]['stock_despues'] if timeline else stock_actual
 
-        # Información del producto
         producto_info = {
             'id_prodc': producto.id_prodc,
             'nombre_prodc': producto.nombre_prodc,
@@ -2718,13 +2867,12 @@ def historial_producto(request, producto_id):
             'marca': producto.marca_fk.nombre_mprod if producto.marca_fk else 'Sin marca',
             'categoria': producto.categoria_fk.nombre if producto.categoria_fk else 'Sin categoría',
             'fecha_creacion': producto.fecha_creacion.isoformat() if producto.fecha_creacion else None,
-            'ubicacion': f"Bodega: {producto.bodega_fk.nombre_bdg}" if producto.bodega_fk else f"Sucursal: {producto.sucursal_fk.nombre_sucursal}" if producto.sucursal_fk else "Sin ubicación",
-            'stock_actual': stock_actual_final,  # Usar el stock del último movimiento del timeline
-            'stock_minimo': float(stock_obj.stock_minimo) if stock_obj and stock_obj.stock_minimo else 0,
-            'stock_maximo': float(stock_obj.stock_maximo) if stock_obj and stock_obj.stock_maximo else 0,
+            'ubicacion': ubicacion_str,
+            'stock_actual': stock_actual_final,
+            'stock_minimo': stock_minimo,
+            'stock_maximo': stock_maximo,
         }
 
-        # Estadísticas del producto
         estadisticas_producto = {
             'total_movimientos': total_movimientos,
             'entradas': {
@@ -2753,7 +2901,8 @@ def historial_producto(request, producto_id):
     except Exception as e:
         logger.error(f"Error obteniendo historial del producto {producto_id}: {str(e)}")
         return Response({
-            'error': 'Error interno del servidor'
+            'error': 'Error interno del servidor',
+            'detalle': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
@@ -2917,3 +3066,180 @@ def productos_con_movimientos_recientes(request):
         return Response({
             'error': f'Error interno del servidor: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ===== ENDPOINTS PARA PRODUCTOS DESACTIVADOS =====
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def productos_desactivados(request):
+    """Obtiene todos los productos desactivados"""
+    try:
+        # Obtener parámetros de filtrado
+        bodega_id = request.query_params.get('bodega_id')
+        sucursal_id = request.query_params.get('sucursal_id')
+        search = request.query_params.get('search', '').strip()
+        
+        # Filtro base para productos desactivados
+        queryset = Productos.objects.filter(activo=False)
+        
+        # Aplicar filtros adicionales
+        if bodega_id:
+            queryset = queryset.filter(bodega_fk=bodega_id)
+        elif sucursal_id:
+            queryset = queryset.filter(sucursal_fk=sucursal_id)
+        
+        # Búsqueda por nombre o código
+        if search:
+            queryset = queryset.filter(
+                models.Q(nombre_prodc__icontains=search) |
+                models.Q(codigo_interno__icontains=search)
+            )
+        
+        # Ordenar por fecha de creación (más recientes primero)
+        queryset = queryset.order_by('-fecha_creacion')
+        
+        # Serializar los productos
+        productos_data = []
+        for producto in queryset:
+            # Obtener información del stock
+            stock_actual = 0
+            stock_minimo = 0
+            stock_maximo = 0
+            
+            if producto.bodega_fk:
+                stock_obj = Stock.objects.filter(
+                    productos_fk=producto,
+                    bodega_fk=producto.bodega_fk.id_bdg
+                ).first()
+            elif producto.sucursal_fk:
+                stock_obj = Stock.objects.filter(
+                    productos_fk=producto,
+                    sucursal_fk=producto.sucursal_fk.id
+                ).first()
+            else:
+                stock_obj = None
+            
+            if stock_obj:
+                stock_actual = float(stock_obj.stock)
+                stock_minimo = float(stock_obj.stock_minimo) if stock_obj.stock_minimo else 0
+                stock_maximo = float(stock_obj.stock_maximo) if stock_obj.stock_maximo else 0
+            
+            productos_data.append({
+                'id': producto.id_prodc,
+                'nombre': producto.nombre_prodc,
+                'codigo': producto.codigo_interno,
+                'descripcion': producto.descripcion_prodc or '',
+                'marca': {
+                    'id': producto.marca_fk.id_mprod,
+                    'nombre': producto.marca_fk.nombre_mprod
+                } if producto.marca_fk else None,
+                'categoria': {
+                    'id': producto.categoria_fk.id,
+                    'nombre': producto.categoria_fk.nombre
+                } if producto.categoria_fk else None,
+                'bodega': {
+                    'id': producto.bodega_fk.id_bdg,
+                    'nombre': producto.bodega_fk.nombre_bdg
+                } if producto.bodega_fk else None,
+                'sucursal': {
+                    'id': producto.sucursal_fk.id,
+                    'nombre': producto.sucursal_fk.nombre_sucursal
+                } if producto.sucursal_fk else None,
+                'fecha_creacion': producto.fecha_creacion,
+                'stock': {
+                    'actual': stock_actual,
+                    'minimo': stock_minimo,
+                    'maximo': stock_maximo
+                }
+            })
+        
+        return Response({
+            'productos': productos_data,
+            'total': len(productos_data)
+        })
+        
+    except Exception as e:
+        return Response({
+            'error': f'Error al obtener productos desactivados: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reactivar_productos(request):
+    """Reactiva múltiples productos seleccionados"""
+    try:
+        producto_ids = request.data.get('producto_ids', [])
+        
+        if not producto_ids:
+            return Response({
+                'error': 'Debe seleccionar al menos un producto para reactivar'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verificar que todos los productos existan y estén desactivados
+        productos_desactivados = Productos.objects.filter(
+            id_prodc__in=producto_ids,
+            activo=False
+        )
+        
+        if len(productos_desactivados) != len(producto_ids):
+            return Response({
+                'error': 'Algunos productos no existen o ya están activos'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Reactivar productos
+        productos_reactivados = []
+        for producto in productos_desactivados:
+            producto.activo = True
+            producto.save()
+            
+            productos_reactivados.append({
+                'id': producto.id_prodc,
+                'nombre': producto.nombre_prodc,
+                'codigo': producto.codigo_interno
+            })
+        
+        return Response({
+            'message': f'Se reactivaron {len(productos_reactivados)} productos exitosamente',
+            'productos_reactivados': productos_reactivados
+        })
+        
+    except Exception as e:
+        return Response({
+            'error': f'Error al reactivar productos: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reactivar_producto_individual(request, producto_id):
+    """Reactiva un producto individual"""
+    try:
+        try:
+            producto = Productos.objects.get(id_prodc=producto_id, activo=False)
+        except Productos.DoesNotExist:
+            return Response({
+                'error': 'Producto no encontrado o ya está activo'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Reactivar el producto
+        producto.activo = True
+        producto.save()
+        
+        return Response({
+            'message': f'Producto "{producto.nombre_prodc}" reactivado exitosamente',
+            'producto': {
+                'id': producto.id_prodc,
+                'nombre': producto.nombre_prodc,
+                'codigo': producto.codigo_interno
+            }
+        })
+        
+    except Exception as e:
+        return Response({
+            'error': f'Error al reactivar producto: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class HistorialEstadoPedidoView(APIView):
+    def get(self, request, pedido_id):
+        historial = HistorialEstadoPedido.objects.filter(pedido_fk=pedido_id).order_by('fecha')
+        serializer = HistorialEstadoPedidoSerializer(historial, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
