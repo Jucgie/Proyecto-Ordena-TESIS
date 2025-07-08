@@ -88,10 +88,11 @@ export function Grafics_b() {
   //Se obtiene la cantidad de pedidos según el día.
   pedidosMostrados.forEach(p => {
     if (p.fecha_entrega){
-      const fecha = formatFechaChile(p.fecha_entrega);
-
-      const dia = (fecha.getDay() + 6) % 7; // 
-      pedidosPorDia[dia]++;
+      const fechaObj = new Date(p.fecha_entrega);
+      if (!isNaN(fechaObj.getTime())) {
+        const dia = (fechaObj.getDay() + 6) % 7; // Lunes=0, Domingo=6
+        pedidosPorDia[dia]++;
+      }
     }
   });
 

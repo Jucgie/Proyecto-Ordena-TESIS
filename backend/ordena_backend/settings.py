@@ -59,15 +59,12 @@ WSGI_APPLICATION = 'ordena_backend.wsgi.application'
 # Configuración de la base de datos
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': os.getenv('DB_NAME'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST'),
-        'PORT': os.getenv('DB_PORT'),
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'ordena',      # El nombre de tu base local
+        'USER': 'postgres',           # Tu usuario local de postgres
+        'PASSWORD': '123',    # Tu contraseña local
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 

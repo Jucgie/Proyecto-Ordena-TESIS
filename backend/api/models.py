@@ -191,7 +191,7 @@ class PersonalEntrega(models.Model):
     id_psn = models.BigAutoField(primary_key=True)
     usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='usuario_fk')
     nombre_psn = models.CharField(max_length=255)
-    descripcion = models.CharField(max_length=255)
+    descripcion_psn = models.CharField(max_length=255)
     patente = models.CharField(max_length=255)
 
     class Meta:
@@ -352,6 +352,7 @@ class MovInventario(models.Model):
     fecha = models.DateTimeField()
     productos_fk = models.ForeignKey(Productos, on_delete=models.CASCADE)
     usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='usuario_fk')
+    motivo = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'mov_inventario'
@@ -445,3 +446,22 @@ class Informe(models.Model):
     @property
     def id(self):
         return self.id_informe
+
+class UsuarioNotificacion(models.Model):
+    id_ntf_us = models.AutoField(primary_key=True)
+    usuario = models.ForeignKey(
+        Usuario,
+        on_delete=models.CASCADE,
+        db_column='usuario_id'
+    )
+    notificacion = models.ForeignKey(
+        Notificacion,
+        on_delete=models.CASCADE,
+        db_column='notificacion_id'
+    )
+    leida = models.BooleanField(default=False)
+    eliminada = models.BooleanField(default=False)
+    fecha_recibida = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'usuario_notificacion'

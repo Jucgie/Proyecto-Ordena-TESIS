@@ -74,24 +74,27 @@ export function PedidoHistorial({ setPedido }: Props) {
         fetchPedidos(params);
     }, [fetchPedidos, usuario]);
 
+    // Siempre trabajar con un array seguro
+    const pedidosArray = Array.isArray(pedidos) ? pedidos : [];
+
     // Estadísticas simples
-    const totalPedidos = pedidos.length;
-    const totalEntregados = pedidos.filter(p => p.estado_pedido_fk === 2).length; // Ajusta el valor según tu sistema
-    const totalPendientes = pedidos.filter(p => p.estado_pedido_fk === 1).length;
-    const totalProductos = pedidos.reduce((acc, p) => acc + (p.solicitud_fk?.productos?.reduce((a, prod) => a + Number(prod.cantidad), 0) || 0), 0);
+    const totalPedidos = pedidosArray.length;
+    const totalEntregados = pedidosArray.filter(p => p.estado_pedido_fk === 2).length; // Ajusta el valor según tu sistema
+    const totalPendientes = pedidosArray.filter(p => p.estado_pedido_fk === 1).length;
+    const totalProductos = pedidosArray.reduce((acc, p) => acc + (p.solicitud_fk?.productos?.reduce((a, prod) => a + Number(prod.cantidad), 0) || 0), 0);
     
     const sucursalesBusqueda = useMemo(() => {
-        const nombres = pedidos.map(p => p.sucursal_fk?.nombre_sucursal).filter(Boolean);
+        const nombres = pedidosArray.map(p => p.sucursal_fk?.nombre_sucursal).filter(Boolean);
         return [...new Set(nombres)];
-    }, [pedidos]);
+    }, [pedidosArray]);
 
     const usuariosBusqueda = useMemo(() => {
-        const nombresUs = pedidos.map(p => p.solicitud_fk?.usuario_nombre).filter(Boolean);
+        const nombresUs = pedidosArray.map(p => p.solicitud_fk?.usuario_nombre).filter(Boolean);
         return [...new Set(nombresUs)];
-    }, [pedidos]);
+    }, [pedidosArray]);
 
     const pedidosFiltros = useMemo(() => {
-        return pedidos.filter(pedido => {
+        return pedidosArray.filter(pedido => {
             const filtroSucursal = sucursalSeleccionada
             ? pedido.sucursal_fk?.nombre_sucursal === sucursalSeleccionada
             : true;
@@ -110,7 +113,7 @@ export function PedidoHistorial({ setPedido }: Props) {
             );
             return filtroSucursal && filtroBusqueda && filtroUsuario;
         });
-    }, [sucursalSeleccionada, pedidos, busqueda, usuarioSeleccionada]);
+    }, [sucursalSeleccionada, pedidosArray, busqueda, usuarioSeleccionada]);
 
     // Separar ingresos y salidas
     const ingresos = pedidosFiltros.filter(p => !!p.proveedor_fk || !!p.proveedor_nombre);
@@ -465,7 +468,7 @@ export function PedidoHistorial({ setPedido }: Props) {
                         </DialogTitle>
                         <DialogContent>
                             {(() => {
-                                const pedido = pedidos.find((p) => p.id_p === pedidoSeleccionado);
+                                const pedido = pedidosArray.find((p) => p.id_p === pedidoSeleccionado);
                                 if (!pedido) return <Typography>No se encontró el pedido.</Typography>;
                                 const detalles = pedido.detalles_pedido || [];
                                 // Detectar tipo de pedido

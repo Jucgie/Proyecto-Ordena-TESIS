@@ -3,7 +3,7 @@ from django.utils import timezone
 from .models import (
     BodegaCentral, Categoria, DetallePedido, EstadoPedido, Historial, Informe,
     Marca, Modulos, MovInventario, Notificacion, Pedidos, Permisos,
-    PersonalEntrega, Productos, Proveedor, Rol, Solicitudes, Stock, Sucursal, Usuario, Stock, SolicitudProductos
+    PersonalEntrega, Productos, Proveedor, Rol, Solicitudes, Stock, Sucursal, Usuario, Stock, SolicitudProductos, UsuarioNotificacion
 )
 import random
 
@@ -106,9 +106,12 @@ class ModulosSerializer(serializers.ModelSerializer):
 class MovInventarioSerializer(serializers.ModelSerializer):
     producto_nombre = serializers.CharField(source='productos_fk.nombre_prodc', read_only=True)
     producto_codigo = serializers.CharField(source='productos_fk.codigo_interno', read_only=True)
+    producto_id = serializers.CharField(source='productos_fk.id_prodc', read_only=True)
     usuario_nombre = serializers.CharField(source='usuario_fk.nombre', read_only=True)
     tipo_movimiento = serializers.SerializerMethodField()
     stock_actual = serializers.SerializerMethodField()
+    stock_antes = serializers.SerializerMethodField()
+    stock_despues = serializers.SerializerMethodField()
     ubicacion = serializers.SerializerMethodField()
     icono_movimiento = serializers.SerializerMethodField()
     color_movimiento = serializers.SerializerMethodField()
@@ -117,10 +120,22 @@ class MovInventarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = MovInventario
         fields = [
-            'id_mvin', 'cantidad', 'fecha', 'productos_fk', 'producto_nombre', 'producto_codigo',
-            'usuario_fk', 'usuario_nombre', 'tipo_movimiento', 'stock_actual', 'ubicacion',
+            'id_mvin', 'cantidad', 'fecha', 'productos_fk', 'producto_nombre', 'producto_codigo', 'producto_id',
+            'usuario_fk', 'usuario_nombre', 'tipo_movimiento', 'stock_actual', 'stock_antes', 'stock_despues', 'motivo', 'ubicacion',
             'icono_movimiento', 'color_movimiento', 'descripcion_movimiento'
         ]
+    
+    def to_representation(self, instance):
+        """Sobrescribe la representación para agregar logs de debug"""
+        representation = super().to_representation(instance)
+        
+        # Logs de debug para el motivo
+        print(f"🔍 DEBUG - Serializando movimiento {instance.id_mvin}:")
+        print(f"  - Motivo original: '{instance.motivo}' (longitud: {len(instance.motivo) if instance.motivo else 0})")
+        motivo_rep = representation.get('motivo')
+        print(f"  - Motivo en representation: '{motivo_rep}' (longitud: {len(motivo_rep) if motivo_rep else 0})")
+        
+        return representation
 
     def get_tipo_movimiento(self, obj):
         """Determina el tipo de movimiento basado en la cantidad"""
@@ -134,9 +149,64 @@ class MovInventarioSerializer(serializers.ModelSerializer):
     def get_stock_actual(self, obj):
         """Obtiene el stock actual del producto"""
         try:
-            stock_obj = Stock.objects.filter(productos_fk=obj.productos_fk).first()
+            if obj.productos_fk.bodega_fk:
+                bodega_id = obj.productos_fk.bodega_fk.id_bdg if hasattr(obj.productos_fk.bodega_fk, 'id_bdg') else obj.productos_fk.bodega_fk
+                stock_obj = Stock.objects.filter(
+                    productos_fk=obj.productos_fk,
+                    bodega_fk=bodega_id
+                ).first()
+            elif obj.productos_fk.sucursal_fk:
+                sucursal_id = obj.productos_fk.sucursal_fk.id if hasattr(obj.productos_fk.sucursal_fk, 'id') else obj.productos_fk.sucursal_fk
+                stock_obj = Stock.objects.filter(
+                    productos_fk=obj.productos_fk,
+                    sucursal_fk=sucursal_id
+                ).first()
+            else:
+                stock_obj = None
             return float(stock_obj.stock) if stock_obj else 0
-        except:
+        except Exception as e:
+            print(f"Error obteniendo stock actual: {e}")
+            return 0
+
+    def get_stock_antes(self, obj):
+        """Obtiene el stock antes del movimiento calculando desde el stock actual hacia atrás"""
+        try:
+            from api.models import MovInventario, Stock
+            
+            # Obtener el stock actual del producto
+            stock_actual = self.get_stock_actual(obj)
+            
+            # Obtener todos los movimientos del producto ordenados cronológicamente
+            movimientos = MovInventario.objects.filter(
+                productos_fk=obj.productos_fk
+            ).order_by('fecha', 'id_mvin')
+            
+            # Empezar desde el stock actual
+            stock_calculado = stock_actual
+            
+            # Recorrer todos los movimientos en orden inverso hasta encontrar el actual
+            for mov in reversed(list(movimientos)):
+                if mov.id_mvin == obj.id_mvin:
+                    # Encontramos el movimiento actual, retornar el stock calculado
+                    return stock_calculado
+                # Restar la cantidad del movimiento (invertir el efecto)
+                stock_calculado -= mov.cantidad
+            
+            # Si no encontramos el movimiento, retornar el stock calculado
+            return stock_calculado
+            
+        except Exception as e:
+            print(f"Error calculando stock antes: {e}")
+            return 0
+
+    def get_stock_despues(self, obj):
+        """Obtiene el stock después del movimiento actual"""
+        try:
+            stock_antes = self.get_stock_antes(obj)
+            # Simplemente sumar la cantidad (puede ser positiva o negativa)
+            return stock_antes + obj.cantidad
+        except Exception as e:
+            print(f"Error calculando stock después: {e}")
             return 0
 
     def get_ubicacion(self, obj):
@@ -187,6 +257,13 @@ class NotificacionSerializer(serializers.ModelSerializer):
             'tipo', 'leida', 'link', 'fecha_hora_ntd'
         ]
         read_only_fields = ['id_ntf', 'fecha_hora_ntd']
+
+class UsuarioNotificacionSerializer(serializers.ModelSerializer):
+    notificacion = NotificacionSerializer(read_only=True)
+
+    class Meta:
+        model = UsuarioNotificacion
+        fields = ['id_ntf_us', 'usuario', 'notificacion', 'leida', 'eliminada', 'fecha_recibida']
 
 class PedidosSerializer(serializers.ModelSerializer):
     sucursal_nombre = serializers.CharField(source='sucursal_fk.nombre_sucursal', read_only=True)
@@ -242,7 +319,7 @@ class PersonalEntregaSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = PersonalEntrega
-        fields = ['id_psn', 'usuario_fk', 'usuario_nombre', 'usuario_correo', 'nombre_psn', 'descripcion', 'patente']
+        fields = ['id_psn', 'usuario_fk', 'usuario_nombre', 'usuario_correo', 'nombre_psn', 'descripcion_psn', 'patente']
 
 class ProductosSerializer(serializers.ModelSerializer):
     class Meta:
@@ -491,6 +568,7 @@ class ProductoSerializer(serializers.ModelSerializer):
     stock_minimo_write = serializers.IntegerField(write_only=True, required=False, source='stock_minimo')
     stock_maximo = serializers.SerializerMethodField()
     stock_maximo_write = serializers.IntegerField(write_only=True, required=False, source='stock_maximo')
+    motivo = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     def get_stock(self, obj):
         try:
@@ -610,7 +688,8 @@ class ProductoSerializer(serializers.ModelSerializer):
             'id', 'id_prodc', 'nombre_prodc', 'descripcion_prodc', 'codigo_interno',
             'fecha_creacion', 'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre',
             'bodega_fk', 'bodega_nombre', 'sucursal_fk', 'sucursal_nombre',
-            'stock', 'stock_minimo', 'stock_maximo', 'stock_write', 'stock_minimo_write', 'stock_maximo_write'
+            'stock', 'stock_minimo', 'stock_maximo', 'stock_write', 'stock_minimo_write', 'stock_maximo_write',
+            'motivo'
         ]
         read_only_fields = ['id_prodc', 'fecha_creacion']
 
@@ -659,6 +738,10 @@ class ProductoSerializer(serializers.ModelSerializer):
         stock_data = validated_data.pop('stock', None)
         stock_minimo_data = validated_data.pop('stock_minimo', None)
         stock_maximo_data = validated_data.pop('stock_maximo', None)
+        motivo = validated_data.pop('motivo', None)  # Extraer el motivo pero no pasarlo al modelo
+        # Guardar el motivo en el contexto para que la vista pueda acceder a él
+        if motivo:
+            self.context['motivo'] = motivo
         # Actualiza los campos del producto principal
         instance = super().update(instance, validated_data)
         # Si se envió un nuevo stock, stock mínimo o stock máximo, actualiza la tabla Stock

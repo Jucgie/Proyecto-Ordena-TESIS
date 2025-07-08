@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, memo } from "react";
 import Layout from "../../components/layout/layout";
 import {
     Paper, Typography, Box, Button, TextField, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -13,20 +13,19 @@ import SearchIcon from '@mui/icons-material/Search';
 import WarningTwoToneIcon from '@mui/icons-material/WarningTwoTone';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
-import QrCodeIcon from '@mui/icons-material/QrCode';
-import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import Tooltip from '@mui/material/Tooltip';
 import sin_imagen from "../../assets/sin_imagen.png";
 import { useInventariosStore } from "../../store/useProductoStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { BODEGA_CENTRAL } from "../../constants/ubicaciones";
-import { useCallback } from "react";
 import CloseIcon from '@mui/icons-material/Close';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { COLORS } from '../../constants/colors';
 import { parseApiError } from '../../utils/errorUtils';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import MotivoAjusteModal from '../../components/inventario/MotivoAjusteModal';
 
 async function fetchImagenUnsplash(nombre: string): Promise<string> {
     const accessKey = "rz2WkwQyM7en1zvTElwVpAbqGaOroIHqoNCllxW1qlg";
@@ -133,7 +132,7 @@ export default function Inventario() {
     );
 
     const updateProducto = useCallback(
-        (ubicacionId: string, producto: ProductInt) => useInventariosStore.getState().updateProducto(ubicacionId, producto),
+        (ubicacionId: string, producto: ProductInt, motivo?: string) => useInventariosStore.getState().updateProducto(ubicacionId, producto, motivo),
         []
     );
 
@@ -188,6 +187,8 @@ export default function Inventario() {
     const [modalDetailOpen, setModalDetailOpen] = useState(false);
     const [modalFiltroOpen, setModalFiltroOpen] = useState(false);
     const [modalGestionOpen, setModalGestionOpen] = useState(false);
+    const [modalMotivoOpen, setModalMotivoOpen] = useState(false);
+    const [productoAjuste, setProductoAjuste] = useState<ProductInt | null>(null);
 
     // Producto seleccionado para editar/ver
     const [productoActual, setProductoActual] = useState<ProductInt | null>(null);
@@ -263,12 +264,24 @@ export default function Inventario() {
     };
 
     const handleQuickStockUpdate = async (updatedProduct: ProductInt) => {
+        setModalDetailOpen(false); // Cierra el modal de detalle
+        setTimeout(() => {
+            setProductoAjuste(updatedProduct);
+            setModalMotivoOpen(true);
+        }, 300); // Espera a que se cierre el modal anterior para evitar solapamiento
+    };
+
+    const handleConfirmarAjuste = async (motivo: string, producto: ProductInt) => {
+        console.log("🔍 DEBUG - handleConfirmarAjuste - Motivo recibido:", motivo);
+        console.log("🔍 DEBUG - handleConfirmarAjuste - Producto:", producto);
+        if (!producto || !producto.id_prodc) return;
         try {
-            if (updatedProduct.id_prodc) {
-                await updateProducto(ubicacionId, updatedProduct);
-                showSnackbar('Stock actualizado correctamente', 'success');
-                setModalDetailOpen(false);
-            }
+            await updateProducto(ubicacionId, producto, motivo);
+            showSnackbar('Stock ajustado correctamente', 'success');
+            setModalMotivoOpen(false);
+            setProductoAjuste(null);
+            // Refrescar productos
+            fetchProductos(ubicacionId);
         } catch (error: any) {
             const msg = parseApiError(error);
             setErrorModalMessage(msg as string);
@@ -723,161 +736,170 @@ export default function Inventario() {
     }) {
         const [editStock, setEditStock] = React.useState(false);
         const [newStock, setNewStock] = React.useState(product?.stock || 0);
+    
+
         React.useEffect(() => {
             setNewStock(product?.stock || 0);
             setEditStock(false);
         }, [product]);
+
         if (!product) return null;
+
         return (
-            <Dialog 
-                open={open} 
-                onClose={onClose} 
-                maxWidth="md" 
-                fullWidth
-                PaperProps={{
-                    sx: {
-                        backgroundColor: "#1a1a1a",
-                        borderRadius: 2,
-                    }
-                }}
-            >
-                <DialogTitle sx={{ 
-                    background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
-                    color: "#FFD700",
-                    borderBottom: "2px solid #FFD700",
-                    fontWeight: 600,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center"
-                }}>
-                    <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        📄 Detalles del Producto
-                    </Box>
-                    <IconButton onClick={onClose} sx={{ color: "#FFD700" }}>
-                        <CloseIcon />
-                    </IconButton>
-                </DialogTitle>
-                <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff", pt: '28px' }}>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '220px 1fr' }, gap: 4 }}>
-                        {/* Columna de la Imagen */}
-                        <Box>
-                            <CardMedia
-                                component="img"
-                                image={
-                                    typeof product.im === "string"
-                                        ? product.im
-                                        : product.im
-                                            ? URL.createObjectURL(product.im)
-                                            : sin_imagen
-                                }
-                                alt={product.name}
-                                sx={{ 
-                                    borderRadius: "8px", 
-                                    width: '100%',
-                                    height: 'auto',
-                                    maxHeight: 220,
-                                    objectFit: "cover",
-                                    border: '1px solid #333',
-                                    boxShadow: 3
-                                }}
-                            />
+            <>
+                <Dialog 
+                    open={open} 
+                    onClose={onClose} 
+                    maxWidth="md" 
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            backgroundColor: "#1a1a1a",
+                            borderRadius: 2,
+                        }
+                    }}
+                >
+                    <DialogTitle sx={{ 
+                        background: "linear-gradient(135deg, #232323 0%, #1a1a1a 100%)",
+                        color: "#FFD700",
+                        borderBottom: "2px solid #FFD700",
+                        fontWeight: 600,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center"
+                    }}>
+                        <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            📄 Detalles del Producto
                         </Box>
-                        {/* Columna de Detalles */}
-                        <Box>
-                            <Typography variant="h4" sx={{ color: "#FFD700", fontWeight: 700, mb: 1, letterSpacing: 1 }}>
-                                {product.name}
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
-                                <Chip label={product.code} sx={{ bgcolor: '#232323', color: '#FFD700', fontWeight: 700, fontSize: 16, px: 2 }} />
-                                <Chip label={product.brand} sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, fontSize: 16, px: 2 }} />
-                                <Chip label={product.category} sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, fontSize: 16, px: 2 }} />
+                        <IconButton onClick={onClose} sx={{ color: "#FFD700" }}>
+                            <CloseIcon />
+                        </IconButton>
+                    </DialogTitle>
+                    <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff", pt: '28px' }}>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '220px 1fr' }, gap: 4 }}>
+                            {/* Columna de la Imagen */}
+                            <Box>
+                                <CardMedia
+                                    component="img"
+                                    image={
+                                        typeof product.im === "string"
+                                            ? product.im
+                                            : product.im
+                                                ? URL.createObjectURL(product.im)
+                                                : sin_imagen
+                                    }
+                                    alt={product.name}
+                                    sx={{ 
+                                        borderRadius: "8px", 
+                                        width: '100%',
+                                        height: 'auto',
+                                        maxHeight: 220,
+                                        objectFit: "cover",
+                                        border: '1px solid #333',
+                                        boxShadow: 3
+                                    }}
+                                />
                             </Box>
-                            <Box sx={{ mb: 3 }}>
-                                <Typography variant="subtitle2" sx={{ color: "#E0E0E0", fontWeight: 500, mb: 1 }}>
-                                    Stock actual
+                            {/* Columna de Detalles */}
+                            <Box>
+                                <Typography variant="h4" sx={{ color: "#FFD700", fontWeight: 700, mb: 1, letterSpacing: 1 }}>
+                                    {product.name}
                                 </Typography>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <Chip 
-                                        label={product.stock + (product.stock === 1 ? ' unidad' : ' unidades')}
-                                        sx={{ 
-                                            bgcolor: product.stock === 0 ? '#F44336' : product.stock < product.stock_minimo ? '#FF9800' : product.stock > product.stock_maximo ? '#4caf50' : '#232323',
-                                            color: product.stock === 0 ? '#fff' : '#FFD700',
-                                            fontWeight: 700, fontSize: 22, px: 3, py: 2, height: 48, fontFamily: 'monospace', letterSpacing: 1.5
-                                        }}
-                                    />
-                                    {!editStock ? (
-                                        <Button size="small" variant="outlined" sx={{ color: '#FFD700', borderColor: '#FFD700', fontWeight: 700 }} onClick={() => setEditStock(true)}>
-                                            Editar stock
-                                        </Button>
-                                    ) : (
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <TextField
-                                                type="number"
-                                                value={newStock}
-                                                onChange={e => setNewStock(Number(e.target.value))}
-                                                size="small"
-                                                sx={{ width: 90, bgcolor: '#232323', input: { color: '#FFD700', fontWeight: 700, fontSize: 20, textAlign: 'center' } }}
-                                                inputProps={{ min: 0 }}
-                                            />
-                                            <Button size="small" variant="contained" sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}
-                                                onClick={async () => {
-                                                    await onQuickStockUpdate({ ...product, stock: newStock });
-                                                    setEditStock(false);
-                                                }}>
-                                                Guardar
-                                            </Button>
-                                            <Button size="small" variant="outlined" sx={{ color: '#FFD700', borderColor: '#FFD700', fontWeight: 700 }} onClick={() => { setEditStock(false); setNewStock(product.stock); }}>
-                                                Cancelar
-                                            </Button>
-                                        </Box>
-                                    )}
+                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+                                    <Chip label={product.code} sx={{ bgcolor: '#232323', color: '#FFD700', fontWeight: 700, fontSize: 16, px: 2 }} />
+                                    <Chip label={product.brand} sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, fontSize: 16, px: 2 }} />
+                                    <Chip label={product.category} sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, fontSize: 16, px: 2 }} />
                                 </Box>
-                                <Typography variant="caption" sx={{ color: '#888', display: 'block', mt: 1 }}>
-                                    Mínimo: {product.stock_minimo} | Máximo: {product.stock_maximo}
+                                <Box sx={{ mb: 3 }}>
+                                    <Typography variant="subtitle2" sx={{ color: "#E0E0E0", fontWeight: 500, mb: 1 }}>
+                                        Stock actual
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                        <Chip 
+                                            label={product.stock + (product.stock === 1 ? ' unidad' : ' unidades')}
+                                            sx={{ 
+                                                bgcolor: product.stock === 0 ? '#F44336' : product.stock < product.stock_minimo ? '#FF9800' : product.stock > product.stock_maximo ? '#4caf50' : '#232323',
+                                                color: product.stock === 0 ? '#fff' : '#FFD700',
+                                                fontWeight: 700, fontSize: 22, px: 3, py: 2, height: 48, fontFamily: 'monospace', letterSpacing: 1.5
+                                            }}
+                                        />
+                                        {!editStock ? (
+                                            <Button size="small" variant="outlined" sx={{ color: '#FFD700', borderColor: '#FFD700', fontWeight: 700 }} onClick={() => setEditStock(true)}>
+                                                Editar stock
+                                            </Button>
+                                        ) : (
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <TextField
+                                                    type="number"
+                                                    value={newStock}
+                                                    onChange={e => setNewStock(Number(e.target.value))}
+                                                    size="small"
+                                                    sx={{ width: 90, bgcolor: '#232323', input: { color: '#FFD700', fontWeight: 700, fontSize: 20, textAlign: 'center' } }}
+                                                    inputProps={{ min: 0 }}
+                                                />
+                                                <Button size="small" variant="contained" sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}
+                                                    onClick={async () => {
+                                                        await onQuickStockUpdate({ ...product, stock: newStock });
+                                                        setEditStock(false);
+                                                    }}>
+                                                    Guardar
+                                                </Button>
+                                                <Button size="small" variant="outlined" sx={{ color: '#FFD700', borderColor: '#FFD700', fontWeight: 700 }} onClick={() => { setEditStock(false); setNewStock(product.stock); }}>
+                                                    Cancelar
+                                                </Button>
+                                            </Box>
+                                        )}
+                                    </Box>
+                                    <Typography variant="caption" sx={{ color: '#888', display: 'block', mt: 1 }}>
+                                        Mínimo: {product.stock_minimo} | Máximo: {product.stock_maximo}
+                                    </Typography>
+                                </Box>
+                                <Typography variant="subtitle1" sx={{ color: "#E0E0E0", fontWeight: 500, borderBottom: '1px solid #333', pb: 1, mb: 2 }}>
+                                    Descripción
+                                </Typography>
+                                <Typography sx={{ color: "#BDBDBD", lineHeight: 1.6 }}>
+                                    {product.description}
                                 </Typography>
                             </Box>
-                            <Typography variant="subtitle1" sx={{ color: "#E0E0E0", fontWeight: 500, borderBottom: '1px solid #333', pb: 1, mb: 2 }}>
-                                Descripción
-                            </Typography>
-                            <Typography sx={{ color: "#BDBDBD", lineHeight: 1.6 }}>
-                                {product.description}
-                            </Typography>
                         </Box>
-                    </Box>
-                </DialogContent>
-                <DialogActions sx={{ 
-                    bgcolor: "#1a1a1a", 
-                    borderTop: "1px solid #333",
-                    p: 2 
-                }}>
-                    <Button 
-                        onClick={onClose}
-                        variant="outlined"
-                        sx={{ 
-                            color: "#FFD700",
-                            borderColor: "#FFD700",
-                            borderWidth: 1.5,
-                            fontWeight: 600,
-                            '&:hover': { background: "#FFD70022", borderColor: "#FFD700" }
-                        }}
-                    >
-                        Cerrar
-                    </Button>
-                    <Button 
-                        onClick={() => onEdit(product)} 
-                        startIcon={<EditIcon />} 
-                        variant="contained" 
-                        sx={{
-                            background: "#4CAF50",
-                            color: "#fff",
-                            fontWeight: 700,
-                            '&:hover': { background: "#45a049" }
-                        }}
-                    >
-                        Editar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                    </DialogContent>
+                    <DialogActions sx={{ 
+                        bgcolor: "#1a1a1a", 
+                        borderTop: "1px solid #333",
+                        p: 2 
+                    }}>
+
+                        <Button 
+                            onClick={onClose}
+                            variant="outlined"
+                            sx={{ 
+                                color: "#FFD700",
+                                borderColor: "#FFD700",
+                                borderWidth: 1.5,
+                                fontWeight: 600,
+                                '&:hover': { background: "#FFD70022", borderColor: "#FFD700" }
+                            }}
+                        >
+                            Cerrar
+                        </Button>
+                        <Button 
+                            onClick={() => onEdit(product)} 
+                            startIcon={<EditIcon />} 
+                            variant="contained" 
+                            sx={{
+                                background: "#4CAF50",
+                                color: "#fff",
+                                fontWeight: 700,
+                                '&:hover': { background: "#45a049" }
+                            }}
+                        >
+                            Editar
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+
+            </>
         );
     }
 
@@ -1453,14 +1475,16 @@ export default function Inventario() {
                     </Typography>
                     {/* Barra de acciones */}
                     <Box sx={{ display: "flex", gap: 2, mb: 3, alignItems: "center" }}>
-                        <Button
-                            startIcon={<AddIcon />}
-                            variant="contained"
-                            sx={{ bgcolor: "#FFD700", color: "#232323", fontWeight: 600 }}
-                            onClick={() => setModalAddOpen(true)}
-                        >
-                            Añadir
-                        </Button>
+                        {ubicacionId === "bodega_central" && (
+                            <Button
+                                startIcon={<AddIcon />}
+                                variant="contained"
+                                sx={{ bgcolor: "#FFD700", color: "#232323", fontWeight: 600 }}
+                                onClick={() => setModalAddOpen(true)}
+                            >
+                                Añadir
+                            </Button>
+                        )}
                         <Button
                             startIcon={<DeleteIcon />}
                             variant="contained"
@@ -1823,6 +1847,13 @@ export default function Inventario() {
                 onClose={() => setSnackbar(s => ({ ...s, open: false }))}
                 message={snackbar.message}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            />
+            {/* Modal para motivo de ajuste */}
+            <MotivoAjusteModal
+              open={modalMotivoOpen}
+              productoAjuste={productoAjuste}
+              onClose={() => setModalMotivoOpen(false)}
+              onConfirm={handleConfirmarAjuste}
             />
         </Layout>
     );

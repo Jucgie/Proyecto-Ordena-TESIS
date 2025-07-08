@@ -39,7 +39,7 @@ interface InventariosState {
     marcas: { [ubicacionId: string]: { id: number; nombre: string }[] };
     categorias: { [ubicacionId: string]: { id: number; nombre: string }[] };
     addProducto: (ubicacionId: string, producto: ProductInt) => Promise<void>;
-    updateProducto: (ubicacionId: string, producto: ProductInt) => Promise<void>;
+    updateProducto: (ubicacionId: string, producto: ProductInt, motivo?: string) => Promise<void>;
     desactivarProductos: (ubicacionId: string, ids: string[]) => Promise<void>;
     addMarca: (ubicacionId: string, marca: string) => Promise<void>;
     deleteMarca: (ubicacionId: string, marcaId: number) => Promise<void>;
@@ -133,10 +133,11 @@ export const useInventariosStore = create<InventariosState>()(
                 }
             },
 
-            updateProducto: async (ubicacionId: string, producto: ProductInt) => {
+            updateProducto: async (ubicacionId: string, producto: ProductInt, motivo?: string) => {
+                console.log("🔍 DEBUG - Store - updateProducto llamado con motivo:", motivo);
                 try {
                     if (producto.id_prodc) {
-                        const productoActualizadoBackend = await productoService.updateProducto(producto.id_prodc.toString(), producto, ubicacionId);
+                        const productoActualizadoBackend = await productoService.updateProducto(producto.id_prodc.toString(), producto, ubicacionId, motivo);
                         const productoActualizadoFrontend = mapBackendToFrontend(productoActualizadoBackend);
                         set(state => ({
                             inventarios: {

@@ -76,9 +76,12 @@ export default function PedidosSucursal() {
             clearPedidos();
             
             // Obtener pedidos desde la base de datos filtrados por sucursal destino
-            const pedidosDB = await pedidosService.getPedidos({ 
+            const pedidosDBRaw = await pedidosService.getPedidos({ 
                 sucursal_id: sucursalActualId.toString() 
             });
+            const pedidosDB = Array.isArray(pedidosDBRaw)
+                ? pedidosDBRaw
+                : pedidosDBRaw.results || [];
             
             // Transformar los datos de la BD al formato esperado por el frontend
             const pedidosTransformados = pedidosDB.map((pedidoDB: any) => {

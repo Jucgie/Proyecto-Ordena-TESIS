@@ -146,9 +146,13 @@ export const useBodegaStore = create<BodegaState>()(
       fetchBodegas: async () => {
         try {
           // Asumimos que tu servicio tiene un método para obtener las bodegas
-          const bodegasData = await historialService.getBodegas()
+          const bodegasData = await historialService.getBodegas();
+          // Adaptación para aceptar array o paginación tipo DRF
+          const bodegasArray = Array.isArray(bodegasData)
+            ? bodegasData
+            : bodegasData.results || [];
           // Mapeamos por si los nombres de la API no coinciden exactamente con la interfaz
-          const bodegasMapeadas = bodegasData.map((b: any) => ({
+          const bodegasMapeadas = bodegasArray.map((b: any) => ({
             id: b.id || b.id_bdg, // Acepta 'id' o 'id_bdg' del backend
             bodega_nombre: b.bodega_nombre || b.nombre_bdg, // Acepta ambos nombres
             direccion: b.direccion,
