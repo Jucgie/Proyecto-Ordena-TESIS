@@ -3,13 +3,16 @@ import { Pie } from 'react-chartjs-2';
 
 import styled from 'styled-components';
 
-import {useMemo } from 'react';
+import {useMemo, useState } from 'react';
 //import { each } from 'chart.js/helpers';
 
 //Obtención de datos de la api por medio del archivo store
 import { useBodegaStore } from '../../store/useBodegaStore';
 import { useHistorialStore } from "../../store/useHistorialStore";
 import { useAuthStore } from '../../store/useAuthStore';
+
+import Radio from '@mui/material/Radio';
+
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -20,6 +23,9 @@ export function Grafics_Pie() {
   const pedidos = useHistorialStore(state=>state.pedidos);
   const solicitudesTransferidas = useBodegaStore(state=>state.solicitudesTransferidas);
   const {usuario} = useAuthStore();
+
+  const [filtroTipo, setFiltroTipo] = useState('todos');
+
   
 
   //Definición de Memo para guardar datos previos, evitanto cargar constantemente si no hay cambios 
@@ -35,10 +41,20 @@ export function Grafics_Pie() {
       // Las sucursales no ven las solicitudes pendientes de despacho en la bodega
     }
 
+    //filtro
+    let pedidosFiltro = pedidosMostrados;
 
-      const pedidosEnCamino = pedidosMostrados.filter(p => p.estado_pedido_fk === 1).length;
-      const pedidosCompletados = pedidosMostrados.filter(p => p.estado_pedido_fk === 2).length;
-      const pedidosPendientes = pedidosMostrados.filter(p => p.estado_pedido_fk === 3).length;
+    if (usuario?.tipo === 'bodega') {
+      if(filtroTipo === 'sucursales'){
+        pedidosFiltro = pedidosMostrados.filter(p=>p.sucursal_fk !== null);
+      }else if (filtroTipo === 'proveedores'){
+        pedidosFiltro = pedidosMostrados.filter(p => p.sucursal_fk == null);
+      }
+    }
+//
+      const pedidosEnCamino = pedidosFiltro.filter(p => p.estado_pedido_fk === 1).length;
+      const pedidosCompletados = pedidosFiltro.filter(p => p.estado_pedido_fk === 2).length;
+      const pedidosPendientes = pedidosFiltro.filter(p => p.estado_pedido_fk === 3).length;
       
         const counts=[
           
@@ -70,15 +86,46 @@ export function Grafics_Pie() {
   ],
 };
 
-}, [pedidos, solicitudesTransferidas,usuario]);
+}, [pedidos, solicitudesTransferidas,usuario,filtroTipo]);
 
   return (
 
     <Container>
-    <Pie 
-    data={data}
-    
-    />
+      {usuario?.tipo === 'bodega' && (
+        <FilterContainer>
+          <label>
+          <Radio value={"todos"} 
+            checked={filtroTipo === 'todos'} 
+            onChange={() => setFiltroTipo('todos')} 
+            sx={{color:'white', 
+              '&.Mui-checked': {
+            color: "yellow",
+          }}}/>
+            Todos
+          </label>
+          <label>
+            <Radio value="sucursales" 
+              checked={filtroTipo === 'sucursales'} 
+              onChange={()=>setFiltroTipo('sucursales')} 
+              sx={{color:'white', '&.Mui-checked': {
+            color: "yellow",
+          }}}/>
+            Sucursales
+          </label>
+          <label>
+            <Radio value={"proveedores"} 
+              checked={filtroTipo === 'proveedores'} 
+              onChange={() => setFiltroTipo('proveedores')}
+              sx={{color:'white', '&.Mui-checked': {
+            color: "yellow",
+          }}}/>
+            Proveedores
+          </label>
+        </FilterContainer>
+      )}
+      <ChartWrapper>
+        <Pie data={data} />
+      </ChartWrapper>
     </Container>
 
   );
@@ -90,3 +137,25 @@ const Container = styled.div`
     width: 100%;
     height: 100%;
 `
+const ChartWrapper = styled.div`
+  position: relative;
+  width: 100%;
+  height: 100%;
+`;
+
+const FilterContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 10px;
+  color: #ccc;
+  font-size: 14px;
+
+  label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: white;
+  }
+`;
