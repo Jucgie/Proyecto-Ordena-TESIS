@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.utils import timezone
+import pytz
 from .models import (
     BodegaCentral, Categoria, DetallePedido, EstadoPedido, Historial, Informe,
     Marca, Modulos, MovInventario, Notificacion, Pedidos, Permisos,
@@ -50,12 +51,14 @@ class EstadoPedidoSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class HistorialSerializer(serializers.ModelSerializer):
+    fecha = serializers.DateTimeField(format=None)
     class Meta:
         model = Historial
         fields = '__all__'
 
 class InformeSerializer(serializers.ModelSerializer):
     usuario_nombre = serializers.CharField(source='usuario_fk.nombre', read_only=True)
+    fecha_generado = serializers.DateTimeField(format=None)
     
     class Meta:
         model = Informe
@@ -70,6 +73,15 @@ class InformeSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['fecha_generado'] = timezone.now()
         return super().create(validated_data)
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        fecha_utc = instance.fecha_generado
+        if fecha_utc:
+            tz = pytz.timezone('America/Santiago')
+            fecha_chile = fecha_utc.astimezone(tz)
+            rep['fecha_generado'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
+        return rep
 
 class InformeCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -138,7 +150,12 @@ class MovInventarioSerializer(serializers.ModelSerializer):
         print(f"  - Motivo original: '{instance.motivo}' (longitud: {len(instance.motivo) if instance.motivo else 0})")
         motivo_rep = representation.get('motivo')
         print(f"  - Motivo en representation: '{motivo_rep}' (longitud: {len(motivo_rep) if motivo_rep else 0})")
-        
+        # Conversión de fecha
+        fecha_utc = getattr(instance, 'fecha', None)
+        if fecha_utc:
+            tz = pytz.timezone('America/Santiago')
+            fecha_chile = fecha_utc.astimezone(tz)
+            representation['fecha'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
         return representation
 
     def get_tipo_movimiento(self, obj):
@@ -283,6 +300,7 @@ class UsuarioNotificacionSerializer(serializers.ModelSerializer):
         fields = ['id_ntf_us', 'usuario', 'notificacion', 'leida', 'eliminada', 'fecha_recibida']
 
 class PedidosSerializer(serializers.ModelSerializer):
+    fecha_entrega = serializers.DateTimeField(format=None)
     sucursal_nombre = serializers.CharField(source='sucursal_fk.nombre_sucursal', read_only=True)
     sucursal_direccion = serializers.CharField(source='sucursal_fk.direccion', read_only=True)
     bodega_nombre = serializers.CharField(source='bodega_fk.nombre_bdg', read_only=True)
@@ -295,6 +313,7 @@ class PedidosSerializer(serializers.ModelSerializer):
     solicitud_id = serializers.IntegerField(source='solicitud_fk.id_solc', read_only=True)
     detalles_pedido = DetallePedidoSerializer(many=True, read_only=True)
     tipo = serializers.SerializerMethodField()
+    num_guia_despacho = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     def get_tipo(self, obj):
         if obj.proveedor_fk:
@@ -310,16 +329,19 @@ class PedidosSerializer(serializers.ModelSerializer):
             'sucursal_fk', 'sucursal_nombre', 'sucursal_direccion', 'personal_entrega_fk', 'personal_entrega_nombre', 'personal_entrega_patente',
             'usuario_fk', 'usuario_nombre', 'solicitud_fk', 'solicitud_id',
             'bodega_fk', 'bodega_nombre', 'bodega_direccion', 'proveedor_fk', 'proveedor_nombre',
+            'num_guia_despacho',
             'detalles_pedido', 'tipo'
         ]
         read_only_fields = ['id_p']
 
 class PedidosCreateSerializer(serializers.ModelSerializer):
+    num_guia_despacho = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     class Meta:
         model = Pedidos
         fields = [
             'descripcion', 'fecha_entrega', 'estado_pedido_fk', 'sucursal_fk',
-            'personal_entrega_fk', 'usuario_fk', 'solicitud_fk', 'bodega_fk', 'proveedor_fk'
+            'personal_entrega_fk', 'usuario_fk', 'solicitud_fk', 'bodega_fk', 'proveedor_fk',
+            'num_guia_despacho'
         ]
         extra_kwargs = {
             'fecha_entrega': {'required': False},  # No requerido porque se asigna automáticamente
@@ -347,6 +369,7 @@ class PersonalEntregaSerializer(serializers.ModelSerializer):
         fields = ['id_psn', 'usuario_fk', 'usuario_nombre', 'usuario_correo', 'nombre_psn', 'descripcion_psn', 'patente']
 
 class ProductosSerializer(serializers.ModelSerializer):
+    fecha_creacion = serializers.DateTimeField(format=None)
     # Hacer la descripción opcional
     descripcion_prodc = serializers.CharField(required=False, allow_blank=True)
     
@@ -357,6 +380,15 @@ class ProductosSerializer(serializers.ModelSerializer):
             'fecha_creacion', 'marca_fk', 'categoria_fk', 'bodega_fk', 'sucursal_fk'
         ]
         read_only_fields = ['id_prodc', 'fecha_creacion']
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        fecha_utc = instance.fecha_creacion
+        if fecha_utc:
+            tz = pytz.timezone('America/Santiago')
+            fecha_chile = fecha_utc.astimezone(tz)
+            rep['fecha_creacion'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
+        return rep
 
 class ProveedorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -412,6 +444,7 @@ class SolicitudProductosSerializer(serializers.ModelSerializer):
         fields = ['id_solc_prod', 'cantidad', 'producto_fk', 'producto_nombre', 'producto_codigo']
 
 class SolicitudesSerializer(serializers.ModelSerializer):
+    fecha_creacion = serializers.DateTimeField(format=None)
     sucursal_nombre = serializers.CharField(source='fk_sucursal.nombre_sucursal', read_only=True)
     sucursal_direccion = serializers.CharField(source='fk_sucursal.direccion', read_only=True)
     sucursal_rut = serializers.CharField(source='fk_sucursal.rut', read_only=True)
@@ -431,20 +464,14 @@ class SolicitudesSerializer(serializers.ModelSerializer):
         read_only_fields = ['id_solc', 'fecha_creacion']
 
     def to_representation(self, instance):
-        """Sobrescribe la representación para agregar logs de debug"""
-        representation = super().to_representation(instance)
-        
-        # Logs de debug
-        print(f"DEBUG - Serializando solicitud {instance.id_solc}:")
-        print(f"  - Sucursal FK: {instance.fk_sucursal}")
-        print(f"  - Sucursal nombre: {getattr(instance.fk_sucursal, 'nombre_sucursal', 'N/A')}")
-        print(f"  - Sucursal dirección: {getattr(instance.fk_sucursal, 'direccion', 'N/A')}")
-        print(f"  - Sucursal RUT: {getattr(instance.fk_sucursal, 'rut', 'N/A')}")
-        print(f"  - Usuario FK: {instance.usuarios_fk}")
-        print(f"  - Usuario nombre: {getattr(instance.usuarios_fk, 'nombre', 'N/A')}")
-        print(f"  - Usuario rol: {getattr(instance.usuarios_fk.rol_fk, 'nombre_rol', 'N/A') if instance.usuarios_fk.rol_fk else 'N/A'}")
-        
-        return representation
+        rep = super().to_representation(instance)
+        # Convertir fecha_creacion a hora local de Chile
+        fecha_utc = instance.fecha_creacion
+        if fecha_utc:
+            tz = pytz.timezone('America/Santiago')
+            fecha_chile = fecha_utc.astimezone(tz)
+            rep['fecha_creacion'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
+        return rep
 
     def create(self, validated_data):
         validated_data['fecha_creacion'] = timezone.now()
@@ -890,6 +917,7 @@ class ProductoSerializer(serializers.ModelSerializer):
 
 # --- SERIALIZER PARA PRODUCTOS EN BODEGA ---
 class ProductoBodegaSerializer(serializers.ModelSerializer):
+    fecha_creacion = serializers.DateTimeField(format=None)
     stock = serializers.SerializerMethodField()
     marca_nombre = serializers.CharField(source='marca_fk.nombre_mprod', read_only=True)
     categoria_nombre = serializers.CharField(source='categoria_fk.nombre', read_only=True)
@@ -897,11 +925,20 @@ class ProductoBodegaSerializer(serializers.ModelSerializer):
     # Hacer la descripción opcional
     descripcion_prodc = serializers.CharField(required=False, allow_blank=True)
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        fecha_utc = instance.fecha_creacion
+        if fecha_utc:
+            tz = pytz.timezone('America/Santiago')
+            fecha_chile = fecha_utc.astimezone(tz)
+            rep['fecha_creacion'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
+        return rep
+
     class Meta:
         model = Productos
         fields = [
             'id_prodc', 'nombre_prodc', 'descripcion_prodc', 'codigo_interno',
-            'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre', 'bodega_fk', 'stock'
+            'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre', 'bodega_fk', 'stock', 'fecha_creacion'
         ]
 
     def get_stock(self, obj):
@@ -913,6 +950,7 @@ class ProductoBodegaSerializer(serializers.ModelSerializer):
 
 # --- SERIALIZER PARA PRODUCTOS EN SUCURSAL ---
 class ProductoSucursalSerializer(serializers.ModelSerializer):
+    fecha_creacion = serializers.DateTimeField(format=None)
     stock = serializers.SerializerMethodField()
     marca_nombre = serializers.CharField(source='marca_fk.nombre_mprod', read_only=True)
     categoria_nombre = serializers.CharField(source='categoria_fk.nombre', read_only=True)
@@ -920,11 +958,20 @@ class ProductoSucursalSerializer(serializers.ModelSerializer):
     # Hacer la descripción opcional
     descripcion_prodc = serializers.CharField(required=False, allow_blank=True)
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        fecha_utc = instance.fecha_creacion
+        if fecha_utc:
+            tz = pytz.timezone('America/Santiago')
+            fecha_chile = fecha_utc.astimezone(tz)
+            rep['fecha_creacion'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
+        return rep
+
     class Meta:
         model = Productos
         fields = [
             'id_prodc', 'nombre_prodc', 'descripcion_prodc', 'codigo_interno',
-            'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre', 'sucursal_fk', 'stock'
+            'marca_fk', 'marca_nombre', 'categoria_fk', 'categoria_nombre', 'sucursal_fk', 'stock', 'fecha_creacion'
         ]
 
     def get_stock(self, obj):
@@ -949,6 +996,7 @@ class ProductoSucursalSerializer(serializers.ModelSerializer):
         return float(stock_obj.stock) if stock_obj else 0
 
 class HistorialEstadoPedidoSerializer(serializers.ModelSerializer):
+    fecha = serializers.DateTimeField(format=None)
     estado_anterior_obj = EstadoPedidoSerializer(source='estado_anterior', read_only=True)
     estado_nuevo_obj = EstadoPedidoSerializer(source='estado_nuevo', read_only=True)
     usuario_obj = UsuarioSerializer(source='usuario_fk', read_only=True)
@@ -967,18 +1015,27 @@ class HistorialEstadoPedidoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id_hist_ped', 'fecha']
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        fecha_utc = getattr(instance, 'fecha', None)
+        if fecha_utc:
+            tz = pytz.timezone('America/Santiago')
+            fecha_chile = fecha_utc.astimezone(tz)
+            rep['fecha'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
+        return rep
+
 
 class HistorialPedidosDetalladoSerializer(serializers.ModelSerializer):
+    fecha = serializers.DateTimeField(format=None)
+    fecha_entrega = serializers.DateTimeField(source='pedidos_fk.fecha_entrega', format=None, read_only=True)
     # Campos directos
     id = serializers.IntegerField(source='id_hst', read_only=True)
-    fecha = serializers.DateTimeField(read_only=True)
     producto_id = serializers.IntegerField(source='producto_fk.id_prodc', read_only=True)
     producto_nombre = serializers.CharField(source='producto_fk.nombre_prodc', read_only=True)
     usuario_id = serializers.IntegerField(source='usuario_fk.id_us', read_only=True)
     usuario_nombre = serializers.CharField(source='usuario_fk.nombre', read_only=True)
     # Contexto del pedido
     pedido_id = serializers.IntegerField(source='pedidos_fk.id_p', read_only=True)
-    fecha_entrega = serializers.DateTimeField(source='pedidos_fk.fecha_entrega', read_only=True)
     sucursal_id = serializers.SerializerMethodField()
     sucursal_nombre = serializers.SerializerMethodField()
     proveedor_id = serializers.SerializerMethodField()
@@ -1044,3 +1101,21 @@ class HistorialPedidosDetalladoSerializer(serializers.ModelSerializer):
         codigo = re.sub(r'["\'\s]+', '-', codigo)
         codigo = re.sub(r'[^A-Za-z0-9\-_]', '', codigo)
         return codigo.upper()
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        # fecha
+        fecha_utc = getattr(instance, 'fecha', None)
+        if fecha_utc:
+            tz = pytz.timezone('America/Santiago')
+            fecha_chile = fecha_utc.astimezone(tz)
+            rep['fecha'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
+        # fecha_entrega
+        fecha_entrega_utc = getattr(instance, 'pedidos_fk', None)
+        if fecha_entrega_utc and hasattr(fecha_entrega_utc, 'fecha_entrega'):
+            fecha_entrega = fecha_entrega_utc.fecha_entrega
+            if fecha_entrega:
+                tz = pytz.timezone('America/Santiago')
+                fecha_chile = fecha_entrega.astimezone(tz)
+                rep['fecha_entrega'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
+        return rep

@@ -53,6 +53,11 @@ export default function Informes() {
         fetchInformes();
     }, []);
 
+    useEffect(() => {
+        window.fetchInformes = fetchInformes;
+        return () => { delete window.fetchInformes; };
+    }, []);
+
     // Aplicar filtros cuando cambien los valores
     useEffect(() => {
         aplicarFiltros();
@@ -73,6 +78,7 @@ export default function Informes() {
             console.log('🔍 DEBUG - Cantidad de informes:', response.length);
             
             setInformes(response);
+            window.informesGlobal = response; // <-- Sincroniza la variable global
         } catch (error) {
             console.error("Error al obtener informes:", error);
         } finally {
@@ -240,6 +246,13 @@ export default function Informes() {
         setSearchTerm("");
         setFiltroModulo("");
         setFiltroFecha("");
+    };
+
+    // Función para validar si ya existe un informe con el mismo título y módulo
+    const existeInformeDuplicado = (titulo: string, modulo_origen: string) => {
+        return informesArray.some(
+            inf => inf.titulo === titulo && inf.modulo_origen === modulo_origen
+        );
     };
 
     return (

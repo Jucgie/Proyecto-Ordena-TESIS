@@ -30,7 +30,7 @@ import { solicitudesService, pedidosService, personalEntregaService, informesSer
 import EstadoBadge from "../../components/EstadoBadge";
 import { buscarProductosSimilares } from '../../services/api';
 import RefreshIcon from '@mui/icons-material/Refresh';
-
+import { formatFechaChile } from "../../utils/formatFechaChile";
 
 // Interfaces
 interface Producto {
@@ -151,7 +151,7 @@ function TablaIngresos({ ingresos, onVerDetalles, loading }: { ingresos: any[], 
                         ingresos.map((row: any) => (
                             <TableRow key={row.id_p || row.id}>
                                 <TableCell style={{ color: "#fff" }}>{row.id_p || row.id}</TableCell>
-                                <TableCell style={{ color: "#fff" }}>{formatFecha(row.fecha_entrega || row.fecha)}</TableCell>
+                                <TableCell style={{ color: "#fff" }}>{formatFechaChile(row.fecha_entrega || row.fecha)}</TableCell>
                                 <TableCell style={{ color: "#fff" }}>{row.proveedor_nombre || "Sin proveedor"}</TableCell>
                                 <TableCell style={{ color: "#fff" }}>{Array.isArray(row.detalles_pedido) ? row.detalles_pedido.reduce((acc: number, p: any) => acc + parseFloat(p.cantidad || '0'), 0) : 0}</TableCell>
                                 <TableCell>
@@ -208,7 +208,7 @@ function TablaSalidas({ salidas, onVerDetalles, loading }: { salidas: any[], onV
                             return (
                                 <TableRow key={row.id_p || row.id}>
                                     <TableCell style={{ color: "#fff" }}>{row.id_p || row.id}</TableCell>
-                                    <TableCell style={{ color: "#fff" }}>{formatFecha(row.fecha_entrega || row.fecha)}</TableCell>
+                                    <TableCell style={{ color: "#fff" }}>{formatFechaChile(row.fecha_entrega || row.fecha)}</TableCell>
                                     <TableCell style={{ color: "#fff" }}>{row.personal_entrega_nombre || "-"}</TableCell>
                                     <TableCell style={{ color: "#fff" }}>{row.sucursal_nombre || "-"}</TableCell>
                                     <TableCell style={{ color: "#fff" }}>{row.estado_pedido_nombre || "-"}</TableCell>
@@ -298,6 +298,7 @@ export default function PedidosBodega() {
     // Cargar productos similares cuando cambia el producto actual en validación múltiple
     useEffect(() => {
         if (modalValidacionMultiple && productoActualValidacion) {
+            setProductosSimilaresActual([]); // Limpiar antes de buscar
             buscarProductosSimilaresLocal(productoActualValidacion);
             setProductoSeleccionado(null); // Resetear selección
         }
@@ -560,6 +561,21 @@ export default function PedidosBodega() {
                     oci_asociada: solicitud.id
                 };
                 
+                // Función para validar si ya existe un informe con el mismo título y módulo
+                const existeInformeDuplicado = (titulo: string, modulo_origen: string) => {
+                    // Buscar en el estado local de informes si está disponible, o hacer una petición si es necesario
+                    // Aquí se asume que tienes acceso a los informes en el estado o prop
+                    if (!Array.isArray(window.informesGlobal)) return false;
+                    return window.informesGlobal.some(
+                        (inf: any) => inf.titulo === titulo && inf.modulo_origen === modulo_origen
+                    );
+                };
+                
+                if (existeInformeDuplicado(`Guía de Despacho - Pedido ${nuevoPedido.id}`, 'pedidos')) {
+                    alert("Ya existe un informe con este título y módulo.");
+                    return;
+                }
+                
                 await informesService.createInforme({
                     titulo: `Guía de Despacho - Pedido ${nuevoPedido.id}`,
                     descripcion: `Guía de despacho generada para el pedido ${nuevoPedido.id} hacia ${solicitud.sucursalDestino}`,
@@ -570,6 +586,7 @@ export default function PedidosBodega() {
                     bodega_fk: usuario?.bodega || null,
                     pedidos_fk: nuevoPedido.id
                 });
+                if (typeof window.fetchInformes === 'function') window.fetchInformes();
                 
                 console.log('✅ Informe de guía de despacho creado exitosamente');
             } catch (error) {
@@ -600,20 +617,21 @@ export default function PedidosBodega() {
     const [modalTipo, setModalTipo] = useState<"ingreso" | "salida" | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    // Al montar, cargar pedidos desde el backend
+    // --- MOVER FUERA DEL useEffect ---
+    const fetchPedidos = async () => {
+        if (!usuario?.bodega) return;
+        setLoading(true);
+        try {
+            const pedidosResponse = await pedidosService.getPedidos({ bodega_id: usuario.bodega.toString() });
+            setPedidosBackend(pedidosResponse.results || []);
+        } catch (error) {
+            setPedidosBackend([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchPedidos = async () => {
-            if (!usuario?.bodega) return;
-            setLoading(true);
-            try {
-                const pedidosResponse = await pedidosService.getPedidos({ bodega_id: usuario.bodega.toString() });
-                setPedidosBackend(pedidosResponse.results || []);
-            } catch (error) {
-                setPedidosBackend([]);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchPedidos();
     }, [usuario?.bodega]);
 
@@ -867,29 +885,33 @@ export default function PedidosBodega() {
                 throw new Error('No se encontraron los datos del formulario');
             }
 
+            // Eliminar numGuiaDespacho del objeto antes de enviar
+            const { numGuiaDespacho, ...restFormulario } = datosFormulario;
+
             const datosFinales = {
-                    ...datosFormulario,
-                    productos: productosFinales
-                        .filter((p: any) =>
-                            (p.es_producto_existente && p.id && p.cantidad > 0) ||
-                            (!p.es_producto_existente && p.nombre && p.marca && p.categoria && p.cantidad > 0)
-                        )
-                        .map((p: any) =>
-                            p.es_producto_existente
-                                ? { es_producto_existente: true, id: p.id, cantidad: p.cantidad }
-                                : {
-                                    nombre: p.nombre,
-                                    cantidad: p.cantidad,
-                                    marca: p.marca,
-                                    categoria: p.categoria,
-                                    modelo: p.modelo || undefined,
-                                    ...(p.codigo_interno ? { codigo_interno: p.codigo_interno } : {})
-                                }
-                        ),
-                    bodega_id: bodegaId
-                };
-                console.log("DEBUG productosFinales:", productosFinales);
-                console.log("DEBUG productos enviados:", datosFinales.productos);
+                ...restFormulario,
+                num_guia_despacho: numGuiaDespacho, // Solo snake_case
+                productos: productosFinales
+                    .filter((p: any) =>
+                        (p.es_producto_existente && p.id && p.cantidad > 0) ||
+                        (!p.es_producto_existente && p.nombre && p.marca && p.categoria && p.cantidad > 0)
+                    )
+                    .map((p: any) =>
+                        p.es_producto_existente
+                            ? { es_producto_existente: true, id: p.id, cantidad: p.cantidad }
+                            : {
+                                nombre: p.nombre,
+                                cantidad: p.cantidad,
+                                marca: p.marca,
+                                categoria: p.categoria,
+                                modelo: p.modelo || undefined,
+                                ...(p.codigo_interno ? { codigo_interno: p.codigo_interno } : {})
+                            }
+                    ),
+                bodega_id: bodegaId
+            };
+            console.log("DEBUG productosFinales:", productosFinales);
+            console.log("DEBUG productos enviados:", datosFinales.productos);
 
             // Crear el ingreso en el backend
             const resultado = await pedidosService.crearIngresoBodega(datosFinales);
@@ -900,6 +922,8 @@ export default function PedidosBodega() {
 
             // Recargar productos para mostrar el stock actualizado
             await fetchProductos(bodegaId);
+            // --- AGREGADO: Refrescar pedidos para ver el estado actualizado ---
+            await fetchPedidos();
 
             setSnackbarMessage(`Ingreso creado exitosamente. ${resultado.productos_agregados?.length || 0} productos agregados al inventario.`);
             setSnackbarSeverity("success");
@@ -934,7 +958,22 @@ export default function PedidosBodega() {
                     }
                 };
 
-                await informesService.crearInforme(contenidoInforme);
+                // Función para validar si ya existe un informe con el mismo título y módulo
+                const existeInformeDuplicado = (titulo: string, modulo_origen: string) => {
+                    // Buscar en el estado local de informes si está disponible, o hacer una petición si es necesario
+                    // Aquí se asume que tienes acceso a los informes en el estado o prop
+                    if (!Array.isArray(window.informesGlobal)) return false;
+                    return window.informesGlobal.some(
+                        (inf: any) => inf.titulo === titulo && inf.modulo_origen === modulo_origen
+                    );
+                };
+                
+                if (existeInformeDuplicado(`Informe de Ingreso - Pedido ${pedidoIdReal}`, 'pedidos')) {
+                    alert("Ya existe un informe con este título y módulo.");
+                    return;
+                }
+
+                await informesService.createInforme(contenidoInforme);
             } catch (error) {
                 console.error('Error creando informe:', error);
             }
@@ -1012,6 +1051,13 @@ export default function PedidosBodega() {
     useEffect(() => {
         setPaginaActual(1);
     }, [opcion, ingresos, salidas]);
+
+    // Función para validar si ya existe un ingreso con el mismo número de guía y proveedor
+    const existeGuiaProveedor = (numGuia, proveedorNombre) => {
+        return pedidosBackend.some(
+            p => (p.num_guia_despacho || p.numGuiaDespacho) === numGuia
+        );
+    };
 
     return (
         <Layout>
@@ -1516,7 +1562,7 @@ export default function PedidosBodega() {
                                     />
                                     <TextField
                                         label="Fecha"
-                                        value={formatFechaLegible(pedidoSeleccionado.fecha || pedidoSeleccionado.fecha_entrega)}
+                                        value={formatFechaChile(pedidoSeleccionado.fecha || pedidoSeleccionado.fecha_entrega)}
                                         InputProps={{ readOnly: true, sx: { color: "#fff" } }}
                                         size="small"
                                         sx={{ "& .MuiInputLabel-root": { color: "#ccc" }, "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: "#444" }, "&:hover fieldset": { borderColor: "#FFD700" } } }}
@@ -1656,7 +1702,6 @@ export default function PedidosBodega() {
                             bgcolor: '#1a1a1a',
                             color: '#fff',
                             borderRadius: 3,
-                            // border: '2px solid #FFD700', // QUITAR BORDE AMARILLO
                             boxShadow: 24,
                             p: 0,
                         }
@@ -1677,6 +1722,10 @@ export default function PedidosBodega() {
                     <DialogContent sx={{ bgcolor: '#1a1a1a', p: 3 }}>
                         {productoActualValidacion && (
                             <Box>
+                                {/* Mostrar número de producto actual y total */}
+                                <Typography variant="subtitle2" sx={{ color: '#FFD700', fontWeight: 600, mb: 1 }}>
+                                    Producto {productosValidados.length + 1} de {productosAValidar.length + productosValidados.length}
+                                </Typography>
                                 <Typography variant="h6" sx={{ color: '#FFD700', fontWeight: 700, mb: 1 }}>
                                     Ya existe un producto similar en el inventario
                                 </Typography>
@@ -1706,9 +1755,6 @@ export default function PedidosBodega() {
                                             </Typography>
                                             <Typography variant="body1" sx={{ color: '#bbb' }}>
                                                 <b>Cantidad:</b> {productoActualValidacion.cantidad}
-                                            </Typography>
-                                            <Typography variant="body1" sx={{ color: '#bbb' }}>
-                                                <b>Código:</b> {previsualizarCodigo(productoActualValidacion)}
                                             </Typography>
                                         </Box>
                                     </Grid>
@@ -1820,14 +1866,17 @@ export default function PedidosBodega() {
                                 categoria: p.categoria,
                                 modelo: p.modelo || undefined
                             }));
-                            await pedidosService.crearIngresoBodega({
-                                fecha: data.fecha,
-                                num_guia_despacho: data.numGuiaDespacho,
-                                observaciones: data.observacionesRecepcion,
+                            // Eliminar numGuiaDespacho antes de enviar
+                            const { numGuiaDespacho, ...restData } = data;
+                            const datosApi = {
+                                ...restData,
+                                num_guia_despacho: numGuiaDespacho,
                                 productos: productosLimpios,
                                 proveedor: data.proveedor,
                                 bodega_id: usuario?.bodega?.toString() || "bodega_central"
-                            });
+                            };
+                            console.log("DEBUG SUBMIT PEDIDOSBODEGA:", datosApi);
+                            await pedidosService.crearIngresoBodega(datosApi);
                             // Generar acta de recepción
                             generarActaRecepcion({
                                 numeroActa: `ACTA-${Date.now()}`,
@@ -1856,13 +1905,14 @@ export default function PedidosBodega() {
                             setIsModalOpen(false);
                             cargarPedidosRecientes();
                             // Forzar recarga del inventario con el mismo identificador
-                            fetchProductos(usuario?.bodega?.toString() || "bodega_central");
+                            fetchProductos("bodega_central");
                         } catch (error) {
                             setSnackbarMessage("Error al registrar el ingreso");
                             setSnackbarSeverity("error");
                             setShowSnackbar(true);
                         }
                     }}
+                    existeGuiaProveedor={existeGuiaProveedor}
                 />
             </div>
         </Layout>

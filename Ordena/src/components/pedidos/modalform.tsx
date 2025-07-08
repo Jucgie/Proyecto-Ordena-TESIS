@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Table, TableHead, TableRow, TableCell, TableBody, IconButton, Box, Typography, FormControl, InputLabel, MenuItem, Tooltip, Chip, Snackbar, Alert, TableContainer, Paper, CircularProgress, LinearProgress
 } from "@mui/material";
@@ -27,8 +27,7 @@ interface Props {
     onClose: () => void;
     tipo: "ingreso" | "salida";
     onSubmit: (data: any) => void;
-    // marcas: string[];
-    // categorias: string[];
+    existeGuiaProveedor?: (numGuia: string, proveedorNombre: string) => boolean;
 }
 
 // Servicio para generar documentos automáticamente
@@ -91,7 +90,7 @@ function normalizarFecha(fecha: string): string {
     return '';
 }
 
-export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, onSubmit }: Props) {
+export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, onSubmit, existeGuiaProveedor }: Props) {
     // Estados para productos
     const [productos, setProductos] = useState<Producto[]>([]);
     const [productosExtraidos, setProductosExtraidos] = useState<Producto[]>([]);
@@ -310,7 +309,7 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
             } else {
             }
             
-            if (datos.num_guia) {
+            if (datos.num_guia && datos.num_guia.trim() !== "") {
                 setNumGuiaDespacho(datos.num_guia);
                 camposRellenados++;
             }
@@ -354,53 +353,130 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
         }
     };
 
-    const handleSubmit = () => {
-        // Validar que todos los productos tengan los campos requeridos
-        const productosValidos = productos.filter(p => p.nombre.trim() && p.cantidad > 0);
-        
-        if (productosValidos.length === 0) {
-            mostrarFeedback('Debe agregar al menos un producto válido', 'error');
-            return;
-        }
+    const [loadingSubmit, setLoadingSubmit] = useState(false);
+    const submitLock = useRef(false);
+    const [alertaGuiaDuplicada, setAlertaGuiaDuplicada] = useState(false);
+    const [errorGuiaDespacho, setErrorGuiaDespacho] = useState<string | null>(null);
 
-        onSubmit({
-            tipo,
-            proveedor: tipo === "ingreso"
-                ? {
-                    nombre: proveedorNombre,
-                    rut: proveedorRut,
-                    contacto: proveedorContacto,
-                    telefono: proveedorTelefono,
-                    email: proveedorEmail
-                }
-                : undefined,
-            asignado: tipo === "salida" ? asignado : undefined,
-            sucursalDestino: tipo === "salida" ? sucursalDestino : undefined,
-            fecha,
-            numGuiaDespacho,
-            archivoGuia,
-            nombreArchivo,
-            observacionesRecepcion,
-            productos: productosValidos,
-        });
-        
-        // Limpiar formulario
-        setProveedorNombre("");
-        setProveedorRut("");
-        setProveedorContacto("");
-        setProveedorTelefono("");
-        setProveedorEmail("");
-        setAsignado("");
-        setSucursalDestino("");
-        setFecha("");
-        setNumGuiaDespacho("");
-        setArchivoGuia(null);
-        setNombreArchivo("");
-        setObservacionesRecepcion("");
-        setProductos([]);
-        setProductosExtraidos([]);
-        setMostrarProductosExtraidos(false);
-        onClose();
+    // Validación instantánea de guía de despacho duplicada
+    useEffect(() => {
+        if (tipo === "ingreso" && existeGuiaProveedor && numGuiaDespacho.trim()) {
+            if (existeGuiaProveedor(numGuiaDespacho, proveedorNombre)) {
+                setErrorGuiaDespacho("Ya existe un ingreso con este número de guía de despacho.");
+            } else {
+                setErrorGuiaDespacho(null);
+            }
+        } else {
+            setErrorGuiaDespacho(null);
+        }
+    }, [numGuiaDespacho, proveedorNombre, tipo, existeGuiaProveedor]);
+
+    const handleSubmit = async () => {
+        if (loadingSubmit || submitLock.current) return; // Evita doble submit extremo
+        setLoadingSubmit(true);
+        submitLock.current = true;
+        try {
+            // Validar que todos los productos tengan los campos requeridos
+            const productosValidos = productos.filter(p => p.nombre.trim() && p.cantidad > 0);
+            if (productosValidos.length === 0) {
+                mostrarFeedback('Debe agregar al menos un producto válido', 'error');
+                setLoadingSubmit(false);
+                submitLock.current = false;
+                return;
+            }
+            // Validar campo obligatorio de guía de despacho (solo para ingreso)
+            if (tipo === "ingreso" && (!numGuiaDespacho || !numGuiaDespacho.trim())) {
+                mostrarFeedback('El campo N° Guía de Despacho es obligatorio.', 'error');
+                setLoadingSubmit(false);
+                submitLock.current = false;
+                return;
+            }
+            // Validar duplicado de guía de despacho (solo para ingreso)
+            if (tipo === "ingreso" && errorGuiaDespacho) {
+                setAlertaGuiaDuplicada(true);
+                setLoadingSubmit(false);
+                submitLock.current = false;
+                return;
+            }
+            // Corregir la fecha para que sea en hora local de Chile y formato correcto
+            let fechaEnvio = fecha;
+            if (!fechaEnvio) {
+                // Si no hay fecha seleccionada, usar la actual en hora local de Chile
+                const fechaChile = new Date();
+                // Ajustar a zona horaria de Chile (America/Santiago)
+                const offsetChile = -3 * 60; // -3 horas en minutos
+                const fechaUTC = fechaChile.getTime() + (fechaChile.getTimezoneOffset() * 60000);
+                const fechaSantiago = new Date(fechaUTC + offsetChile * 60000);
+                // Formato YYYY-MM-DD HH:mm:ss
+                const yyyy = fechaSantiago.getFullYear();
+                const mm = String(fechaSantiago.getMonth() + 1).padStart(2, '0');
+                const dd = String(fechaSantiago.getDate()).padStart(2, '0');
+                const hh = String(fechaSantiago.getHours()).padStart(2, '0');
+                const min = String(fechaSantiago.getMinutes()).padStart(2, '0');
+                const ss = String(fechaSantiago.getSeconds()).padStart(2, '0');
+                fechaEnvio = `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+            }
+            // Si la fecha ya viene en formato YYYY-MM-DD, agregar hora local
+            if (/^\d{4}-\d{2}-\d{2}$/.test(fechaEnvio)) {
+                const now = new Date();
+                const offsetChile = -3 * 60;
+                const fechaUTC = now.getTime() + (now.getTimezoneOffset() * 60000);
+                const fechaSantiago = new Date(fechaUTC + offsetChile * 60000);
+                const hh = String(fechaSantiago.getHours()).padStart(2, '0');
+                const min = String(fechaSantiago.getMinutes()).padStart(2, '0');
+                const ss = String(fechaSantiago.getSeconds()).padStart(2, '0');
+                fechaEnvio = `${fechaEnvio} ${hh}:${min}:${ss}`;
+            }
+            const datosEnvio = {
+                tipo,
+                proveedor: tipo === "ingreso"
+                    ? {
+                        nombre: proveedorNombre,
+                        rut: proveedorRut,
+                        contacto: proveedorContacto,
+                        telefono: proveedorTelefono,
+                        email: proveedorEmail
+                    }
+                    : undefined,
+                asignado: tipo === "salida" ? asignado : undefined,
+                sucursalDestino: tipo === "salida" ? sucursalDestino : undefined,
+                fecha: fechaEnvio,
+                numGuiaDespacho,
+                archivoGuia,
+                nombreArchivo,
+                observacionesRecepcion,
+                productos: productosValidos,
+            };
+            console.log("DEBUG SUBMIT MODALFORM:", datosEnvio);
+            await onSubmit(datosEnvio);
+            // Limpiar formulario
+            setProveedorNombre("");
+            setProveedorRut("");
+            setProveedorContacto("");
+            setProveedorTelefono("");
+            setProveedorEmail("");
+            setAsignado("");
+            setSucursalDestino("");
+            setFecha("");
+            setNumGuiaDespacho("");
+            setArchivoGuia(null);
+            setNombreArchivo("");
+            setObservacionesRecepcion("");
+            setProductos([]);
+            setProductosExtraidos([]);
+            setMostrarProductosExtraidos(false);
+            onClose();
+        } catch (error: any) {
+            // Mostrar error del backend si es duplicado
+            if (error?.response?.data?.error?.includes('guía de despacho')) {
+                mostrarFeedback(error.response.data.error, 'error');
+            } else {
+                mostrarFeedback('Error al registrar el ingreso', 'error');
+            }
+        } finally {
+            setLoadingSubmit(false);
+            submitLock.current = false;
+        }
     };
 
     return (
@@ -801,12 +877,14 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
                                             color: "#fff",
-                                            '& fieldset': { borderColor: "#444" },
-                                            '&:hover fieldset': { borderColor: "#FFD700" },
-                                            '&.Mui-focused fieldset': { borderColor: "#FFD700" }
+                                            '& fieldset': { borderColor: errorGuiaDespacho ? '#ff4444' : '#444' },
+                                            '&:hover fieldset': { borderColor: errorGuiaDespacho ? '#ff4444' : '#FFD700' },
+                                            '&.Mui-focused fieldset': { borderColor: errorGuiaDespacho ? '#ff4444' : '#FFD700' }
                                         },
                                         '& .MuiInputLabel-root': { color: "#ccc" }
                                     }}
+                                    error={!!errorGuiaDespacho}
+                                    helperText={errorGuiaDespacho}
                                 />
                             </Box>
 
@@ -1159,7 +1237,7 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                     <Button
                         onClick={handleSubmit}
                         variant="contained"
-                        disabled={!proveedorNombre || !proveedorRut || productos.length === 0}
+                        disabled={loadingSubmit || !proveedorNombre || !proveedorRut || productos.length === 0}
                         sx={{
                             bgcolor: "#FFD700",
                             color: "#000",
@@ -1173,10 +1251,20 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                             }
                         }}
                     >
-                        {tipo === "ingreso" ? "Registrar Ingreso" : "Registrar Salida"}
+                        {loadingSubmit ? 'Procesando...' : (tipo === "ingreso" ? "Registrar Ingreso" : "Registrar Salida")}
                     </Button>
                 </DialogActions>
             </Dialog>
+            <Snackbar
+                open={alertaGuiaDuplicada}
+                autoHideDuration={6000}
+                onClose={() => setAlertaGuiaDuplicada(false)}
+                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+            >
+                <Alert onClose={() => setAlertaGuiaDuplicada(false)} severity="error" sx={{ width: '100%' }}>
+                    Ya existe un ingreso con este número de guía de despacho. Por favor, ingresa un número diferente o revisa los ingresos existentes.
+                </Alert>
+            </Snackbar>
         </>
     );
 });

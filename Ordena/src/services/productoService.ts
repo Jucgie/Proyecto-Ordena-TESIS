@@ -22,15 +22,13 @@ export const productoService = {
         return response.data;
     },
 
-    // Nueva función para obtener solo productos activos
     getProductosActivos: async (ubicacionId?: string) => {
         console.log("🔍 DEBUG - Service - getProductosActivos llamado con ubicacionId:", ubicacionId);
         const params = new URLSearchParams();
-        
-        // Agregar parámetro para filtrar solo productos activos
+    
         params.append('activo', 'true');
-        
-        // Si el ubicacionId es "bodega_central", filtrar por bodega
+        params.append('page_size', '1000'); // <-- LÍMITE ALTO
+    
         if (ubicacionId === "bodega_central") {
             params.append('bodega_id', '2');
             console.log("🔍 DEBUG - Service - Filtrando por bodega_id: 2");
@@ -38,7 +36,7 @@ export const productoService = {
             params.append('sucursal_id', ubicacionId);
             console.log("🔍 DEBUG - Service - Filtrando por sucursal_id:", ubicacionId);
         }
-        
+    
         console.log("🔍 DEBUG - Service - Parámetros finales:", params.toString());
         const response = await api.get('/productos/', { params });
         console.log("🔍 DEBUG - Service - Respuesta del backend:", response.data);

@@ -27,6 +27,7 @@ from django.conf import settings
 from django.db import models
 from api.utils.notificaciones import crear_notificacion
 from django.db.models import Min
+from django.db import IntegrityError
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,8 @@ class ProductoViewSet(viewsets.ModelViewSet):
     serializer_class = ProductoSerializer
     lookup_field = 'id_prodc'
     authentication_classes = [JWTAuthentication]
+    pagination_class = None
+    
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -731,6 +734,7 @@ class InformeViewSet(viewsets.ModelViewSet):
     serializer_class = InformeSerializer
     lookup_field = 'id_informe'
     authentication_classes = [JWTAuthentication]
+    pagination_class = None
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -834,6 +838,7 @@ class PedidosViewSet(viewsets.ModelViewSet):
     serializer_class = PedidosSerializer
     lookup_field = 'id_p'
     authentication_classes = [JWTAuthentication]
+
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -1171,13 +1176,13 @@ class PedidosViewSet(viewsets.ModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], url_path='crear-ingreso-bodega')
+    @transaction.atomic  # <--- ATOMICIDAD AGREGADA
     def crear_ingreso_bodega(self, request):
         """
         Crea un pedido de ingreso para la bodega y agrega los productos al inventario
         """
+        logger.info("[crear_ingreso_bodega] INICIO del proceso de ingreso de bodega")
         try:
-
-            
             # Obtener datos del request
             fecha = request.data.get('fecha')
             num_rem = request.data.get('num_rem', '')
@@ -1186,11 +1191,9 @@ class PedidosViewSet(viewsets.ModelViewSet):
             productos_data = request.data.get('productos', [])
             proveedor_data = request.data.get('proveedor', {})
             bodega_id = request.data.get('bodega_id')
-            
-            logger.info(f"DEBUG - Fecha: {fecha}")
-            logger.info(f"DEBUG - Bodega ID: {bodega_id}")
-            logger.info(f"DEBUG - Productos: {productos_data}")
-            logger.info(f"DEBUG - Proveedor: {proveedor_data}")
+            logger.info(f"[crear_ingreso_bodega] Datos recibidos: fecha={fecha}, bodega_id={bodega_id}, num_rem={num_rem}, num_guia_despacho={num_guia_despacho}, observaciones={observaciones}")
+            logger.info(f"[crear_ingreso_bodega] Productos recibidos: {productos_data}")
+            logger.info(f"[crear_ingreso_bodega] Proveedor recibido: {proveedor_data}")
             
             if not fecha:
                 return Response({'error': 'Fecha es requerida'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1198,16 +1201,28 @@ class PedidosViewSet(viewsets.ModelViewSet):
                 return Response({'error': 'Debe incluir al menos un producto'}, status=status.HTTP_400_BAD_REQUEST)
             if not bodega_id:
                 return Response({'error': 'ID de bodega es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+            # --- VALIDACIÓN DE DUPLICADOS POR GUÍA DE DESPACHO Y BODEGA ---
+            # Log de todas las guías existentes para esa bodega
+            guias_existentes = list(Pedidos.objects.filter(bodega_fk=bodega_id).values_list('num_guia_despacho', flat=True))
+            logger.info(f"[crear_ingreso_bodega] Guías existentes en bodega {bodega_id}: {guias_existentes}")
+            logger.info(f"[crear_ingreso_bodega] Guía recibida: '{num_guia_despacho}'")
+            if num_guia_despacho and bodega_id:
+                guia_normalizada = num_guia_despacho.strip().upper()
+                guias_existentes_normalizadas = [ (g.strip().upper() if g else '') for g in guias_existentes ]
+                logger.info(f"[crear_ingreso_bodega] Guías normalizadas en bodega {bodega_id}: {guias_existentes_normalizadas}")
+                logger.info(f"[crear_ingreso_bodega] Guía recibida normalizada: '{guia_normalizada}'")
+                if guia_normalizada in guias_existentes_normalizadas:
+                    return Response({'error': 'Ya existe un ingreso con la misma guía de despacho en esta bodega.'}, status=status.HTTP_400_BAD_REQUEST)
+            # ... existing code ...
             
-            # Obtener o crear el estado "Pendiente"
+            # Obtener o crear el estado "Completado" (no Pendiente)
             try:
-                estado_pendiente = EstadoPedido.objects.get(nombre='Pendiente')
+                estado_completado = EstadoPedido.objects.get(nombre='Completado')
             except EstadoPedido.DoesNotExist:
-                estado_pendiente = EstadoPedido.objects.create(
-                    nombre='Pendiente',
-                    descripcion='Pedido pendiente de procesamiento'
+                estado_completado = EstadoPedido.objects.create(
+                    nombre='Completado',
+                    descripcion='Pedido recibido y completado'
                 )
-            
             # Obtener la bodega
             try:
                 bodega = BodegaCentral.objects.get(id_bdg=bodega_id)
@@ -1218,14 +1233,9 @@ class PedidosViewSet(viewsets.ModelViewSet):
             proveedor_obj = None
             if proveedor_data and proveedor_data.get('nombre'):
                 try:
-                    # Buscar proveedor por RUT
                     rut_empresa = proveedor_data.get('rut', '').replace('.', '').replace('-', '').replace(' ', '')
-                    
-                    # Remover el dígito verificador si es una letra
                     if rut_empresa and rut_empresa[-1].isalpha():
                         rut_empresa = rut_empresa[:-1]
-                    
-                    # Convertir a número
                     if rut_empresa:
                         rut_numero = int(rut_empresa)
                         proveedor_obj, created = Proveedor.objects.get_or_create(
@@ -1238,7 +1248,6 @@ class PedidosViewSet(viewsets.ModelViewSet):
                             }
                         )
                         if not created:
-                            # Actualizar información del proveedor existente
                             proveedor_obj.nombres_provd = proveedor_data.get('nombre', proveedor_obj.nombres_provd)
                             proveedor_obj.direccion_provd = proveedor_data.get('contacto', proveedor_obj.direccion_provd)
                             proveedor_obj.correo = proveedor_data.get('email', proveedor_obj.correo)
@@ -1247,44 +1256,43 @@ class PedidosViewSet(viewsets.ModelViewSet):
                     logger.warning(f"No se pudo crear/actualizar proveedor: {str(e)}")
             
             # Crear el pedido
-            # Construir descripción solo con Guía (nunca mostrar REM)
             descripcion_parts = [f"Ingreso desde proveedor {proveedor_data.get('nombre', 'N/A')}"]
-            
             if num_guia_despacho and num_guia_despacho.strip():
                 descripcion_parts.append(f"Guía: {num_guia_despacho}")
-            
             descripcion = " - ".join(descripcion_parts)
-            
             pedido_data = {
                 'descripcion': descripcion,
-                'estado_pedido_fk': estado_pendiente.id_estped,
-                'sucursal_fk': None,  # Los ingresos de bodega no tienen sucursal
-                'personal_entrega_fk': None,  # Los ingresos no tienen personal de entrega
+                'estado_pedido_fk': estado_completado.id_estped,  # <-- SIEMPRE COMPLETADO
+                'sucursal_fk': None,
+                'personal_entrega_fk': None,
                 'usuario_fk': request.user.id_us if hasattr(request, 'user') else None,
-                'solicitud_fk': None,  # Los ingresos no vienen de solicitudes
+                'solicitud_fk': None,
                 'bodega_fk': bodega.id_bdg,
-                'proveedor_fk': proveedor_obj.id_provd if proveedor_obj else None
+                'proveedor_fk': proveedor_obj.id_provd if proveedor_obj else None,
+                'num_guia_despacho': num_guia_despacho
             }
             
             serializer = PedidosCreateSerializer(data=pedido_data)
             serializer.is_valid(raise_exception=True)
-            pedido = serializer.save()
+            try:
+                pedido = serializer.save()
+            except IntegrityError as e:
+                if 'idx_pedidos_guia_bodega' in str(e) or 'unique constraint' in str(e).lower():
+                    return Response({'error': 'Ya existe un ingreso con este número de guía de despacho en esta bodega.'}, status=status.HTTP_400_BAD_REQUEST)
+                raise
             
             try:
-                estado_completado = EstadoPedido.objects.get(nombre='Completado')
-            except EstadoPedido.DoesNotExist:
-                estado_completado = EstadoPedido.objects.create(
-                    nombre='Completado',
-                    descripcion='Pedido recibido y completado'
+                historial = HistorialEstadoPedido.objects.create(
+                    pedido_fk=pedido,
+                    estado_anterior=None,
+                    estado_nuevo=estado_completado,
+                    usuario_fk=request.user,
+                    fecha=timezone.now(),  # Usar fecha actual para evitar problemas
+                    comentario="Ingreso proveedor"
                 )
-            HistorialEstadoPedido.objects.create(
-                pedido_fk=pedido,
-                estado_anterior=None,
-                estado_nuevo=estado_completado,
-                usuario_fk=request.user,
-                fecha=pedido.fecha_entrega,
-                comentario="Ingreso proveedor"
-            )
+                logger.info(f"[crear_ingreso_bodega] Historial de estado 'Completado' creado para pedido {pedido.id_p} (historial id: {historial.id_hist_ped})")
+            except Exception as e:
+                logger.error(f"[crear_ingreso_bodega] ERROR al crear historial de estado 'Completado' para pedido {pedido.id_p}: {str(e)}")
             
             # Procesar productos y agregarlos al inventario
             productos_agregados = []
@@ -1364,6 +1372,15 @@ class PedidosViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.warning(f"No se pudo guardar historial de ingreso: {str(e)}")
             
+
+            HistorialEstadoPedido.objects.create(
+                pedido_fk=pedido,
+                estado_anterior=None,
+                estado_nuevo=estado_completado,
+                usuario_fk=request.user if hasattr(request, 'user') else None,
+                comentario="Ingreso proveedor: estado Completado"
+            )
+            
             return Response({
                 'mensaje': 'Ingreso creado exitosamente',
                 'pedido_id': pedido.id_p,
@@ -1441,6 +1458,7 @@ class ProveedorViewSet(viewsets.ModelViewSet):
     serializer_class = ProveedorSerializer
     lookup_field = 'id_provd'
     authentication_classes = [JWTAuthentication]
+    pagination_class = None
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -1622,6 +1640,7 @@ class NotificacionViewSet(viewsets.ModelViewSet):
     queryset = Notificacion.objects.all()
     serializer_class = NotificacionSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         # Solo notificaciones del usuario autenticado
@@ -2870,39 +2889,48 @@ class BuscarProductosSimilaresSucursalView(APIView):
         if not nombre or not sucursal_id:
             return Response({'error': 'Nombre y sucursal_id son requeridos'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Buscar productos que tengan stock en la sucursal, aunque sucursal_fk sea NULL
         productos_con_stock = Stock.objects.filter(
             sucursal_fk=sucursal_id,
             stock__gt=0
         ).values_list('productos_fk', flat=True)
 
         queryset = Productos.objects.filter(id_prodc__in=productos_con_stock)
-        
-        # PRIORIDAD 1: Buscar por código interno exacto
+        nombre_normalizado = nombre.strip().lower()
+
+        # PRIORIDAD 1: Coincidencia exacta en nombre, código, marca y categoría
+        if codigo_interno and marca and categoria:
+            productos_similares = queryset.filter(
+                nombre_prodc__iexact=nombre_normalizado,
+                codigo_interno=codigo_interno,
+                marca_fk__nombre_mprod__iexact=marca,
+                categoria_fk__nombre__iexact=categoria
+            )
+            if productos_similares.exists():
+                serializer = ProductoSucursalSerializer(productos_similares, many=True, context={'request': request})
+                return Response({'productos_similares': serializer.data}, status=status.HTTP_200_OK)
+
+        # PRIORIDAD 2: Nombre exacto
+        productos_similares = queryset.filter(nombre_prodc__iexact=nombre_normalizado)
+        if productos_similares.exists():
+            serializer = ProductoSucursalSerializer(productos_similares, many=True, context={'request': request})
+            return Response({'productos_similares': serializer.data}, status=status.HTTP_200_OK)
+
+        # PRIORIDAD 3: Código interno exacto
         if codigo_interno:
             productos_similares = queryset.filter(codigo_interno=codigo_interno)
             if productos_similares.exists():
                 serializer = ProductoSucursalSerializer(productos_similares, many=True, context={'request': request})
                 return Response({'productos_similares': serializer.data}, status=status.HTTP_200_OK)
-        
-        # PRIORIDAD 2: Buscar por nombre exacto (sin importar marca/categoría)
-        nombre_normalizado = nombre.strip().lower()
-        productos_similares = queryset.filter(nombre_prodc__iexact=nombre_normalizado)
-        if productos_similares.exists():
-            serializer = ProductoSucursalSerializer(productos_similares, many=True, context={'request': request})
-            return Response({'productos_similares': serializer.data}, status=status.HTTP_200_OK)
-        
-        # PRIORIDAD 3: Solo si no encontramos por nombre, buscar por marca y categoría
+
+        # PRIORIDAD 4: Marca y categoría (icontains)
         if marca and categoria:
             productos_similares = queryset.filter(
-                nombre_prodc__icontains=nombre,
                 marca_fk__nombre_mprod__icontains=marca,
                 categoria_fk__nombre__icontains=categoria
             )
             serializer = ProductoSucursalSerializer(productos_similares, many=True, context={'request': request})
             return Response({'productos_similares': serializer.data}, status=status.HTTP_200_OK)
-        
-        # Si no encontramos nada, retornar lista vacía
+
         return Response({'productos_similares': []}, status=status.HTTP_200_OK)
 
 @api_view(['GET'])

@@ -1,12 +1,13 @@
 export function formatFechaChile(fechaIsoString: string) {
   if (!fechaIsoString) return '-';
-  // Si no tiene Z ni offset, agrégale Z (UTC)
+  // Si la fecha viene en formato 'YYYY-MM-DD HH:mm:ss', conviértela a ISO
   let fechaStr = fechaIsoString;
-  if (!/Z$|([+-]\d{2}:?\d{2})$/.test(fechaIsoString)) {
-    fechaStr += 'Z';
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(fechaIsoString)) {
+    fechaStr = fechaIsoString.replace(' ', 'T');
   }
+  // Ya no forzamos Z ni restamos horas, porque el backend ahora envía ISO 8601 con zona
   const fecha = new Date(fechaStr);
-  return fecha.toLocaleString('es-CL', {
+  const dtf = new Intl.DateTimeFormat('es-CL', {
     timeZone: 'America/Santiago',
     year: 'numeric',
     month: '2-digit',
@@ -15,4 +16,5 @@ export function formatFechaChile(fechaIsoString: string) {
     minute: '2-digit',
     hour12: true
   });
+  return dtf.format(fecha);
 }

@@ -83,84 +83,7 @@ import DirectionsSubwayIcon from '@mui/icons-material/DirectionsSubway';
 import DirectionsTransitIcon from '@mui/icons-material/DirectionsTransit';
 import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
 
-// Función mejorada para buscar imágenes usando Pexels API
-async function fetchImagenPexels(nombre: string, categoria?: string, marca?: string): Promise<string> {
-    try {
-        const apiKey = "F225d2rKvO7dOrqEAPttpQXuz09Pio3Jz4Qj8aE7SbWQqCFEf3nYaTV6";
 
-        // Palabras clave base en español e inglés
-        const keywordsEs = [nombre, categoria, marca, "producto", "herramienta", "ferretería", "industrial", "sobre fondo blanco", "packaging", "catálogo"].filter(Boolean).join(" ");
-        const keywordsEn = [nombre, categoria, marca, "product", "tool", "hardware", "industrial", "white background", "packaging", "catalog", "professional photo"].filter(Boolean).join(" ");
-        
-        // Unir ambos idiomas para una sola búsqueda
-        const keywords = `${keywordsEs} ${keywordsEn}`;
-
-        // Buscar en Pexels
-        const response = await fetch(
-            `https://api.pexels.com/v1/search?query=${encodeURIComponent(keywords)}&per_page=15&orientation=landscape`,
-            {
-                headers: {
-                    'Authorization': apiKey
-                }
-            }
-        );
-        if (!response.ok) {
-            throw new Error(`Pexels API error: ${response.status}`);
-        }
-        const data = await response.json();
-        if (!data.photos || data.photos.length === 0) return "";
-
-        // Palabras clave para filtrar imágenes irrelevantes (solo las más problemáticas)
-        const blacklist = ["person", "people", "woman", "man", "girl", "boy", "child", "children", "baby", "family", "portrait", "selfie", "face", "fashion", "model", "wedding", "love", "couple", "friends", "pet", "dog", "cat", "animal", "bird", "horse", "fish", "food", "fruit", "vegetable", "cake", "bread", "drink", "coffee", "tea", "wine", "beer", "alcohol", "party", "music", "dance", "sport", "ball", "car", "bike", "motorcycle", "bus", "train", "plane", "boat", "ship", "road", "street", "city", "building", "house", "apartment", "hotel", "room", "bed", "sofa", "chair", "table", "desk", "computer", "laptop", "phone", "tablet", "screen", "tv", "camera", "watch", "clock", "calendar", "book", "magazine", "newspaper", "pen", "pencil", "paint", "brush", "art", "drawing", "photo", "picture", "frame", "poster", "sign", "logo", "brand", "advertising", "banner", "flyer", "brochure", "card", "gift", "present", "box", "bag", "wallet", "key", "lock", "door", "window", "mirror", "lamp", "light", "candle", "fire", "smoke", "cloud", "rain", "snow", "ice", "water", "pool", "bath", "shower", "toilet", "sink", "towel", "soap", "shampoo", "toothbrush", "toothpaste", "comb", "brush", "razor", "scissors", "nail", "polish", "makeup", "perfume", "jewelry", "ring", "necklace", "earring", "bracelet", "watch", "glasses", "sunglasses", "hat", "cap", "helmet", "shirt", "t-shirt", "blouse", "dress", "skirt", "pants", "jeans", "shorts", "suit", "jacket", "coat", "sweater", "hoodie", "vest", "scarf", "glove", "sock", "shoe", "boot", "slipper", "sandals", "umbrella", "bag", "backpack", "suitcase", "luggage", "cart", "basket", "trolley", "box", "crate", "barrel", "bottle", "jar", "can", "cup", "glass", "mug", "plate", "bowl", "dish", "tray", "fork", "knife", "spoon", "chopstick", "napkin", "straw", "toothpick", "grill", "oven", "stove", "microwave", "fridge", "freezer", "blender", "mixer", "toaster", "kettle"];
-
-        // Score de relevancia más flexible
-        function getScore(photo: any) {
-            const text = `${photo.alt || ''} ${photo.photographer || ''}`.toLowerCase();
-            let score = 0;
-            
-            // Bonus por coincidencias exactas
-            if (nombre && text.includes(nombre.toLowerCase())) score += 3;
-            if (marca && text.includes(marca.toLowerCase())) score += 2;
-            if (categoria && text.includes(categoria.toLowerCase())) score += 2;
-            
-            // Bonus por palabras relacionadas con productos/herramientas
-            const productKeywords = ["product", "tool", "hardware", "ferretería", "herramienta", "industrial", "equipment", "machine", "device", "instrument", "appliance", "gadget", "component", "part", "material", "supply", "accessory"];
-            for (const keyword of productKeywords) {
-                if (text.includes(keyword)) score += 1;
-            }
-            
-            // Bonus por imágenes profesionales
-            const professionalKeywords = ["white background", "packaging", "catalog", "professional", "commercial", "studio", "clean", "minimal", "modern"];
-            for (const keyword of professionalKeywords) {
-                if (text.includes(keyword)) score += 1;
-            }
-            
-            // Penalización menor por contenido irrelevante
-            for (const word of blacklist) {
-                if (text.includes(word)) score -= 1;
-            }
-            
-            return score;
-        }
-
-        // Ordenar por score de relevancia
-        const sorted = data.photos
-            .map((photo: any) => ({ ...photo, _score: getScore(photo) }))
-            .sort((a: any, b: any) => b._score - a._score);
-
-        // Tomar la mejor imagen (más flexible, no requiere score positivo)
-        const best = sorted[0];
-        if (best && best._score >= -1) { // Permitir imágenes con score ligeramente negativo
-            return best.src?.medium || best.src?.large || best.src?.small || "";
-        }
-        
-        // Si no hay buenas opciones, devolver vacío
-        return "";
-    } catch (error) {
-        console.error("Error fetching image from Pexels:", error);
-        return "";
-    }
-}
 
 // Función de respaldo con placeholders inteligentes por categoría
 function getPlaceholderImage(categoria?: string, marca?: string, nombre?: string): string {
@@ -452,30 +375,6 @@ export default function Inventario() {
     // Estado para el modal de reactivar productos
     const [modalReactivarOpen, setModalReactivarOpen] = useState(false);
 
-    // Mover la declaración de marcasActivas y categoriasActivas y su useEffect justo antes de la lógica de filtrado de productos
-    const [marcasActivas, setMarcasActivas] = useState<{ [nombre: string]: boolean }>({});
-    const [categoriasActivas, setCategoriasActivas] = useState<{ [nombre: string]: boolean }>({});
-    useEffect(() => {
-        if (Array.isArray(marcas)) {
-            setMarcasActivas(prev => {
-                const nuevo = { ...prev };
-                marcas.forEach((m: any) => {
-                    if (nuevo[m.nombre] === undefined) nuevo[m.nombre] = true;
-                });
-                return nuevo;
-            });
-        }
-        if (Array.isArray(categorias)) {
-            setCategoriasActivas(prev => {
-                const nuevo = { ...prev };
-                categorias.forEach((c: any) => {
-                    if (nuevo[c.nombre] === undefined) nuevo[c.nombre] = true;
-                });
-                return nuevo;
-            });
-        }
-    }, [marcas, categorias]);
-
     // --- Función de ordenamiento avanzado ---
     const ordenarProductos = (productos: ProductInt[]) => {
         return [...productos].sort((a, b) => {
@@ -562,6 +461,8 @@ export default function Inventario() {
 
     // Aplicar filtros y ordenamiento
     const filteredProducts = ordenarProductos(filtrarProductos(productos));
+
+
 
     // --- Mejorar función de filtro para alertas ---
     const [alertaFiltro, setAlertaFiltro] = useState<null | 'bajo' | 'alto'>(null);
@@ -651,6 +552,8 @@ export default function Inventario() {
             showSnackbar(errorMessage, 'error');
         }
     };
+
+
 
     // --- Formularios ---
 
@@ -1341,14 +1244,12 @@ export default function Inventario() {
             console.log(`[INVENTARIO] Producto #${i}:`, p);
         });
 
+ 
+
     // Modal para gestionar marcas y categorías (con switches de activación y color amarillo)
-    function GestionarModal({ open, onClose, marcasActivas, setMarcasActivas, categoriasActivas, setCategoriasActivas, handleDeleteMarca, handleDeleteCategoria }: {
+    function GestionarModal({ open, onClose, handleDeleteMarca, handleDeleteCategoria }: {
         open: boolean,
         onClose: () => void,
-        marcasActivas: { [nombre: string]: boolean },
-        setMarcasActivas: React.Dispatch<React.SetStateAction<{ [nombre: string]: boolean }>>,
-        categoriasActivas: { [nombre: string]: boolean },
-        setCategoriasActivas: React.Dispatch<React.SetStateAction<{ [nombre: string]: boolean }>>,
         handleDeleteMarca: (marca: string) => void,
         handleDeleteCategoria: (cat: string) => void,
     }) {
@@ -1356,13 +1257,13 @@ export default function Inventario() {
         const [nuevaCategoria, setNuevaCategoria] = useState("");
         const [buscaMarca, setBuscaMarca] = useState("");
         const [buscaCategoria, setBuscaCategoria] = useState("");
-        // ... el resto igual, pero sin useState ni useEffect de activas
+        // ... el resto igual, pero sin switches ni lógica de activas
         return (
             <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{
                 sx: {
                     bgcolor: '#181818',
                     borderRadius: 3,
-                    border: 'none', // sin borde amarillo
+                    border: 'none',
                     boxShadow: 24,
                     p: 0
                 }
@@ -1370,7 +1271,7 @@ export default function Inventario() {
                 <DialogTitle sx={{
                     bgcolor: '#232323',
                     color: '#FFD700',
-                    borderBottom: 'none', // sin borde amarillo
+                    borderBottom: 'none',
                     fontWeight: 700,
                     fontSize: 20,
                     letterSpacing: 0.5,
@@ -1400,7 +1301,7 @@ export default function Inventario() {
                                     key={m.nombre}
                                     sx={{
                                         bgcolor: '#232323',
-                                        color: marcasActivas[m.nombre] ? '#FFD700' : '#888',
+                                        color: '#FFD700',
                                         px: 2,
                                         py: 0.5,
                                         borderRadius: 2,
@@ -1411,17 +1312,11 @@ export default function Inventario() {
                                         boxShadow: 1,
                                         border: 'none',
                                         transition: "all 0.2s",
-                                        opacity: marcasActivas[m.nombre] ? 1 : 0.5,
+                                        opacity: 1,
                                         '&:hover': { bgcolor: '#232323', color: '#FFD700' }
                                     }}
                                 >
                                     {m.nombre}
-                                    <Switch
-                                        checked={marcasActivas[m.nombre] !== false}
-                                        onChange={() => setMarcasActivas(prev => ({ ...prev, [m.nombre]: !prev[m.nombre] }))}
-                                            size="small"
-                                        sx={{ ml: 1, color: '#FFD700', '& .MuiSwitch-thumb': { bgcolor: '#FFD700' } }}
-                                    />
                                 </Box>
                             ))}
                         </Box>
@@ -1435,12 +1330,12 @@ export default function Inventario() {
                                 InputProps={{ style: { color: '#fff' } }}
                             />
                             <Button
-                              variant="contained"
+                                variant="contained"
                                 sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, borderRadius: 2, boxShadow: 0, '&:hover': { bgcolor: '#FFD700cc', color: '#232323' } }}
                                 onClick={() => { if (nuevaMarca.trim()) { addMarca(nuevaMarca.trim()); setNuevaMarca(""); } }}
-                          >
-                              Agregar
-                          </Button>
+                            >
+                                Agregar
+                            </Button>
                         </Box>
                     </Box>
                     <Divider sx={{ bgcolor: '#333', mb: 4 }} />
@@ -1464,7 +1359,7 @@ export default function Inventario() {
                                     key={c.nombre}
                                     sx={{
                                         bgcolor: '#232323',
-                                        color: categoriasActivas[c.nombre] ? '#FFD700' : '#888',
+                                        color: '#FFD700',
                                         px: 2,
                                         py: 0.5,
                                         borderRadius: 2,
@@ -1475,17 +1370,11 @@ export default function Inventario() {
                                         boxShadow: 1,
                                         border: 'none',
                                         transition: "all 0.2s",
-                                        opacity: categoriasActivas[c.nombre] ? 1 : 0.5,
+                                        opacity: 1,
                                         '&:hover': { bgcolor: '#232323', color: '#FFD700' }
                                     }}
                                 >
                                     {c.nombre}
-                                    <Switch
-                                        checked={categoriasActivas[c.nombre] !== false}
-                                        onChange={() => setCategoriasActivas(prev => ({ ...prev, [c.nombre]: !prev[c.nombre] }))}
-                                        size="small"
-                                        sx={{ ml: 1, color: '#FFD700', '& .MuiSwitch-thumb': { bgcolor: '#FFD700' } }}
-                                    />
                                 </Box>
                             ))}
                         </Box>
@@ -1499,12 +1388,12 @@ export default function Inventario() {
                                 InputProps={{ style: { color: '#fff' } }}
                             />
                             <Button
-                              variant="contained"
+                                variant="contained"
                                 sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, borderRadius: 2, boxShadow: 0, '&:hover': { bgcolor: '#FFD700cc', color: '#232323' } }}
                                 onClick={() => { if (nuevaCategoria.trim()) { addCategoria(nuevaCategoria.trim()); setNuevaCategoria(""); } }}
-                          >
-                              Agregar
-                          </Button>
+                            >
+                                Agregar
+                            </Button>
                         </Box>
                     </Box>
                 </DialogContent>
@@ -1630,7 +1519,7 @@ export default function Inventario() {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {paginatedProducts.map((product, index) => (
+                        {productosParaMostrar.map((product, index) => (
                             <TableRow 
                                 key={product.code + index}
                                 sx={{ 
@@ -2015,20 +1904,12 @@ export default function Inventario() {
     }, [ubicacionId, fetchProductos]);
 
     // --- Mejorar función de filtro para alertas ---
-    // Ahora filtra productos según switches activos
+    // Restaurar filtrado original sin marcas/categorias activas
     const productosParaMostrar = alertaFiltro === 'bajo'
-        ? productos.filter((p: ProductInt) => p.stock < p.stock_minimo && marcasActivas[p.brand] !== false && categoriasActivas[p.category] !== false)
+        ? productos.filter((p: ProductInt) => p.stock < p.stock_minimo)
         : alertaFiltro === 'alto'
-            ? productos.filter((p: ProductInt) => p.stock > p.stock_maximo && marcasActivas[p.brand] !== false && categoriasActivas[p.category] !== false)
-            : filteredProducts.filter(p => marcasActivas[p.brand] !== false && categoriasActivas[p.category] !== false);
-    // Mostrar advertencia si hay productos ocultos
-    const productosOcultos = productos.filter(p => marcasActivas[p.brand] === false || categoriasActivas[p.category] === false);
-
-    // PAGINACIÓN
-    const [page, setPage] = useState(1);
-    const itemsPerPage = 20;
-    const totalPages = Math.ceil(productosParaMostrar.length / itemsPerPage);
-    const paginatedProducts = productosParaMostrar.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+            ? productos.filter((p: ProductInt) => p.stock > p.stock_maximo)
+            : filteredProducts;
 
     // FEEDBACK VISUAL
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
@@ -2082,29 +1963,9 @@ export default function Inventario() {
                         Inventario de Productos
                     </Typography>
                     {/* Alertas de productos ocultos, stock bajo y stock alto */}
-                    {productosOcultos.length > 0 && (
+                    {productos.length === 0 && (
                         <Alert severity="warning" sx={{ mb: 2, bgcolor: '#181818', color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                            {productosOcultos.length} producto(s) están ocultos porque su marca o categoría está desactivada.
-                            <Button
-                                variant="outlined"
-                                size="small"
-                                sx={{ ml: 3, color: '#FFD700', borderColor: '#FFD700', fontWeight: 700, borderRadius: 2, '&:hover': { bgcolor: '#232323', color: '#FFD700' } }}
-                                onClick={() => {
-                                    // Reactivar todas las marcas y categorías
-                                    setMarcasActivas(prev => {
-                                        const nuevo = { ...prev };
-                                        Object.keys(nuevo).forEach(k => { nuevo[k] = true; });
-                                        return nuevo;
-                                    });
-                                    setCategoriasActivas(prev => {
-                                        const nuevo = { ...prev };
-                                        Object.keys(nuevo).forEach(k => { nuevo[k] = true; });
-                                        return nuevo;
-                                    });
-                                }}
-                            >
-                                Volver a mostrar todo
-                            </Button>
+                            No existen registros previos, empieza a agregarlos en "+ Añadir".
                         </Alert>
                     )}
                     <StockAlerts productosVisibles={productosParaMostrar} />
@@ -2249,7 +2110,7 @@ export default function Inventario() {
                                     justifyContent: "center",
                                     padding: 2
                                 }}>
-                                    {paginatedProducts.map((product, idx) => (
+                                    {productosParaMostrar.map((product, idx) => (
                                         <Card
                                             key={product.code + idx}
                                             sx={{
@@ -2502,14 +2363,7 @@ export default function Inventario() {
                             )
                         )}
                     </Box>
-                    {/* Controles de paginación */}
-                    {totalPages > 1 && (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, gap: 2 }}>
-                            <Button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} variant="outlined">Anterior</Button>
-                            <Typography sx={{ color: COLORS.DORADO, fontWeight: 600 }}>Página {page} de {totalPages}</Typography>
-                            <Button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} variant="outlined">Siguiente</Button>
-                        </Box>
-                    )}
+
                     {/* Botón desactivar seleccionados */}
                     {deleteMode && selected.length > 0 && (
                         <Button
@@ -2616,10 +2470,6 @@ export default function Inventario() {
             <GestionarModal
                 open={modalGestionOpen}
                 onClose={() => setModalGestionOpen(false)}
-                marcasActivas={marcasActivas}
-                setMarcasActivas={setMarcasActivas}
-                categoriasActivas={categoriasActivas}
-                setCategoriasActivas={setCategoriasActivas}
                 handleDeleteMarca={handleDeleteMarca}
                 handleDeleteCategoria={handleDeleteCategoria}
             />

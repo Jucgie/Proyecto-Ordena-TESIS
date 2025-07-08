@@ -248,6 +248,7 @@ class Pedidos(models.Model):
     solicitud_fk = models.ForeignKey(Solicitudes, on_delete=models.CASCADE, db_column='solicitud_fk')
     bodega_fk = models.ForeignKey(BodegaCentral, on_delete=models.CASCADE)
     proveedor_fk = models.ForeignKey(Proveedor, on_delete=models.SET_NULL, null=True)
+    num_guia_despacho = models.CharField(max_length=100, null=True, blank=True)
 
     class Meta:
         db_table = 'pedidos'

@@ -43,36 +43,14 @@ export function PedidoDetalle({ id, setDetalle }: Props) {
         pedidosService.getHistorialEstados(id)
             .then(historialData => {
                 let historial = Array.isArray(historialData) ? historialData : [];
-                
-                // Agregar evento inicial 'Pendiente' si no existe
-                if (pedido) {
-                    const yaTienePendiente = historial.some(h => h.estado_nuevo_nombre === 'Pendiente');
-                    if (!yaTienePendiente) {
-                        // Usar la fecha del pedido como fecha inicial del estado Pendiente
-                        const fechaInicial = pedido.fecha_entrega;
-                        historial = [
-                            {
-                                id_hist_ped: 'fake-pendiente',
-                                pedido_fk: pedido.id_p,
-                                estado_nuevo: 3, // ID de Pendiente
-                                estado_nuevo_nombre: 'Pendiente',
-                                usuario_nombre: pedido.usuario_nombre || pedido.solicitud_fk?.usuario_nombre || '—',
-                                fecha: fechaInicial,
-                                comentario: 'Registro inicial automático'
-                            },
-                            ...historial
-                        ];
-                    }
-                }
-                
+                // Ya no agregamos 'Pendiente' manualmente para ingresos, solo mostramos lo que viene del backend
                 // Ordenar cronológicamente: Pendiente abajo (más antiguo), Completado arriba (más reciente)
                 historial = historial.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
-                
                 setHistorialEstados(historial);
             })
             .catch(() => setError("Error al cargar el historial de estados"))
             .finally(() => setLoading(false));
-    }, [id, pedido]);
+    }, [id]);
 
     if (loading) return <Container><CircularProgress sx={{ color: '#FFD700' }} /></Container>;
     if (error) return <Container><Typography sx={{ color: 'red' }}>{error}</Typography></Container>;
@@ -97,9 +75,11 @@ export function PedidoDetalle({ id, setDetalle }: Props) {
     // --- AJUSTE: Ordenar timeline de salida por flujo lógico ---
     let historialFiltrado = historialEstados;
     if (pedido && (pedido.proveedor_nombre || pedido.proveedor_fk)) {
-        // Si es ingreso de proveedor, solo mostrar 'Completado' si existe
-        const completado = historialEstados.find(h => h.estado_nuevo_nombre === 'Completado');
-        historialFiltrado = completado ? [completado] : [];
+        // Si es ingreso de proveedor, mostrar SOLO el primer estado 'Completado' (el más antiguo)
+        historialFiltrado = historialEstados
+            .filter(h => h.estado_nuevo_nombre === 'Completado')
+            .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+            .slice(0, 1);
     } else {
         // Para salidas, ordenar por flujo lógico y luego por fecha, y mostrar de abajo hacia arriba
         const ordenFlujo = ['Pendiente', 'En camino', 'Completado'];

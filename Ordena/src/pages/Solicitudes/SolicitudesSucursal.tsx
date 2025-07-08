@@ -19,6 +19,52 @@ import sin_imagen from "../../assets/sin_imagen.png";
 import { solicitudesService } from "../../services/api";
 import EstadoBadge from "../../components/EstadoBadge";
 import { formatFechaChile } from '../../utils/formatFechaChile';
+import BuildIcon from '@mui/icons-material/Build';
+import ConstructionIcon from '@mui/icons-material/Construction';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
+import HardwareIcon from '@mui/icons-material/Hardware';
+import StraightenIcon from '@mui/icons-material/Straighten';
+import LayersIcon from '@mui/icons-material/Layers';
+import BoltIcon from '@mui/icons-material/Bolt';
+import PlumbingIcon from '@mui/icons-material/Plumbing';
+import YardIcon from '@mui/icons-material/Yard';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
+import FormatPaintIcon from '@mui/icons-material/FormatPaint';
+
+function getCategoryIcon(category?: string) {
+    const cat = (category || '').toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").trim();
+    const exactMap: Record<string, { icon: React.ReactElement, color: string }> = {
+        'martillo': { icon: <ConstructionIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#FF6B35' },
+        'llave inglesa': { icon: <BuildIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#607D8B' },
+        'herramientas': { icon: <Inventory2Icon sx={{ fontSize: 36, color: '#fff' }} />, color: '#FFA726' },
+        'tornillos': { icon: <HardwareIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#90A4AE' },
+        'clavos': { icon: <HardwareIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#B0BEC5' },
+        'cinta metrica': { icon: <StraightenIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#FFD700' },
+        'taladro': { icon: <BuildIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#4ECDC4' },
+        'planchas': { icon: <LayersIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#95A5A6' },
+        'electricidad': { icon: <BoltIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#FFE66D' },
+        'plomeria': { icon: <PlumbingIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#45B7D1' },
+        'construccion': { icon: <ConstructionIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#95A5A6' },
+        'jardin': { icon: <YardIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#2ECC71' },
+        'automotriz': { icon: <DirectionsCarIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#E74C3C' },
+        'pintura': { icon: <FormatPaintIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#9B59B6' },
+    };
+    if (exactMap[cat]) return exactMap[cat];
+    if (cat.includes('herramienta')) return { icon: <BuildIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#FF6B35' };
+    if (cat.includes('martillo')) return { icon: <ConstructionIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#FF6B35' };
+    if (cat.includes('tornillo')) return { icon: <HardwareIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#90A4AE' };
+    if (cat.includes('clavo')) return { icon: <HardwareIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#B0BEC5' };
+    if (cat.includes('cinta metrica')) return { icon: <StraightenIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#FFD700' };
+    if (cat.includes('taladro')) return { icon: <BuildIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#4ECDC4' };
+    if (cat.includes('planchas')) return { icon: <LayersIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#95A5A6' };
+    if (cat.includes('electricidad')) return { icon: <BoltIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#FFE66D' };
+    if (cat.includes('plomeria')) return { icon: <PlumbingIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#45B7D1' };
+    if (cat.includes('construccion')) return { icon: <ConstructionIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#95A5A6' };
+    if (cat.includes('jardin')) return { icon: <YardIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#2ECC71' };
+    if (cat.includes('automotriz')) return { icon: <DirectionsCarIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#E74C3C' };
+    if (cat.includes('pintura')) return { icon: <FormatPaintIcon sx={{ fontSize: 36, color: '#fff' }} />, color: '#9B59B6' };
+    return { icon: <Inventory2Icon sx={{ fontSize: 36, color: '#fff' }} />, color: '#34495E' };
+}
 
 interface Usuario {
     id: number;
@@ -1008,13 +1054,31 @@ export default function SolicitudesSucursal() {
                         🏷️ Seleccionar productos de la bodega central
                     </DialogTitle>
                     <DialogContent sx={{ bgcolor: "#1a1a1a", color: "#fff" }}>
-                        {/* Filtros y buscador */}
-                        <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                        {/* Buscador arriba de la lista */}
+                        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
                             <TextField
-                                placeholder="Buscar producto..."
+                                placeholder="Buscar por nombre, marca, categoría o código..."
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                                 size="small"
+                                sx={{
+                                    bgcolor: '#181818',
+                                    borderRadius: 2,
+                                    width: 350,
+                                    input: { color: '#FFD700', fontWeight: 700 },
+                                    '& .MuiOutlinedInput-root': {
+                                        '& fieldset': { borderColor: '#FFD700', borderWidth: 2 },
+                                        '&:hover fieldset': { borderColor: '#FFD700' },
+                                        color: '#FFD700',
+                                        fontWeight: 700,
+                                        background: '#181818',
+                                    },
+                                    '& .MuiInputLabel-root': {
+                                        color: '#FFD700',
+                                        fontWeight: 700,
+                                    },
+                                }}
+                                InputProps={{ style: { color: '#FFD700', fontWeight: 700 } }}
                             />
                             <TextField
                                 select
@@ -1022,14 +1086,30 @@ export default function SolicitudesSucursal() {
                                 value={filtroMarca}
                                 onChange={e => setFiltroMarca(e.target.value)}
                                 size="small"
-                                sx={{ minWidth: 120 }}
+                                sx={{
+                                    minWidth: 120,
+                                    bgcolor: '#181818',
+                                    borderRadius: 2,
+                                    '& .MuiOutlinedInput-root': {
+                                        '& fieldset': { borderColor: '#FFD700', borderWidth: 2 },
+                                        '&:hover fieldset': { borderColor: '#FFD700' },
+                                        color: '#FFD700',
+                                        fontWeight: 700,
+                                        background: '#181818',
+                                    },
+                                    '& .MuiInputLabel-root': {
+                                        color: '#FFD700',
+                                        fontWeight: 700,
+                                    },
+                                }}
+                                InputLabelProps={{ style: { color: '#FFD700', fontWeight: 700 } }}
                             >
                                 <MenuItem value="">Todas</MenuItem>
-                            {marcasBodegaCentral.map((m, index) => (
-                                <MenuItem key={`marca-${index}`} value={typeof m === 'string' ? m : m.nombre || m}>
-                                    {typeof m === 'string' ? m : m.nombre || m}
-                                </MenuItem>
-                            ))}
+                                {marcasBodegaCentral.map((m, index) => (
+                                    <MenuItem key={`marca-${index}`} value={typeof m === 'string' ? m : m.nombre || m} style={{ color: '#232323', fontWeight: 600 }}>
+                                        {typeof m === 'string' ? m : m.nombre || m}
+                                    </MenuItem>
+                                ))}
                             </TextField>
                             <TextField
                                 select
@@ -1037,35 +1117,61 @@ export default function SolicitudesSucursal() {
                                 value={filtroCategoria}
                                 onChange={e => setFiltroCategoria(e.target.value)}
                                 size="small"
-                                sx={{ minWidth: 120 }}
+                                sx={{
+                                    minWidth: 120,
+                                    bgcolor: '#181818',
+                                    borderRadius: 2,
+                                    '& .MuiOutlinedInput-root': {
+                                        '& fieldset': { borderColor: '#FFD700', borderWidth: 2 },
+                                        '&:hover fieldset': { borderColor: '#FFD700' },
+                                        color: '#FFD700',
+                                        fontWeight: 700,
+                                        background: '#181818',
+                                    },
+                                    '& .MuiInputLabel-root': {
+                                        color: '#FFD700',
+                                        fontWeight: 700,
+                                    },
+                                }}
+                                InputLabelProps={{ style: { color: '#FFD700', fontWeight: 700 } }}
                             >
                                 <MenuItem value="">Todas</MenuItem>
-                            {categoriasBodegaCentral.map((c, index) => (
-                                <MenuItem key={`categoria-${index}`} value={typeof c === 'string' ? c : c.nombre || c}>
-                                    {typeof c === 'string' ? c : c.nombre || c}
-                                </MenuItem>
-                            ))}
+                                {categoriasBodegaCentral.map((c, index) => (
+                                    <MenuItem key={`categoria-${index}`} value={typeof c === 'string' ? c : c.nombre || c} style={{ color: '#232323', fontWeight: 600 }}>
+                                        {typeof c === 'string' ? c : c.nombre || c}
+                                    </MenuItem>
+                                ))}
                             </TextField>
                         </Box>
-                        {/* Vista tipo inventario */}
-                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                            {productosFiltrados.map(prod => (
-                                <Card key={prod.code} sx={{ width: 180, bgcolor: "#232323", color: "#fff", cursor: "pointer" }}>
-                                    <CardActionArea onClick={() => handleSeleccionarProducto(prod)}>
-                                        <CardMedia
-                                            component="img"
-                                            image={typeof prod.im === "string" ? prod.im : sin_imagen}
-                                            alt={prod.name}
-                                            sx={{ height: 100, objectFit: "cover" }}
-                                        />
-                                        <CardContent>
-                                            <Typography variant="subtitle1">{prod.name}</Typography>
-                                            <Typography variant="body2">{prod.brand} | {prod.category}</Typography>
-                                            <Typography variant="body2" sx={{ color: "#FFD700" }}>Stock: {prod.stock}</Typography>
-                                        </CardContent>
-                                    </CardActionArea>
-                                </Card>
-                            ))}
+                        {/* Vista tipo lista inventario */}
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                            {productosFiltrados.map(prod => {
+                                // Buscar si existe en inventario de la sucursal
+                                const inventarioSucursal = inventarios[sucursalData.id] || [];
+                                const productoEnSucursal = inventarioSucursal.find((p: any) => p.id_prodc?.toString() === prod.id_prodc?.toString() || p.code === prod.code);
+                                const stockActual = productoEnSucursal ? productoEnSucursal.stock : null;
+                                const { icon, color } = getCategoryIcon(prod.category);
+                                return (
+                                    <Box key={prod.code} sx={{ display: 'flex', alignItems: 'center', bgcolor: '#232323', borderRadius: 2, p: 1.5, mb: 1, boxShadow: 1, cursor: 'pointer', border: '1px solid #333', '&:hover': { borderColor: '#FFD700', bgcolor: '#232323' } }} onClick={() => handleSeleccionarProducto(prod)}>
+                                        <Box sx={{ mr: 2, bgcolor: color, borderRadius: 2, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {icon}
+                                        </Box>
+                                        <Box sx={{ flex: 1 }}>
+                                            <Typography variant="subtitle1" sx={{ color: '#FFD700', fontWeight: 600 }}>{prod.name}</Typography>
+                                            <Typography variant="body2" sx={{ color: '#bbb' }}>{prod.brand} | {prod.category}</Typography>
+                                            <Typography variant="body2" sx={{ color: '#FFD700', fontFamily: 'monospace', fontWeight: 600 }}>
+                                                Código interno: {prod.code || '—'}
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ color: productoEnSucursal ? '#4CAF50' : '#FFD700', fontWeight: 600 }}>
+                                                {productoEnSucursal ? `Ya tienes este producto en tu inventario. Stock actual: ${stockActual}` : 'No tienes este producto en tu inventario.'}
+                                            </Typography>
+                                        </Box>
+                                        <Box>
+                                            <Typography variant="body2" sx={{ color: '#FFD700', fontWeight: 600 }}>Stock bodega: {prod.stock}</Typography>
+                                        </Box>
+                                    </Box>
+                                );
+                            })}
                         </Box>
                     </DialogContent>
                     <DialogActions sx={{ 

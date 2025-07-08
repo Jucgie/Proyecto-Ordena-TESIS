@@ -209,6 +209,19 @@ export default function PedidosSucursal() {
                     oci_asociada: pedido.ociAsociada || ""
                 };
 
+                // Función para validar si ya existe un informe con el mismo título y módulo
+                const existeInformeDuplicado = (titulo: string, modulo_origen: string) => {
+                    if (!Array.isArray(window.informesGlobal)) return false;
+                    return window.informesGlobal.some(
+                        (inf: any) => inf.titulo === titulo && inf.modulo_origen === modulo_origen
+                    );
+                };
+
+                if (existeInformeDuplicado(`Confirmación de Recepción - Pedido ${pedido.id}`, 'pedidos')) {
+                    alert("Ya existe un informe con este título y módulo.");
+                    return;
+                }
+
                 await informesService.createInforme({
                     titulo: `Confirmación de Recepción - Pedido ${pedido.id}`,
                     descripcion: `Confirmación de recepción del pedido ${pedido.id} en ${sucursal?.nombre || pedido.sucursalDestino}`,
@@ -219,6 +232,7 @@ export default function PedidosSucursal() {
                     sucursal_fk: usuario?.sucursal || null,
                     pedidos_fk: pedido.id
                 });
+                if (typeof window.fetchInformes === 'function') window.fetchInformes();
 
                 console.log('✅ Informe de confirmación de recepción creado exitosamente');
             } catch (error) {
@@ -465,6 +479,14 @@ export default function PedidosSucursal() {
             procesarIngresoConProductosValidados();
         }
     }, [productosAValidar.length, productosValidados.length, modalValidacionMultiple, procesandoIngreso]);
+
+    useEffect(() => {
+        if (modalValidacionMultiple && productoActualValidacion) {
+            setProductosSimilaresActual([]); // Limpiar antes de buscar
+            buscarProductosSimilaresLocal(productoActualValidacion);
+            setProductoSeleccionado(null); // Resetear selección
+        }
+    }, [productoActualValidacion, modalValidacionMultiple]);
 
     const handleCrearIngresoSucursal = async (data: any) => {
         // data.productos debe ser el array de productos a ingresar
@@ -1040,6 +1062,10 @@ export default function PedidosSucursal() {
                     <DialogContent sx={{ bgcolor: '#1a1a1a', p: 3 }}>
                         {productoActualValidacion && (
                             <Box>
+                                {/* Mostrar número de producto actual y total */}
+                                <Typography variant="subtitle2" sx={{ color: '#FFD700', fontWeight: 600, mb: 1 }}>
+                                    Producto {productosValidados.length + 1} de {productosAValidar.length + productosValidados.length}
+                                </Typography>
                                 <Typography variant="h6" sx={{ color: '#FFD700', fontWeight: 700, mb: 1 }}>
                                     Ya existe un producto similar en el inventario
                                 </Typography>
@@ -1158,6 +1184,16 @@ export default function PedidosSucursal() {
                         onCancelar={handleCancelarComparacion}
                         productoSeleccionado={productoSeleccionadoComparacion}
                         setProductoSeleccionado={setProductoSeleccionadoComparacion}
+                        indiceActual={(() => {
+                          // Buscar el índice del producto pendiente en el array de productos del pedido seleccionado
+                          if (!pedidoSeleccionado || !pedidoSeleccionado.productos) return 0;
+                          return pedidoSeleccionado.productos.findIndex((p: any) =>
+                            p.nombre === productoPendiente.nombre &&
+                            p.marca === productoPendiente.marca &&
+                            p.categoria === productoPendiente.categoria
+                          );
+                        })()}
+                        totalProductos={pedidoSeleccionado && pedidoSeleccionado.productos ? pedidoSeleccionado.productos.length : 1}
                     />
                 )}
             </div>

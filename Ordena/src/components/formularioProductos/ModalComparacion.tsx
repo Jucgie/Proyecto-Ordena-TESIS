@@ -18,6 +18,8 @@ type ModalComparacionProps = {
   onCancelar: () => void;
   productoSeleccionado?: any;
   setProductoSeleccionado?: (producto: any) => void;
+  indiceActual?: number; // Nuevo: índice del producto actual (opcional)
+  totalProductos?: number; // Nuevo: total de productos a validar (opcional)
 };
 
 const ModalComparacion: React.FC<ModalComparacionProps> = ({
@@ -28,14 +30,27 @@ const ModalComparacion: React.FC<ModalComparacionProps> = ({
   onCancelar,
   productoSeleccionado: productoSeleccionadoProp,
   setProductoSeleccionado: setProductoSeleccionadoProp,
+  indiceActual,
+  totalProductos,
 }) => {
   const [productoSeleccionado, setProductoSeleccionado] = React.useState<any>(null);
   const seleccionado = productoSeleccionadoProp !== undefined ? productoSeleccionadoProp : productoSeleccionado;
   const setSeleccionado = setProductoSeleccionadoProp !== undefined ? setProductoSeleccionadoProp : setProductoSeleccionado;
 
+  // Limpiar selección al cambiar de producto nuevo
+  React.useEffect(() => {
+    setProductoSeleccionado(null);
+  }, [productoNuevo]);
+
   return (
     <div className="modal-comparacion-overlay">
       <div className="modal-comparacion modal-simple">
+        {/* Mostrar número de producto actual si se reciben los props */}
+        {typeof indiceActual === 'number' && typeof totalProductos === 'number' && (
+          <div style={{ color: '#FFD700', fontWeight: 600, marginBottom: 8 }}>
+            Producto {indiceActual + 1} de {totalProductos}
+          </div>
+        )}
         <h2 style={{ color: '#FFD700', marginBottom: 8 }}>¡Atención! Producto similar encontrado</h2>
         <p style={{ color: '#fff', marginBottom: 16 }}>
           Se ha detectado uno o más productos similares al que intentas crear o ingresar.<br />Revisa la información antes de continuar.

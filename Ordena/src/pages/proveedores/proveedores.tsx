@@ -132,7 +132,21 @@ export default function Proveedores() {
             
             console.log('🔍 DEBUG - Datos del informe a enviar:', informeData);
             
+            // Función para validar si ya existe un informe con el mismo título y módulo
+            const existeInformeDuplicado = (titulo: string, modulo_origen: string) => {
+                if (!Array.isArray(window.informesGlobal)) return false;
+                return window.informesGlobal.some(
+                    (inf: any) => inf.titulo === titulo && inf.modulo_origen === modulo_origen
+                );
+            };
+
+            if (existeInformeDuplicado(informeData.titulo, informeData.modulo_origen)) {
+                alert("Ya existe un informe con este título y módulo.");
+                return;
+            }
+
             await informesService.createInforme(informeData);
+            if (typeof window.fetchInformes === 'function') window.fetchInformes();
 
         } catch (error) {
             console.error('Error al generar acta:', error);
