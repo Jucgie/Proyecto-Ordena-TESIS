@@ -1,6 +1,10 @@
 import api from "./api";
 
 export const historialService ={
+    registrarHistorialPedido: async (pedido: any) => {
+        const response = await api.post('/historial-pedidos/', pedido);
+        return response.data;
+    },
     getPedidos: async(params = {})=>{
         const response = await api.get('/pedidos/', { params });
         return response.data;
@@ -26,6 +30,16 @@ export const historialService ={
     },
     getBodegas: async () => {
         const response = await api.get('/bodegas/'); // Asegúrate que la URL es correcta
+        return response.data;
+    },
+    getHistorialPedidosDetallado: async (filtros = {}) => {
+        const params = new URLSearchParams();
+        Object.entries(filtros).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                params.append(key, value.toString());
+            }
+        });
+        const response = await api.get(`/historial-pedidos/?${params.toString()}`);
         return response.data;
     },
 }

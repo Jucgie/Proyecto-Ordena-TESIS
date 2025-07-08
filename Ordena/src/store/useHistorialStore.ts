@@ -73,8 +73,14 @@ export interface Pedidos{
     solicitud_fk?: Solicitud;
     bodega_fk: Bodega;
     proveedor_fk?: number;
-detalles_pedido?:DetallePedido[];
-
+    detalles_pedido?:DetallePedido[];
+    // Campos opcionales agregados por el backend para mostrar nombres y tipo
+    sucursal_nombre?: string;
+    usuario_nombre?: string;
+    estado_pedido_nombre?: string;
+    proveedor_nombre?: string;
+    personal_entrega_nombre?: string;
+    tipo?: string;
 }
 
 interface HistorialState {

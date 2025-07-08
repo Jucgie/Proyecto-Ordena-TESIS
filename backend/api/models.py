@@ -415,10 +415,10 @@ class Notificacion(models.Model):
 
 class Historial(models.Model):
     id_hst = models.BigAutoField(primary_key=True)
-    fecha = models.DateTimeField()
+    fecha = models.DateTimeField(auto_now_add=True)
     usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='usuario_fk')
     pedidos_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE, db_column='pedidos_fk')
-    producto_fk = models.ForeignKey(Productos, on_delete=models.CASCADE)
+    producto_fk = models.ForeignKey(Productos, on_delete=models.CASCADE, db_column='producto_fk_id')
 
     class Meta:
         db_table = 'historial'

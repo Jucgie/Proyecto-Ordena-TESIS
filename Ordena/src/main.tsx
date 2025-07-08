@@ -8,9 +8,17 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { useInventariosStore } from './store/useProductoStore';
+
+if (import.meta.env.DEV) {
+  // @ts-ignore
+  window.useInventariosStore = useInventariosStore;
+}
 
 createRoot(document.getElementById('root')!).render(
+  
   <StrictMode>
     <App />
   </StrictMode>,
+  
 )

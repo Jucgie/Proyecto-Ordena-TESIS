@@ -4,7 +4,7 @@ import {
     Paper, Typography, Box, Button, TextField, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions,
     Card, CardContent, CardMedia, CardActionArea, Checkbox, FormControl, InputLabel, Select, IconButton,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Alert, CircularProgress,
-    Drawer, Divider
+    Drawer, Divider, Switch
 } from "@mui/material";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -38,6 +38,50 @@ import { productoService } from '../../services/productoService';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import TuneIcon from '@mui/icons-material/Tune';
 import ReactivarProductosModal from '../../components/inventario/ReactivarProductosModal';
+import BuildIcon from '@mui/icons-material/Build';
+import BoltIcon from '@mui/icons-material/Bolt';
+import PlumbingIcon from '@mui/icons-material/Plumbing';
+import ConstructionIcon from '@mui/icons-material/Construction';
+import YardIcon from '@mui/icons-material/Yard';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
+import FormatPaintIcon from '@mui/icons-material/FormatPaint';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
+import HardwareIcon from '@mui/icons-material/Hardware';
+import StraightenIcon from '@mui/icons-material/Straighten';
+import LayersIcon from '@mui/icons-material/Layers';
+import CategoryIcon from '@mui/icons-material/Category';
+import EmojiObjectsIcon from '@mui/icons-material/EmojiObjects';
+import HandymanIcon from '@mui/icons-material/Handyman';
+import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
+import ColorLensIcon from '@mui/icons-material/ColorLens';
+import HomeIcon from '@mui/icons-material/Home';
+import StoreIcon from '@mui/icons-material/Store';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import ScienceIcon from '@mui/icons-material/Science';
+import ComputerIcon from '@mui/icons-material/Computer';
+import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
+import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import LocalGroceryStoreIcon from '@mui/icons-material/LocalGroceryStore';
+import BatteryChargingFullIcon from '@mui/icons-material/BatteryChargingFull';
+import ElectricBoltIcon from '@mui/icons-material/ElectricBolt';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import GrassIcon from '@mui/icons-material/Grass';
+import ConstructionOutlinedIcon from '@mui/icons-material/ConstructionOutlined';
+import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
+import FactoryIcon from '@mui/icons-material/Factory';
+import LocalCafeIcon from '@mui/icons-material/LocalCafe';
+import KitchenIcon from '@mui/icons-material/Kitchen';
+import ChairIcon from '@mui/icons-material/Chair';
+import DirectionsBusIcon from '@mui/icons-material/DirectionsBus';
+import DirectionsBikeIcon from '@mui/icons-material/DirectionsBike';
+import DirectionsBoatIcon from '@mui/icons-material/DirectionsBoat';
+import DirectionsRailwayIcon from '@mui/icons-material/DirectionsRailway';
+import DirectionsSubwayIcon from '@mui/icons-material/DirectionsSubway';
+import DirectionsTransitIcon from '@mui/icons-material/DirectionsTransit';
+import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
 
 // Función mejorada para buscar imágenes usando Pexels API
 async function fetchImagenPexels(nombre: string, categoria?: string, marca?: string): Promise<string> {
@@ -119,40 +163,106 @@ async function fetchImagenPexels(nombre: string, categoria?: string, marca?: str
 }
 
 // Función de respaldo con placeholders inteligentes por categoría
-function getPlaceholderImage(categoria?: string, marca?: string): string {
-    const categoriaLower = categoria?.toLowerCase() || '';
-    
-    // Colores por categoría
-    const categoriaColors: { [key: string]: string } = {
-        'herramientas': '#FF6B35',
-        'electrónicos': '#4ECDC4',
-        'plomería': '#45B7D1',
-        'electricidad': '#FFE66D',
-        'construcción': '#95A5A6',
-        'jardín': '#2ECC71',
-        'automotriz': '#E74C3C',
-        'pintura': '#9B59B6',
-        'martillo': '#FF6B35' // Para el caso específico
+function getPlaceholderImage(categoria?: string, marca?: string, nombre?: string): string {
+    // Normalizar categoría: minúsculas, sin tildes, sin espacios
+    function normalize(str: string = "") {
+        return str
+            .toLowerCase()
+            .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+            .replace(/[^a-z0-9 ]/g, "")
+            .trim();
+    }
+    const cat = normalize(categoria);
+    // Alias de categorías
+    const alias: { [key: string]: string } = {
+        "herramienta": "herramientas",
+        "herramientas": "herramientas",
+        "martillo": "herramientas",
+        "clavo": "clavos",
+        "clavos": "clavos",
+        "tornillo": "tornillos",
+        "tornillos": "tornillos",
+        "planchas": "planchas",
+        "cinta metrica": "cinta metrica",
+        "taladro": "taladro",
+        "electricidad": "electricidad",
+        "plomeria": "plomeria",
+        "construccion": "construccion",
+        "jardin": "jardin",
+        "automotriz": "automotriz",
+        "pintura": "pintura"
     };
-    
-    const baseColor = categoriaColors[categoriaLower] || '#34495E';
-    
-    // SVG simplificado y más robusto
+    const baseCat = alias[cat] || cat || 'default';
+    // Íconos SVG genéricos por categoría
+    const categoriaConfig: { [key: string]: { color: string, icon: string } } = {
+        'herramientas': {
+            color: '#FF6B35',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><path d="M36.5 11.5L28 20L32 24L40.5 15.5C41.3284 14.6716 41.3284 13.3284 40.5 12.5L35.5 7.5C34.6716 6.67157 33.3284 6.67157 32.5 7.5L24 16L28 20L36.5 11.5Z" fill="#fff"/></svg>`
+        },
+        'clavos': {
+            color: '#B0BEC5',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><rect x="22" y="8" width="4" height="28" fill="#fff"/><rect x="20" y="36" width="8" height="4" fill="#fff"/></svg>`
+        },
+        'tornillos': {
+            color: '#90A4AE',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><rect x="22" y="8" width="4" height="24" fill="#fff"/><polygon points="24,36 20,44 28,44" fill="#fff"/></svg>`
+        },
+        'planchas': {
+            color: '#95A5A6',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><rect x="10" y="20" width="28" height="8" fill="#fff"/></svg>`
+        },
+        'cinta metrica': {
+            color: '#FFD700',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><circle cx="24" cy="24" r="12" fill="#fff"/><rect x="20" y="32" width="8" height="8" fill="#fff"/></svg>`
+        },
+        'taladro': {
+            color: '#4ECDC4',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><rect x="12" y="20" width="24" height="8" fill="#fff"/><rect x="32" y="16" width="8" height="16" fill="#fff"/></svg>`
+        },
+        'electricidad': {
+            color: '#FFE66D',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><path d="M24 4L16 28H24V44L32 20H24V4Z" fill="#fff"/></svg>`
+        },
+        'plomeria': {
+            color: '#45B7D1',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><path d="M34 14V10C34 7.79086 32.2091 6 30 6H18C15.7909 6 14 7.79086 14 10V14H6V18H42V14H34Z" fill="#fff"/></svg>`
+        },
+        'construccion': {
+            color: '#95A5A6',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><rect x="8" y="32" width="32" height="8" fill="#fff"/><rect x="12" y="24" width="24" height="8" fill="#fff"/><rect x="16" y="16" width="16" height="8" fill="#fff"/></svg>`
+        },
+        'jardin': {
+            color: '#2ECC71',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><circle cx="24" cy="24" r="10" fill="#fff"/><path d="M24 34V44" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>`
+        },
+        'automotriz': {
+            color: '#E74C3C',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><rect x="10" y="20" width="28" height="12" fill="#fff"/><circle cx="16" cy="36" r="4" fill="#fff"/><circle cx="32" cy="36" r="4" fill="#fff"/></svg>`
+        },
+        'pintura': {
+            color: '#9B59B6',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><rect x="20" y="8" width="8" height="32" fill="#fff"/><rect x="16" y="36" width="16" height="4" fill="#fff"/></svg>`
+        },
+        // Default: caja genérica
+        'default': {
+            color: '#34495E',
+            icon: `<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" fill="none"/><rect x="12" y="20" width="24" height="16" fill="#fff"/><rect x="16" y="16" width="16" height="8" fill="#fff"/></svg>`
+        }
+    };
+    const config = categoriaConfig[baseCat] || categoriaConfig['default'];
+    // SVG con icono, nombre y marca
     const svgContent = `<svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100%" height="100%" fill="${baseColor}"/>
-        <circle cx="150" cy="100" r="40" fill="rgba(255,255,255,0.2)"/>
-        <text x="150" y="110" font-family="Arial, sans-serif" font-size="20" fill="white" text-anchor="middle">${categoria || 'Producto'}</text>
-        <text x="150" y="130" font-family="Arial, sans-serif" font-size="14" fill="rgba(255,255,255,0.8)" text-anchor="middle">${marca || 'Sin imagen'}</text>
+        <rect width="100%" height="100%" fill="${config.color}"/>
+        <g transform="translate(126,36)">${config.icon}</g>
+        <text x="150" y="120" font-family="Arial, sans-serif" font-size="22" fill="white" text-anchor="middle" font-weight="bold">${nombre ? nombre.slice(0, 18) : (categoria || 'Producto')}</text>
+        <text x="150" y="145" font-family="Arial, sans-serif" font-size="15" fill="rgba(255,255,255,0.85)" text-anchor="middle">${marca || 'Sin marca'}</text>
     </svg>`;
-    
     try {
-        const result = `data:image/svg+xml;base64,${btoa(svgContent)}`;
-        return result;
+        return `data:image/svg+xml;base64,${btoa(svgContent)}`;
     } catch (error) {
-        console.error("Error generando placeholder:", error);
         // Fallback simple
         const fallbackSvg = `<svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
-            <rect width="100%" height="100%" fill="${baseColor}"/>
+            <rect width="100%" height="100%" fill="${config.color}"/>
             <text x="150" y="100" font-family="Arial, sans-serif" font-size="24" fill="white" text-anchor="middle">${categoria || 'Producto'}</text>
         </svg>`;
         return `data:image/svg+xml;base64,${btoa(fallbackSvg)}`;
@@ -341,6 +451,30 @@ export default function Inventario() {
 
     // Estado para el modal de reactivar productos
     const [modalReactivarOpen, setModalReactivarOpen] = useState(false);
+
+    // Mover la declaración de marcasActivas y categoriasActivas y su useEffect justo antes de la lógica de filtrado de productos
+    const [marcasActivas, setMarcasActivas] = useState<{ [nombre: string]: boolean }>({});
+    const [categoriasActivas, setCategoriasActivas] = useState<{ [nombre: string]: boolean }>({});
+    useEffect(() => {
+        if (Array.isArray(marcas)) {
+            setMarcasActivas(prev => {
+                const nuevo = { ...prev };
+                marcas.forEach((m: any) => {
+                    if (nuevo[m.nombre] === undefined) nuevo[m.nombre] = true;
+                });
+                return nuevo;
+            });
+        }
+        if (Array.isArray(categorias)) {
+            setCategoriasActivas(prev => {
+                const nuevo = { ...prev };
+                categorias.forEach((c: any) => {
+                    if (nuevo[c.nombre] === undefined) nuevo[c.nombre] = true;
+                });
+                return nuevo;
+            });
+        }
+    }, [marcas, categorias]);
 
     // --- Función de ordenamiento avanzado ---
     const ordenarProductos = (productos: ProductInt[]) => {
@@ -1188,25 +1322,7 @@ export default function Inventario() {
         );
     }
 
-    // Modal para gestionar marcas y categorías
-    function GestionarModal({ open, onClose }: { open: boolean, onClose: () => void }) {
-        const [nuevaMarca, setNuevaMarca] = useState("");
-        const [nuevaCategoria, setNuevaCategoria] = useState("");
-        const [buscaMarca, setBuscaMarca] = useState("");
-        const [buscaCategoria, setBuscaCategoria] = useState("");
-
-        // Filtrado local para mostrar solo lo buscado - con validación de tipos
-        const marcasFiltradas = Array.isArray(marcas) 
-            ? marcas
-                .filter(m => m && typeof m === 'object' && m.nombre)
-                .filter(m => m.nombre.toLowerCase().includes(buscaMarca.toLowerCase()))
-            : [];
-        const categoriasFiltradas = Array.isArray(categorias)
-            ? categorias
-                .filter(c => c && typeof c === 'object' && c.nombre)
-                .filter(c => c.nombre.toLowerCase().includes(buscaCategoria.toLowerCase()))
-            : [];
-
+    // Declarar las funciones en el scope principal:
         const handleDeleteMarca = (marca: string) => {
             const marcaObj = marcas.find(m => typeof m === 'object' && m?.nombre === marca);
             if (marcaObj && typeof marcaObj === 'object' && marcaObj.id) {
@@ -1220,26 +1336,71 @@ export default function Inventario() {
             }
         };
 
+        console.log("🔍 [INVENTARIO] Productos del store:", productos);
+        productos.forEach((p, i) => {
+            console.log(`[INVENTARIO] Producto #${i}:`, p);
+        });
+
+    // Modal para gestionar marcas y categorías (con switches de activación y color amarillo)
+    function GestionarModal({ open, onClose, marcasActivas, setMarcasActivas, categoriasActivas, setCategoriasActivas, handleDeleteMarca, handleDeleteCategoria }: {
+        open: boolean,
+        onClose: () => void,
+        marcasActivas: { [nombre: string]: boolean },
+        setMarcasActivas: React.Dispatch<React.SetStateAction<{ [nombre: string]: boolean }>>,
+        categoriasActivas: { [nombre: string]: boolean },
+        setCategoriasActivas: React.Dispatch<React.SetStateAction<{ [nombre: string]: boolean }>>,
+        handleDeleteMarca: (marca: string) => void,
+        handleDeleteCategoria: (cat: string) => void,
+    }) {
+        const [nuevaMarca, setNuevaMarca] = useState("");
+        const [nuevaCategoria, setNuevaCategoria] = useState("");
+        const [buscaMarca, setBuscaMarca] = useState("");
+        const [buscaCategoria, setBuscaCategoria] = useState("");
+        // ... el resto igual, pero sin useState ni useEffect de activas
         return (
-            <Dialog open={open} onClose={onClose}>
-                <DialogTitle>Gestionar Marcas y Categorías</DialogTitle>
-                <DialogContent>
-                    <Box sx={{ mb: 3 }}>
-                        <Typography variant="subtitle1" sx={{ mb: 1 }}>Marcas actuales:</Typography>
+            <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{
+                sx: {
+                    bgcolor: '#181818',
+                    borderRadius: 3,
+                    border: 'none', // sin borde amarillo
+                    boxShadow: 24,
+                    p: 0
+                }
+            }}>
+                <DialogTitle sx={{
+                    bgcolor: '#232323',
+                    color: '#FFD700',
+                    borderBottom: 'none', // sin borde amarillo
+                    fontWeight: 700,
+                    fontSize: 20,
+                    letterSpacing: 0.5,
+                    px: 4,
+                    py: 2.5
+                }}>
+                    Gestionar Marcas y Categorías
+                </DialogTitle>
+                <DialogContent sx={{ bgcolor: '#181818', color: '#fff', px: 4, py: 3 }}>
+                    <Box sx={{ mb: 4 }}>
+                        <Typography variant="subtitle2" sx={{ mb: 1, color: '#FFD700', fontWeight: 600, fontSize: 15, letterSpacing: 0.5 }}>Marcas actuales</Typography>
                         <TextField
                             placeholder="Buscar marca..."
                             value={buscaMarca}
                             onChange={e => setBuscaMarca(e.target.value)}
                             size="small"
-                            sx={{ mb: 1, width: "100%" }}
+                            sx={{ mb: 2, width: "100%", bgcolor: '#232323', borderRadius: 2,
+                                input: { color: '#fff', fontWeight: 500 },
+                                label: { color: '#FFD700' },
+                                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#333' }
+                            }}
+                            InputProps={{ style: { color: '#fff' } }}
                         />
-                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
-                            {marcasFiltradas.map(m => (
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.2, mb: 2 }}>
+                            {marcas.map(m => (
                                 <Box
                                     key={m.nombre}
                                     sx={{
-                                        bgcolor: "#FFD700",
-                                        color: "#232323",
+                                        bgcolor: '#232323',
+                                        color: marcasActivas[m.nombre] ? '#FFD700' : '#888',
                                         px: 2,
                                         py: 0.5,
                                         borderRadius: 2,
@@ -1247,65 +1408,63 @@ export default function Inventario() {
                                         display: "flex",
                                         alignItems: "center",
                                         position: "relative",
-                                        "&:hover .delete-icon": { opacity: 1 }
+                                        boxShadow: 1,
+                                        border: 'none',
+                                        transition: "all 0.2s",
+                                        opacity: marcasActivas[m.nombre] ? 1 : 0.5,
+                                        '&:hover': { bgcolor: '#232323', color: '#FFD700' }
                                     }}
                                 >
                                     {m.nombre}
-                                    <Tooltip title="Desactivar marca">
-                                        <IconButton
+                                    <Switch
+                                        checked={marcasActivas[m.nombre] !== false}
+                                        onChange={() => setMarcasActivas(prev => ({ ...prev, [m.nombre]: !prev[m.nombre] }))}
                                             size="small"
-                                            className="delete-icon"
-                                            sx={{
-                                                ml: 1,
-                                                opacity: 0,
-                                                transition: "opacity 0.2s",
-                                                "&:hover": { color: "#ff4444" }
-                                            }}
-                                            onClick={() => handleDeleteMarca(m.nombre)}
-                                        >
-                                            <DeleteIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
+                                        sx={{ ml: 1, color: '#FFD700', '& .MuiSwitch-thumb': { bgcolor: '#FFD700' } }}
+                                    />
                                 </Box>
                             ))}
                         </Box>
-                        <Box sx={{ display: "flex", gap: 1 }}>
+                        <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
                             <TextField
                                 label="Nueva marca"
                                 value={nuevaMarca}
                                 onChange={e => setNuevaMarca(e.target.value)}
                                 size="small"
+                                sx={{ bgcolor: '#232323', borderRadius: 2, input: { color: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#333' } }}
+                                InputProps={{ style: { color: '#fff' } }}
                             />
                             <Button
-                              onClick={() => {
-                                  if (nuevaMarca && !marcas.some(m => typeof m === 'object' && m?.nombre === nuevaMarca)) {
-                                      addMarca(nuevaMarca);
-                                      setNuevaMarca("");
-                                  }
-                              }}
                               variant="contained"
-                              size="small"
+                                sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, borderRadius: 2, boxShadow: 0, '&:hover': { bgcolor: '#FFD700cc', color: '#232323' } }}
+                                onClick={() => { if (nuevaMarca.trim()) { addMarca(nuevaMarca.trim()); setNuevaMarca(""); } }}
                           >
                               Agregar
                           </Button>
                         </Box>
                     </Box>
+                    <Divider sx={{ bgcolor: '#333', mb: 4 }} />
                     <Box>
-                        <Typography variant="subtitle1" sx={{ mb: 1 }}>Categorías actuales:</Typography>
+                        <Typography variant="subtitle2" sx={{ mb: 1, color: '#FFD700', fontWeight: 600, fontSize: 15, letterSpacing: 0.5 }}>Categorías actuales</Typography>
                         <TextField
                             placeholder="Buscar categoría..."
                             value={buscaCategoria}
                             onChange={e => setBuscaCategoria(e.target.value)}
                             size="small"
-                            sx={{ mb: 1, width: "100%" }}
+                            sx={{ mb: 2, width: "100%", bgcolor: '#232323', borderRadius: 2,
+                                input: { color: '#fff', fontWeight: 500 },
+                                label: { color: '#FFD700' },
+                                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#333' }
+                            }}
+                            InputProps={{ style: { color: '#fff' } }}
                         />
-                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
-                            {categoriasFiltradas.map(c => (
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.2, mb: 2 }}>
+                            {categorias.map(c => (
                                 <Box
                                     key={c.nombre}
                                     sx={{
-                                        bgcolor: "#FFD700",
-                                        color: "#232323",
+                                        bgcolor: '#232323',
+                                        color: categoriasActivas[c.nombre] ? '#FFD700' : '#888',
                                         px: 2,
                                         py: 0.5,
                                         borderRadius: 2,
@@ -1313,45 +1472,44 @@ export default function Inventario() {
                                         display: "flex",
                                         alignItems: "center",
                                         position: "relative",
-                                        "&:hover .delete-icon": { opacity: 1 }
+                                        boxShadow: 1,
+                                        border: 'none',
+                                        transition: "all 0.2s",
+                                        opacity: categoriasActivas[c.nombre] ? 1 : 0.5,
+                                        '&:hover': { bgcolor: '#232323', color: '#FFD700' }
                                     }}
                                 >
                                     {c.nombre}
-                                    <Tooltip title="Desactivar categoría">
-                                        <IconButton
-                                            onClick={() => handleDeleteCategoria(c.nombre)}
-                                            sx={{ color: "#ff4444" }}
-                                        >
-                                            <DeleteIcon />
-                                        </IconButton>
-                                    </Tooltip>
+                                    <Switch
+                                        checked={categoriasActivas[c.nombre] !== false}
+                                        onChange={() => setCategoriasActivas(prev => ({ ...prev, [c.nombre]: !prev[c.nombre] }))}
+                                        size="small"
+                                        sx={{ ml: 1, color: '#FFD700', '& .MuiSwitch-thumb': { bgcolor: '#FFD700' } }}
+                                    />
                                 </Box>
                             ))}
                         </Box>
-                        <Box sx={{ display: "flex", gap: 1 }}>
+                        <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
                             <TextField
                                 label="Nueva categoría"
                                 value={nuevaCategoria}
                                 onChange={e => setNuevaCategoria(e.target.value)}
                                 size="small"
+                                sx={{ bgcolor: '#232323', borderRadius: 2, input: { color: '#fff' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#333' } }}
+                                InputProps={{ style: { color: '#fff' } }}
                             />
                             <Button
-                              onClick={() => {
-                                  if (nuevaCategoria && !categorias.some(c => typeof c === 'object' && c?.nombre === nuevaCategoria)) {
-                                      addCategoria(nuevaCategoria);
-                                      setNuevaCategoria("");
-                                  }
-                              }}
                               variant="contained"
-                              size="small"
+                                sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, borderRadius: 2, boxShadow: 0, '&:hover': { bgcolor: '#FFD700cc', color: '#232323' } }}
+                                onClick={() => { if (nuevaCategoria.trim()) { addCategoria(nuevaCategoria.trim()); setNuevaCategoria(""); } }}
                           >
                               Agregar
                           </Button>
                         </Box>
                     </Box>
                 </DialogContent>
-                <DialogActions>
-                    <Button onClick={onClose}>Cerrar</Button>
+                <DialogActions sx={{ bgcolor: '#181818', borderTop: 'none', p: 2, justifyContent: "flex-end" }}>
+                    <Button onClick={onClose} variant="outlined" sx={{ color: '#FFD700', borderColor: '#FFD700', fontWeight: 700, borderRadius: 2, '&:hover': { bgcolor: '#232323', color: '#FFD700' } }}>Cerrar</Button>
                 </DialogActions>
             </Dialog>
         );
@@ -1504,34 +1662,16 @@ export default function Inventario() {
                             >
                                 {/* Imagen */}
                                 <TableCell sx={{ textAlign: "center", py: 2 }}>
-                                    <Box sx={{
-                                        position: "relative",
-                                        display: "inline-block",
-                                        borderRadius: 2,
-                                        overflow: "hidden",
-                                        border: "2px solid #333",
-                                        transition: "all 0.3s ease",
-                                        "&:hover": {
-                                            borderColor: "#FFD700",
-                                            transform: "scale(1.1)"
-                                        }
-                                    }}>
-                                        <img 
-                                            src={
-                                                typeof product.im === "string"
-                                                    ? product.im
-                                                    : product.im
-                                                        ? URL.createObjectURL(product.im)
-                                                        : sin_imagen
-                                            } 
-                                            alt={product.name}
-                                            style={{ 
-                                                width: 60, 
-                                                height: 60, 
-                                                objectFit: "cover",
-                                                display: "block"
-                                            }} 
-                                        />
+                                    <Box sx={{ position: "relative", display: "inline-block", borderRadius: 2, overflow: "hidden", border: "2px solid #333", transition: "all 0.3s ease", "&:hover": { borderColor: "#FFD700", transform: "scale(1.1)" } }}>
+                                        {typeof product.im === "string" && product.im ? (
+                                            <img src={product.im} alt={product.name} style={{ width: 60, height: 60, objectFit: "cover", display: "block" }} />
+                                        ) : product.im instanceof File ? (
+                                            <img src={URL.createObjectURL(product.im)} alt={product.name} style={{ width: 60, height: 60, objectFit: "cover", display: "block" }} />
+                                        ) : (
+                                            (() => { const {icon, color} = getCategoryIcon(product.category); return (
+                                                <Box sx={{ width: 60, height: 60, bgcolor: color, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</Box>
+                                            ); })()
+                                        )}
                                         {/* Indicador de estado */}
                                         <Box sx={{
                                             position: "absolute",
@@ -1752,44 +1892,59 @@ export default function Inventario() {
     );
 
     // Componente para alertas de stock bajo
-    const StockAlerts = () => {
-        const lowStockProducts = productos.filter(p => p.stock < p.stock_minimo);
-        const outOfStockProducts = productos.filter(p => p.stock === 0);
+    const StockAlerts = ({ productosVisibles }: { productosVisibles: ProductInt[] }) => {
+        const lowStockProducts = productosVisibles.filter(p => p.stock < p.stock_minimo);
+        const outOfStockProducts = productosVisibles.filter(p => p.stock === 0);
         
         if (lowStockProducts.length === 0) return null;
 
         return (
             <Box
                 sx={{
-                    p: 2,
-                    bgcolor: outOfStockProducts.length > 0 ? "#4a1a1a" : "#4a3a1a",
-                    borderRadius: 2,
-                    border: `1px solid ${outOfStockProducts.length > 0 ? "#f44336" : "#ff9800"}`,
-                    display: "flex",
-                    alignItems: "center",
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: 2,
+                    p: 1.5,
+                    bgcolor: outOfStockProducts.length > 0 ? "#2d1a1a" : "#2d241a",
+                    borderRadius: 2,
+                    border: `1.5px solid ${outOfStockProducts.length > 0 ? "#f44336" : "#ff9800"}`,
+                    mb: 2,
+                    boxShadow: 2,
                     cursor: 'pointer',
                     transition: 'background 0.2s',
                     '&:hover': {
-                        bgcolor: outOfStockProducts.length > 0 ? '#6e2323' : '#6e4a23',
-                        boxShadow: 3,
+                        bgcolor: outOfStockProducts.length > 0 ? '#4a1a1a' : '#4a3a1a',
+                        boxShadow: 4,
                     },
+                    minHeight: 56
                 }}
                 onClick={() => setAlertaFiltro('bajo')}
             >
-                <WarningTwoToneIcon sx={{ color: outOfStockProducts.length > 0 ? "#f44336" : "#ff9800", fontSize: 28 }} />
-                <Box>
-                    <Typography variant="body1" sx={{ color: outOfStockProducts.length > 0 ? "#f44336" : "#ff9800", fontWeight: 600 }}>
+                <WarningTwoToneIcon sx={{ color: outOfStockProducts.length > 0 ? "#f44336" : "#ff9800", fontSize: 32 }} />
+                <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip
+                            label={outOfStockProducts.length > 0 
+                                ? `${outOfStockProducts.length} sin stock`
+                                : `${lowStockProducts.length} bajo stock mínimo`}
+                            sx={{
+                                bgcolor: outOfStockProducts.length > 0 ? "#f44336" : "#ff9800",
+                                color: '#fff',
+                                fontWeight: 700,
+                                fontSize: 16,
+                                px: 1.5
+                            }}
+                        />
+                        <Typography sx={{ color: '#fff', fontWeight: 600, fontSize: 16 }}>
                         {outOfStockProducts.length > 0 
-                            ? `${outOfStockProducts.length} productos sin stock`
-                            : `${lowStockProducts.length} productos bajo stock mínimo`
-                        }
+                                ? "Productos agotados"
+                                : "Productos bajo stock mínimo"}
                     </Typography>
-                    <Typography variant="body2" sx={{ color: "#ccc", mt: 0.5 }}>
+                    </Box>
+                    <Typography variant="body2" sx={{ color: "#ccc", mt: 0.5, fontSize: 13 }}>
                         {outOfStockProducts.length > 0 
-                            ? "Algunos productos están completamente agotados"
-                            : "Productos con stock menor al mínimo establecido"
-                        }
+                            ? "Haz clic para ver solo los agotados"
+                            : "Haz clic para ver solo los de stock bajo"}
                     </Typography>
                 </Box>
             </Box>
@@ -1797,37 +1952,52 @@ export default function Inventario() {
     };
 
     // Componente para alertas de stock alto
-    const HighStockAlerts = () => {
-        const highStockProducts = productos.filter(p => p.stock > p.stock_maximo);
+    const HighStockAlerts = ({ productosVisibles }: { productosVisibles: ProductInt[] }) => {
+        const highStockProducts = productosVisibles.filter(p => p.stock > p.stock_maximo);
         
         if (highStockProducts.length === 0) return null;
 
         return (
             <Box
                 sx={{
-                    p: 2,
-                    bgcolor: "#1a4a1a",
-                    borderRadius: 2,
-                    border: `1px solid #4caf50`,
-                    display: "flex",
-                    alignItems: "center",
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: 2,
+                    p: 1.5,
+                    bgcolor: "#1a2d1a",
+                    borderRadius: 2,
+                    border: `1.5px solid #4caf50`,
+                    mb: 2,
+                    boxShadow: 2,
                     cursor: 'pointer',
                     transition: 'background 0.2s',
                     '&:hover': {
                         bgcolor: '#236e23',
-                        boxShadow: 3,
+                        boxShadow: 4,
                     },
+                    minHeight: 56
                 }}
                 onClick={() => setAlertaFiltro('alto')}
             >
-                <WarningTwoToneIcon sx={{ color: "#4caf50", fontSize: 28 }} />
-                <Box>
-                    <Typography variant="body1" sx={{ color: "#4caf50", fontWeight: 600 }}>
-                        {highStockProducts.length} productos superan el stock máximo
+                <WarningTwoToneIcon sx={{ color: "#4caf50", fontSize: 32 }} />
+                <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip
+                            label={`${highStockProducts.length} sobre stock máximo`}
+                            sx={{
+                                bgcolor: "#4caf50",
+                                color: '#fff',
+                                fontWeight: 700,
+                                fontSize: 16,
+                                px: 1.5
+                            }}
+                        />
+                        <Typography sx={{ color: '#fff', fontWeight: 600, fontSize: 16 }}>
+                            Productos con exceso de stock
                     </Typography>
-                    <Typography variant="body2" sx={{ color: "#ccc", mt: 0.5 }}>
-                        Productos con stock mayor al máximo recomendado
+                    </Box>
+                    <Typography variant="body2" sx={{ color: "#ccc", mt: 0.5, fontSize: 13 }}>
+                        Haz clic para ver solo los de stock alto
                     </Typography>
                 </Box>
             </Box>
@@ -1845,11 +2015,14 @@ export default function Inventario() {
     }, [ubicacionId, fetchProductos]);
 
     // --- Mejorar función de filtro para alertas ---
+    // Ahora filtra productos según switches activos
     const productosParaMostrar = alertaFiltro === 'bajo'
-        ? productos.filter((p: ProductInt) => p.stock < p.stock_minimo)
+        ? productos.filter((p: ProductInt) => p.stock < p.stock_minimo && marcasActivas[p.brand] !== false && categoriasActivas[p.category] !== false)
         : alertaFiltro === 'alto'
-            ? productos.filter((p: ProductInt) => p.stock > p.stock_maximo)
-            : filteredProducts;
+            ? productos.filter((p: ProductInt) => p.stock > p.stock_maximo && marcasActivas[p.brand] !== false && categoriasActivas[p.category] !== false)
+            : filteredProducts.filter(p => marcasActivas[p.brand] !== false && categoriasActivas[p.category] !== false);
+    // Mostrar advertencia si hay productos ocultos
+    const productosOcultos = productos.filter(p => marcasActivas[p.brand] === false || categoriasActivas[p.category] === false);
 
     // PAGINACIÓN
     const [page, setPage] = useState(1);
@@ -1861,6 +2034,46 @@ export default function Inventario() {
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
     const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => setSnackbar({ open: true, message, severity });
 
+    // Función para obtener ícono y color por categoría (mejorada con mapeo exacto y fallback)
+    function getCategoryIcon(category?: string) {
+        const cat = (category || '').toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").trim();
+        // Mapeo exacto
+        const exactMap: Record<string, { icon: React.ReactElement, color: string }> = {
+            'martillo': { icon: <ConstructionIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#FF6B35' },
+            'llave inglesa': { icon: <BuildIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#607D8B' },
+            'herramientas': { icon: <Inventory2Icon sx={{ fontSize: 44, color: '#fff' }} />, color: '#FFA726' },
+            'tornillos': { icon: <HardwareIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#90A4AE' },
+            'clavos': { icon: <HardwareIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#B0BEC5' },
+            'cinta metrica': { icon: <StraightenIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#FFD700' },
+            'taladro': { icon: <BuildIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#4ECDC4' },
+            'planchas': { icon: <LayersIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#95A5A6' },
+            'electricidad': { icon: <BoltIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#FFE66D' },
+            'plomeria': { icon: <PlumbingIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#45B7D1' },
+            'construccion': { icon: <ConstructionIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#95A5A6' },
+            'jardin': { icon: <YardIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#2ECC71' },
+            'automotriz': { icon: <DirectionsCarIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#E74C3C' },
+            'pintura': { icon: <FormatPaintIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#9B59B6' },
+        };
+        if (exactMap[cat]) return exactMap[cat];
+        // Fallback por palabras clave
+        if (cat.includes('herramienta')) return { icon: <BuildIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#FF6B35' };
+        if (cat.includes('martillo')) return { icon: <ConstructionIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#FF6B35' };
+        if (cat.includes('tornillo')) return { icon: <HardwareIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#90A4AE' };
+        if (cat.includes('clavo')) return { icon: <HardwareIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#B0BEC5' };
+        if (cat.includes('cinta metrica')) return { icon: <StraightenIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#FFD700' };
+        if (cat.includes('taladro')) return { icon: <BuildIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#4ECDC4' };
+        if (cat.includes('planchas')) return { icon: <LayersIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#95A5A6' };
+        if (cat.includes('electricidad')) return { icon: <BoltIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#FFE66D' };
+        if (cat.includes('plomeria')) return { icon: <PlumbingIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#45B7D1' };
+        if (cat.includes('construccion')) return { icon: <ConstructionIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#95A5A6' };
+        if (cat.includes('jardin')) return { icon: <YardIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#2ECC71' };
+        if (cat.includes('automotriz')) return { icon: <DirectionsCarIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#E74C3C' };
+        if (cat.includes('pintura')) return { icon: <FormatPaintIcon sx={{ fontSize: 44, color: '#fff' }} />, color: '#9B59B6' };
+        // Default
+        return { icon: <Inventory2Icon sx={{ fontSize: 44, color: '#fff' }} />, color: '#34495E' };
+    }
+
+
     return (
         <Layout>
             <Box sx={{ maxWidth: 1200, margin: "0 auto", padding: 3 }}>
@@ -1868,9 +2081,37 @@ export default function Inventario() {
                     <Typography variant="h4" sx={{ color: "#FFD700", mb: 2, fontWeight: 700 }}>
                         Inventario de Productos
                     </Typography>
+                    {/* Alertas de productos ocultos, stock bajo y stock alto */}
+                    {productosOcultos.length > 0 && (
+                        <Alert severity="warning" sx={{ mb: 2, bgcolor: '#181818', color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                            {productosOcultos.length} producto(s) están ocultos porque su marca o categoría está desactivada.
+                            <Button
+                                variant="outlined"
+                                size="small"
+                                sx={{ ml: 3, color: '#FFD700', borderColor: '#FFD700', fontWeight: 700, borderRadius: 2, '&:hover': { bgcolor: '#232323', color: '#FFD700' } }}
+                                onClick={() => {
+                                    // Reactivar todas las marcas y categorías
+                                    setMarcasActivas(prev => {
+                                        const nuevo = { ...prev };
+                                        Object.keys(nuevo).forEach(k => { nuevo[k] = true; });
+                                        return nuevo;
+                                    });
+                                    setCategoriasActivas(prev => {
+                                        const nuevo = { ...prev };
+                                        Object.keys(nuevo).forEach(k => { nuevo[k] = true; });
+                                        return nuevo;
+                                    });
+                                }}
+                            >
+                                Volver a mostrar todo
+                            </Button>
+                        </Alert>
+                    )}
+                    <StockAlerts productosVisibles={productosParaMostrar} />
+                    <HighStockAlerts productosVisibles={productosParaMostrar} />
                     {/* Barra de acciones */}
-                    <Box sx={{ display: "flex", gap: 2, mb: 3, alignItems: "center" }}>
-                        {ubicacionId === "bodega_central" && (
+                    <Box sx={{ display: "flex", gap: 2, mb: 3, alignItems: "center", flexWrap: "wrap" }}>
+                        {/* Acciones principales */}
                             <Button
                                 startIcon={<AddIcon />}
                                 variant="contained"
@@ -1879,7 +2120,6 @@ export default function Inventario() {
                             >
                                 Añadir
                             </Button>
-                        )}
                         <Button
                             startIcon={<DeleteIcon />}
                             variant="contained"
@@ -1896,14 +2136,36 @@ export default function Inventario() {
                         >
                             Reactivar
                         </Button>
-                        <Button
-                            startIcon={<FilterAltIcon />}
-                            variant="contained"
-                            sx={{ bgcolor: "#FFD700", color: "#232323", fontWeight: 600 }}
-                            onClick={() => setModalFiltroOpen(true)}
-                        >
-                            Filtro
-                        </Button>
+                        {/* Toggle de vista cards/tabla */}
+                        <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+                            <Box sx={{ display: 'flex', gap: 1, bgcolor: '#232323', borderRadius: 2, p: 0.5, boxShadow: 1 }}>
+                                <IconButton
+                                    onClick={() => setViewMode('cards')}
+                                    sx={{ 
+                                        color: viewMode === 'cards' ? '#FFD700' : '#888',
+                                        bgcolor: viewMode === 'cards' ? '#181818' : 'transparent',
+                                        borderRadius: 2,
+                                        border: viewMode === 'cards' ? '2px solid #FFD700' : '2px solid transparent',
+                                        transition: 'all 0.2s',
+                                    }}
+                                >
+                                    <ViewModuleIcon />
+                                </IconButton>
+                                <IconButton
+                                    onClick={() => setViewMode('table')}
+                                    sx={{ 
+                                        color: viewMode === 'table' ? '#FFD700' : '#888',
+                                        bgcolor: viewMode === 'table' ? '#181818' : 'transparent',
+                                        borderRadius: 2,
+                                        border: viewMode === 'table' ? '2px solid #FFD700' : '2px solid transparent',
+                                        transition: 'all 0.2s',
+                                    }}
+                                >
+                                    <ViewListIcon />
+                                </IconButton>
+                        </Box>
+                        </Box>
+                        {/* Acciones secundarias */}
                         <Button
                             variant="contained"
                             sx={{ bgcolor: "#FFD700", color: "#232323", fontWeight: 600 }}
@@ -1911,35 +2173,16 @@ export default function Inventario() {
                         >
                             Gestionar marcas/categorías
                         </Button>
-                        <Box sx={{ flex: 1 }} />
-                        {/* Toggle de vista */}
-                        <Box sx={{ display: "flex", alignItems: "center", bgcolor: "#1a1a1a", borderRadius: 2, p: 0.5 }}>
-                            <Tooltip title="Vista de tarjetas">
-                                <IconButton
-                                    onClick={() => setViewMode('cards')}
-                                    sx={{ 
-                                        bgcolor: viewMode === 'cards' ? "#FFD700" : "transparent",
-                                        color: viewMode === 'cards' ? "#232323" : "#FFD700",
-                                        "&:hover": { bgcolor: viewMode === 'cards' ? "#FFD700" : "#333" }
-                                    }}
-                                >
-                                    <ViewModuleIcon />
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Vista de tabla">
-                                <IconButton
-                                    onClick={() => setViewMode('table')}
-                                    sx={{ 
-                                        bgcolor: viewMode === 'table' ? "#FFD700" : "transparent",
-                                        color: viewMode === 'table' ? "#232323" : "#FFD700",
-                                        "&:hover": { bgcolor: viewMode === 'table' ? "#FFD700" : "#333" }
-                                    }}
-                                >
-                                    <ViewListIcon />
-                                </IconButton>
-                            </Tooltip>
-                        </Box>
-                        <Box sx={{ display: "flex", alignItems: "center", bgcolor: "#fff", borderRadius: 2, px: 2 }}>
+                        <Button
+                            startIcon={<TuneIcon />}
+                            variant="contained"
+                            sx={{ bgcolor: "#FFD700", color: "#232323", fontWeight: 600 }}
+                            onClick={() => setDrawerOpen(true)}
+                        >
+                            Filtros avanzados
+                        </Button>
+                        {/* Buscador */}
+                        <Box sx={{ display: "flex", alignItems: "center", bgcolor: "#fff", borderRadius: 2, px: 2, ml: 2 }}>
                             <SearchIcon sx={{ color: "#232323" }} />
                             <TextField
                                 placeholder="Buscar..."
@@ -1953,21 +2196,7 @@ export default function Inventario() {
                                 sx={{ width: 200, ml: 1 }}
                             />
                         </Box>
-                        <Button
-                            startIcon={<TuneIcon />}
-                            variant="contained"
-                            sx={{ bgcolor: "#FFD700", color: "#232323", fontWeight: 600 }}
-                            onClick={() => setDrawerOpen(true)}
-                        >
-                            Filtros avanzados
-                        </Button>
                     </Box>
-                    
-                    {/* Alertas de stock bajo */}
-                    <StockAlerts />
-                    
-                    {/* Alertas de stock alto */}
-                    <HighStockAlerts />
                     
                     {/* Filtros avanzados */}
                     <AdvancedFilters />
@@ -2081,25 +2310,26 @@ export default function Inventario() {
                                             
                                             {/* Imagen del producto */}
                                             <Box sx={{ position: "relative", height: 200 }}>
+                                                {typeof product.im === "string" && product.im ? (
                                                 <CardMedia
                                                     component="img"
-                                                    image={
-                                                        typeof product.im === "string"
-                                                            ? product.im
-                                                            : product.im
-                                                                ? URL.createObjectURL(product.im)
-                                                                : sin_imagen
-                                                    }
+                                                        image={product.im}
                                                     alt={product.name}
-                                                    sx={{ 
-                                                        height: "100%", 
-                                                        objectFit: "cover",
-                                                        transition: "transform 0.3s ease",
-                                                        "&:hover": {
-                                                            transform: "scale(1.05)"
-                                                        }
-                                                    }}
-                                                />
+                                                        sx={{ height: "100%", objectFit: "cover", transition: "transform 0.3s ease", "&:hover": { transform: "scale(1.05)" } }}
+                                                    />
+                                                ) : product.im instanceof File ? (
+                                                    <CardMedia
+                                                        component="img"
+                                                        image={URL.createObjectURL(product.im)}
+                                                        alt={product.name}
+                                                        sx={{ height: "100%", objectFit: "cover", transition: "transform 0.3s ease", "&:hover": { transform: "scale(1.05)" } }}
+                                                    />
+                                                ) : (
+                                                    (() => { const {icon, color} = getCategoryIcon(product.category); return (
+                                                        <Box sx={{ width: '100%', height: 200, bgcolor: color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</Box>
+                                                    ); })()
+                                                )}
+                                            </Box>
                                                 
                                                 {/* Overlay con información rápida */}
                                                 <Box sx={{
@@ -2146,7 +2376,6 @@ export default function Inventario() {
                                                                 fontSize: "0.8rem"
                                                             }}
                                                         />
-                                                    </Box>
                                                 </Box>
                                             </Box>
                                             
@@ -2387,6 +2616,12 @@ export default function Inventario() {
             <GestionarModal
                 open={modalGestionOpen}
                 onClose={() => setModalGestionOpen(false)}
+                marcasActivas={marcasActivas}
+                setMarcasActivas={setMarcasActivas}
+                categoriasActivas={categoriasActivas}
+                setCategoriasActivas={setCategoriasActivas}
+                handleDeleteMarca={handleDeleteMarca}
+                handleDeleteCategoria={handleDeleteCategoria}
             />
             {/* Modal de error personalizado */}
             <Dialog
@@ -2440,21 +2675,25 @@ export default function Inventario() {
             />
             {/* Panel lateral de filtros avanzados */}
             <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-                <Box sx={{ width: 320, p: 3, bgcolor: "#232323", height: "100%" }}>
+                <Box sx={{ width: 340, p: 3, bgcolor: "#181818", height: "100%", display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <Typography variant="h6" sx={{ color: "#FFD700", flex: 1 }}>Filtros avanzados</Typography>
-                        <IconButton onClick={() => setDrawerOpen(false)} sx={{ color: '#FFD700' }}>
+                        <Typography variant="h6" sx={{ color: "#FFD700", flex: 1, fontWeight: 700, letterSpacing: 1 }}>Filtros avanzados</Typography>
+                        <IconButton onClick={() => setDrawerOpen(false)} sx={{ color: '#FFD700', fontSize: 28 }}>
                             ×
                         </IconButton>
                     </Box>
-                    <Divider sx={{ mb: 2, bgcolor: '#FFD700' }} />
+                    <Divider sx={{ mb: 2, bgcolor: '#FFD700', height: 2 }} />
                     <TextField
                         label="Stock mínimo"
                         type="number"
                         value={filtrosAvanzados.stockMinimo}
                         onChange={e => setFiltrosAvanzados(f => ({ ...f, stockMinimo: e.target.value }))}
                         fullWidth
-                        sx={{ mb: 2 }}
+                        sx={{ mb: 2, 
+                            '& .MuiInputBase-root': { bgcolor: '#232323', color: '#FFD700', borderRadius: 2 },
+                            '& .MuiInputLabel-root': { color: '#FFD700' },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#FFD700' },
+                        }}
                         inputProps={{ min: 0 }}
                     />
                     <TextField
@@ -2463,16 +2702,20 @@ export default function Inventario() {
                         value={filtrosAvanzados.stockMaximo}
                         onChange={e => setFiltrosAvanzados(f => ({ ...f, stockMaximo: e.target.value }))}
                         fullWidth
-                        sx={{ mb: 2 }}
+                        sx={{ mb: 2, 
+                            '& .MuiInputBase-root': { bgcolor: '#232323', color: '#FFD700', borderRadius: 2 },
+                            '& .MuiInputLabel-root': { color: '#FFD700' },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#FFD700' },
+                        }}
                         inputProps={{ min: 0 }}
                     />
                     <FormControl fullWidth sx={{ mb: 2 }}>
-                        <InputLabel sx={{ color: '#FFD700' }}>Estado de stock</InputLabel>
+                        <InputLabel sx={{ color: '#FFD700', bgcolor: '#232323', px: 0.5, borderRadius: 1 }}>Estado de stock</InputLabel>
                         <Select
                             value={filtrosAvanzados.stockStatus}
                             label="Estado de stock"
                             onChange={e => setFiltrosAvanzados(f => ({ ...f, stockStatus: e.target.value as any }))}
-                            sx={{ color: '#FFD700' }}
+                            sx={{ color: '#FFD700', bgcolor: '#232323', borderRadius: 2, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#FFD700' } }}
                         >
                             <MenuItem value="">Todos</MenuItem>
                             <MenuItem value="sin_stock">Sin stock</MenuItem>
@@ -2482,12 +2725,12 @@ export default function Inventario() {
                         </Select>
                     </FormControl>
                     <FormControl fullWidth sx={{ mb: 2 }}>
-                        <InputLabel sx={{ color: '#FFD700' }}>Ordenar por</InputLabel>
+                        <InputLabel sx={{ color: '#FFD700', bgcolor: '#232323', px: 0.5, borderRadius: 1 }}>Ordenar por</InputLabel>
                         <Select
                             value={filtrosAvanzados.ordenarPor}
                             label="Ordenar por"
                             onChange={e => setFiltrosAvanzados(f => ({ ...f, ordenarPor: e.target.value as any }))}
-                            sx={{ color: '#FFD700' }}
+                            sx={{ color: '#FFD700', bgcolor: '#232323', borderRadius: 2, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#FFD700' } }}
                         >
                             <MenuItem value="stock">Stock</MenuItem>
                             <MenuItem value="nombre">Nombre</MenuItem>
@@ -2497,12 +2740,12 @@ export default function Inventario() {
                         </Select>
                     </FormControl>
                     <FormControl fullWidth sx={{ mb: 2 }}>
-                        <InputLabel sx={{ color: '#FFD700' }}>Orden</InputLabel>
+                        <InputLabel sx={{ color: '#FFD700', bgcolor: '#232323', px: 0.5, borderRadius: 1 }}>Orden</InputLabel>
                         <Select
                             value={filtrosAvanzados.orden}
                             label="Orden"
                             onChange={e => setFiltrosAvanzados(f => ({ ...f, orden: e.target.value as any }))}
-                            sx={{ color: '#FFD700' }}
+                            sx={{ color: '#FFD700', bgcolor: '#232323', borderRadius: 2, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#FFD700' } }}
                         >
                             <MenuItem value="asc">Ascendente</MenuItem>
                             <MenuItem value="desc">Descendente</MenuItem>
@@ -2511,14 +2754,14 @@ export default function Inventario() {
                     <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
                         <Button
                             variant="contained"
-                            sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 600, flex: 1 }}
+                            sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700, flex: 1, boxShadow: 2, borderRadius: 2 }}
                             onClick={() => setDrawerOpen(false)}
                         >
                             Aplicar
                         </Button>
                         <Button
                             variant="outlined"
-                            sx={{ borderColor: '#FFD700', color: '#FFD700', fontWeight: 600, flex: 1 }}
+                            sx={{ borderColor: '#FFD700', color: '#FFD700', fontWeight: 700, flex: 1, borderRadius: 2 }}
                             onClick={() => setFiltrosAvanzados({ stockMinimo: '', stockMaximo: '', stockStatus: '', ordenarPor: 'stock', orden: 'desc' })}
                         >
                             Limpiar

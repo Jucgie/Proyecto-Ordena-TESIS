@@ -2,8 +2,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status, permissions, generics
-from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes,Pedidos,PersonalEntrega,DetallePedido,EstadoPedido, Informe, SolicitudProductos, Pedidos, DetallePedido, Notificacion, Historial, Stock, EstadoPedido, PersonalEntrega, MovInventario, Proveedor, UsuarioNotificacion
-from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer, MovInventarioSerializer, NotificacionSerializer, UsuarioNotificacionSerializer, BodegaCentralSerializer, ProductoSucursalSerializer, ProductoBodegaSerializer
+from .models import Usuario, Rol, BodegaCentral, Sucursal, Productos, Marca, Categoria, Solicitudes,Pedidos,PersonalEntrega,DetallePedido,EstadoPedido, Informe, SolicitudProductos, Pedidos, DetallePedido, Notificacion, Historial, Stock, EstadoPedido, PersonalEntrega, MovInventario, Proveedor, UsuarioNotificacion, HistorialEstadoPedido
+from .serializers import LoginSerializer, RegisterSerializer, ProductoSerializer, HistorialPedidosDetalladoSerializer,MarcaSerializer, CategoriaSerializer, SolicitudesSerializer, SolicitudesCreateSerializer, PedidosSerializer,PersonalEntregaSerializer,DetallePedidoSerializer,EstadoPedidoSerializer, UsuarioSerializer, InformeSerializer, InformeCreateSerializer, PedidosSerializer, PedidosCreateSerializer, PersonalEntregaSerializer, ProveedorSerializer, MovInventarioSerializer, NotificacionSerializer, UsuarioNotificacionSerializer, BodegaCentralSerializer, ProductoSucursalSerializer, ProductoBodegaSerializer, HistorialEstadoPedidoSerializer, HistorialSerializer
 from django.db import transaction
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import make_password, check_password
@@ -826,6 +826,9 @@ class InformeViewSet(viewsets.ModelViewSet):
             logger.error(f"Error en limpieza de informes huérfanos: {str(e)}")
             return Response({'error': f'Error en la limpieza: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
+
+
+
 class PedidosViewSet(viewsets.ModelViewSet):
     queryset = Pedidos.objects.all()
     serializer_class = PedidosSerializer
@@ -842,25 +845,25 @@ class PedidosViewSet(viewsets.ModelViewSet):
             return PedidosCreateSerializer
         return PedidosSerializer
 
+
     def get_queryset(self):
         queryset = Pedidos.objects.all()
         bodega_id = self.request.query_params.get('bodega_id')
         sucursal_id = self.request.query_params.get('sucursal_id')
         estado = self.request.query_params.get('estado')
+        fecha_inicio = self.request.query_params.get('fecha_inicio')
+        fecha_fin = self.request.query_params.get('fecha_fin')
 
-        
         if bodega_id:
             queryset = queryset.filter(bodega_fk=bodega_id)
-            logger.info(f"  - Pedidos después de filtro bodega: {queryset.count()}")
         if sucursal_id:
             queryset = queryset.filter(sucursal_fk=sucursal_id)
-            logger.info(f"  - Pedidos después de filtro sucursal: {queryset.count()}")
         if estado:
             queryset = queryset.filter(estado_pedido_fk__nombre=estado)
-            logger.info(f"  - Pedidos después de filtro estado: {queryset.count()}")
-        
-        logger.info(f"  - Pedidos finales a devolver: {queryset.count()}")
-        
+        if fecha_inicio:
+            queryset = queryset.filter(fecha_entrega__gte=fecha_inicio)
+        if fecha_fin:
+            queryset = queryset.filter(fecha_entrega__lte=fecha_fin)
         return queryset.order_by('-fecha_entrega')
 
     def create(self, request, *args, **kwargs):
@@ -882,6 +885,17 @@ class PedidosViewSet(viewsets.ModelViewSet):
             if pedido_id:
                 try:
                     pedido = Pedidos.objects.get(id_p=pedido_id)
+                    # --- REGISTRO DE HISTORIAL DE ESTADO INICIAL ---
+                    if pedido.estado_pedido_fk:
+                        from .models import HistorialEstadoPedido
+                        HistorialEstadoPedido.objects.create(
+                            pedido_fk=pedido,
+                            estado_anterior=None,
+                            estado_nuevo=pedido.estado_pedido_fk,
+                            usuario_fk=request.user,
+                            comentario="Pedido creado"
+                        )
+                    # --- FIN REGISTRO HISTORIAL ---
                     if pedido.usuario_fk:
                         crear_notificacion(
                             usuario=pedido.usuario_fk,
@@ -907,6 +921,17 @@ class PedidosViewSet(viewsets.ModelViewSet):
             # Lógica para manejar cambios de estado
             estado_nuevo = serializer.validated_data.get('estado_pedido_fk', None)
             if estado_nuevo and hasattr(estado_nuevo, 'nombre'):
+                # --- REGISTRO DE HISTORIAL SOLO SI CAMBIA EL ESTADO ---
+                if estado_anterior != estado_nuevo.nombre:
+                    from .models import HistorialEstadoPedido
+                    HistorialEstadoPedido.objects.create(
+                        pedido_fk=instance,
+                        estado_anterior=instance.estado_pedido_fk,
+                        estado_nuevo=estado_nuevo,
+                        usuario_fk=request.user,
+                        comentario="Cambio de estado"
+                    )
+                # --- FIN REGISTRO HISTORIAL ---
                 if estado_nuevo.nombre == 'En camino' and estado_anterior != 'En camino':
                     # Notificar a la sucursal que el pedido fue despachado
                     if instance.sucursal_fk and hasattr(instance.sucursal_fk, 'usuarios_fk'):
@@ -969,25 +994,34 @@ class PedidosViewSet(viewsets.ModelViewSet):
                 personal_entrega = PersonalEntrega.objects.get(id_psn=personal_entrega_id)
             except PersonalEntrega.DoesNotExist:
                 return Response({'error': 'Personal de entrega no encontrado'}, status=status.HTTP_404_NOT_FOUND)
-            # Obtener el estado "En camino" o crear uno por defecto
-            estado_pedido, created = EstadoPedido.objects.get_or_create(
-                nombre='En camino',
-                defaults={'descripcion': 'Pedido en tránsito'}
+            # Obtener el estado "Pendiente" o crear uno por defecto
+            estado_pendiente, _ = EstadoPedido.objects.get_or_create(
+                nombre='Pendiente',
+                defaults={'descripcion': 'Pedido pendiente'}
             )
-            # Crear el pedido
+            # Crear el pedido en estado Pendiente
             pedido_data = {
                 'descripcion': descripcion,
-                'estado_pedido_fk': estado_pedido.id_estped,
+                'estado_pedido_fk': estado_pendiente.id_estped,
                 'sucursal_fk': solicitud.fk_sucursal.id,
                 'personal_entrega_fk': personal_entrega.id_psn,
                 'usuario_fk': request.user.id_us if hasattr(request, 'user') else solicitud.usuarios_fk.id_us,
                 'solicitud_fk': solicitud.id_solc,
                 'bodega_fk': solicitud.fk_bodega.id_bdg,
-                'proveedor_fk': None  # Los pedidos de solicitudes no tienen proveedor
+                'proveedor_fk': None
             }
             serializer = PedidosCreateSerializer(data=pedido_data)
             serializer.is_valid(raise_exception=True)
             pedido = serializer.save()
+            # Registrar historial: Pendiente
+            from .models import HistorialEstadoPedido
+            HistorialEstadoPedido.objects.create(
+                pedido_fk=pedido,
+                estado_anterior=None,
+                estado_nuevo=estado_pendiente,
+                usuario_fk=request.user,
+                comentario='Registro automático: Pedido creado (Pendiente)'
+            )
             # Crear detalles del pedido basados en los productos de la solicitud
             for sp in solicitud_productos:
                 DetallePedido.objects.create(
@@ -996,15 +1030,12 @@ class PedidosViewSet(viewsets.ModelViewSet):
                     productos_pedido_fk=sp.producto_fk,
                     pedidos_fk=pedido
                 )
-                # Ya NO descontar stock aquí, solo registrar movimiento de inventario tipo SALIDA
                 try:
                     stock_obj, _ = Stock.objects.get_or_create(
                         productos_fk=sp.producto_fk,
                         bodega_fk=solicitud.fk_bodega.id_bdg,
                         defaults={'stock': 0, 'stock_minimo': 0, 'stock_maximo': 0, 'sucursal_fk': None, 'proveedor_fk': None}
                     )
-                    # stock_obj.stock = max(stock_obj.stock - sp.cantidad, 0)  # <--- ELIMINADO EL DESCUENTO AQUÍ
-                    # stock_obj.save()
                     MovInventario.objects.create(
                         cantidad=-abs(sp.cantidad),
                         fecha=timezone.now(),
@@ -1014,7 +1045,23 @@ class PedidosViewSet(viewsets.ModelViewSet):
                     )
                 except Exception as e:
                     logger.error(f"Error registrando salida de inventario para producto {sp.producto_fk}: {str(e)}")
-            logger.info(f"Pedido {pedido.id_p} creado exitosamente desde solicitud {solicitud_id}")
+            # Obtener el estado "En camino"
+            estado_en_camino, _ = EstadoPedido.objects.get_or_create(
+                nombre='En camino',
+                defaults={'descripcion': 'Pedido en tránsito'}
+            )
+            # Actualizar el pedido a estado En camino
+            pedido.estado_pedido_fk = estado_en_camino
+            pedido.save()
+            # Registrar historial: En camino
+            HistorialEstadoPedido.objects.create(
+                pedido_fk=pedido,
+                estado_anterior=estado_pendiente,
+                estado_nuevo=estado_en_camino,
+                usuario_fk=request.user,
+                comentario='Registro automático: Pedido despachado (En camino)'
+            )
+            logger.info(f"Pedido {pedido.id_p} creado exitosamente desde solicitud {solicitud_id} (Pendiente → En camino)")
             return Response({
                 'mensaje': 'Pedido creado exitosamente',
                 'pedido': PedidosSerializer(pedido).data
@@ -1059,6 +1106,18 @@ class PedidosViewSet(viewsets.ModelViewSet):
             # Actualizar el estado del pedido a "Completado"
             pedido.estado_pedido_fk = estado_completado
             pedido.save()
+            
+            # --- REGISTRO DE HISTORIAL DE ESTADO ---
+            from .models import HistorialEstadoPedido
+            estado_anterior = pedido.estado_pedido_fk
+            HistorialEstadoPedido.objects.create(
+                pedido_fk=pedido,
+                estado_anterior=estado_anterior,
+                estado_nuevo=estado_completado,
+                usuario_fk=request.user,
+                comentario="Recepción confirmada"
+            )
+            # --- FIN REGISTRO HISTORIAL ---
             
             # Obtener los detalles del pedido
             detalles_pedido = DetallePedido.objects.filter(pedidos_fk=pedido)
@@ -1188,8 +1247,16 @@ class PedidosViewSet(viewsets.ModelViewSet):
                     logger.warning(f"No se pudo crear/actualizar proveedor: {str(e)}")
             
             # Crear el pedido
+            # Construir descripción solo con Guía (nunca mostrar REM)
+            descripcion_parts = [f"Ingreso desde proveedor {proveedor_data.get('nombre', 'N/A')}"]
+            
+            if num_guia_despacho and num_guia_despacho.strip():
+                descripcion_parts.append(f"Guía: {num_guia_despacho}")
+            
+            descripcion = " - ".join(descripcion_parts)
+            
             pedido_data = {
-                'descripcion': f"Ingreso desde proveedor {proveedor_data.get('nombre', 'N/A')} - REM: {num_rem} - Guía: {num_guia_despacho}",
+                'descripcion': descripcion,
                 'estado_pedido_fk': estado_pendiente.id_estped,
                 'sucursal_fk': None,  # Los ingresos de bodega no tienen sucursal
                 'personal_entrega_fk': None,  # Los ingresos no tienen personal de entrega
@@ -1203,21 +1270,46 @@ class PedidosViewSet(viewsets.ModelViewSet):
             serializer.is_valid(raise_exception=True)
             pedido = serializer.save()
             
+            try:
+                estado_completado = EstadoPedido.objects.get(nombre='Completado')
+            except EstadoPedido.DoesNotExist:
+                estado_completado = EstadoPedido.objects.create(
+                    nombre='Completado',
+                    descripcion='Pedido recibido y completado'
+                )
+            HistorialEstadoPedido.objects.create(
+                pedido_fk=pedido,
+                estado_anterior=None,
+                estado_nuevo=estado_completado,
+                usuario_fk=request.user,
+                fecha=pedido.fecha_entrega,
+                comentario="Ingreso proveedor"
+            )
+            
             # Procesar productos y agregarlos al inventario
             productos_agregados = []
             for producto_info in productos_data:
                 try:
                     resultado = procesar_producto_ingreso(producto_info, bodega, proveedor_obj, request)
                     productos_agregados.append(resultado)
-                
-                    # Crear detalle del pedido
-                    DetallePedido.objects.create(
-                        cantidad=producto_info.get('cantidad', 0),
-                        descripcion=f"Producto de ingreso: {producto_info.get('nombre', '')}",
-                        productos_pedido_fk=Productos.objects.get(codigo_interno=resultado['codigo_interno']),
-                        pedidos_fk=pedido
-                    )
-                
+
+                    # Obtener el producto real usado (por ID/codigo_interno)
+                    producto_real = None
+                    if resultado.get('codigo_interno'):
+                        try:
+                            producto_real = Productos.objects.get(codigo_interno=resultado['codigo_interno'], activo=True)
+                        except Productos.DoesNotExist:
+                            producto_real = None
+                    # Crear detalle del pedido SOLO si se encontró el producto
+                    if producto_real:
+                        DetallePedido.objects.create(
+                            cantidad=producto_info.get('cantidad', 0),
+                            descripcion=f"Producto de ingreso: {producto_info.get('nombre', '')}",
+                            productos_pedido_fk=producto_real,
+                            pedidos_fk=pedido
+                        )
+                    else:
+                        logger.warning(f"No se pudo encontrar producto para detalle con código interno {resultado.get('codigo_interno')}")
                 except Exception as e:
                     logger.error(f"Error procesando producto {producto_info.get('nombre', '')}: {str(e)}")
                     continue
@@ -2185,9 +2277,6 @@ def buscar_producto_por_codigo(codigo_interno, bodega):
         return None
 
 def procesar_producto_ingreso(producto_data, bodega, proveedor, request):
-    """
-    Procesa un producto del ingreso con código único
-    """
     nombre = producto_data.get('nombre', '')
     marca_nombre = producto_data.get('marca', '')
     categoria_nombre = producto_data.get('categoria', '')
@@ -2195,40 +2284,73 @@ def procesar_producto_ingreso(producto_data, bodega, proveedor, request):
     cantidad = producto_data.get('cantidad', 0)
     es_producto_existente = producto_data.get('es_producto_existente', False)
     producto_id_existente = producto_data.get('id')  # ID del producto existente seleccionado
-    
-    if not nombre or not marca_nombre or not categoria_nombre or cantidad <= 0:
-        raise ValueError(f"Datos incompletos para producto: {nombre}")
-    
-    # Si es un producto existente seleccionado desde el frontend
-    if es_producto_existente and producto_id_existente:
+    codigo_interno = producto_data.get('codigo_interno')
+
+    # Nueva validación diferenciada
+    if es_producto_existente:
+        if not producto_id_existente or cantidad <= 0:
+            raise ValueError("Datos incompletos para producto existente: id y cantidad requeridos")
+        # Cargar el producto existente por ID:
         try:
             producto = Productos.objects.get(id_prodc=producto_id_existente, activo=True)
-            logger.info(f"Usando producto existente seleccionado: {producto.codigo_interno}")
         except Productos.DoesNotExist:
-            logger.error(f"Producto existente con ID {producto_id_existente} no encontrado")
-            raise ValueError(f"Producto existente no encontrado")
+            raise ValueError(f"Producto existente con ID {producto_id_existente} no encontrado")
+        # Sumar stock en la bodega correspondiente
+        stock_obj, _ = Stock.objects.get_or_create(
+            productos_fk=producto,
+            bodega_fk=bodega.id_bdg,
+            defaults={
+                'stock': 0,
+                'stock_minimo': 5,
+                'stock_maximo': 100,
+                'sucursal_fk': None,
+                'proveedor_fk': None
+            }
+        )
+        stock_obj.stock += cantidad
+        stock_obj.save()
+        # Registrar movimiento de inventario
+        MovInventario.objects.create(
+            cantidad=cantidad,
+            fecha=timezone.now(),
+            productos_fk=producto,
+            usuario_fk=request.user,
+            motivo='Ingreso por pedido'
+        )
+        return {
+            'producto': producto.nombre_prodc,
+            'codigo_interno': producto.codigo_interno,
+            'cantidad': float(cantidad),
+            'stock_actual': float(stock_obj.stock),
+            'marca': producto.marca_fk.nombre_mprod,
+            'categoria': producto.categoria_fk.nombre,
+            'modelo': modelo,
+            'es_nuevo': False
+        }
     else:
+        if not nombre or not marca_nombre or not categoria_nombre or cantidad <= 0:
+            raise ValueError(f"Datos incompletos para producto: {nombre}")
+
         # Buscar o crear marca
         marca, created = Marca.objects.get_or_create(
             nombre_mprod=marca_nombre,
             defaults={'descripcion_mprod': f'Marca {marca_nombre}'}
         )
-        
+
         # Buscar o crear categoría
         categoria, created = Categoria.objects.get_or_create(
             nombre=categoria_nombre,
             defaults={'descripcion': f'Categoría {categoria_nombre}'}
         )
-        
+
         # Generar código único
         codigo_unico = generate_codigo_unico(nombre, marca_nombre, categoria_nombre, modelo, bodega)
-        
+
         # Verificar si ya existe un producto con este código
         producto_existente = buscar_producto_por_codigo(codigo_unico, bodega)
-        
+
         if producto_existente:
             # Producto existe, solo actualizar stock
-            logger.info(f"Producto existente encontrado: {producto_existente.codigo_interno}")
             producto = producto_existente
         else:
             # Crear nuevo producto con código único
@@ -2242,48 +2364,43 @@ def procesar_producto_ingreso(producto_data, bodega, proveedor, request):
                 fecha_creacion=timezone.now(),
                 sucursal_fk=None
             )
-            logger.info(f"Nuevo producto creado: {producto.codigo_interno}")
-    
-    # Buscar o crear el stock para este producto en la bodega
-    stock_obj, created = Stock.objects.get_or_create(
-        productos_fk=producto,
-        bodega_fk=bodega.id_bdg,
-        defaults={
-            'stock': 0,
-            'stock_minimo': 5,
-            'stock_maximo': 100,
-            'sucursal_fk': None,
-            'proveedor_fk': None
+
+        # Buscar o crear el stock para este producto en la bodega
+        stock_obj, _ = Stock.objects.get_or_create(
+            productos_fk=producto,
+            bodega_fk=bodega.id_bdg,
+            defaults={
+                'stock': 0,
+                'stock_minimo': 5,
+                'stock_maximo': 100,
+                'sucursal_fk': None,
+                'proveedor_fk': None
+            }
+        )
+
+        # Agregar la cantidad al stock existente
+        stock_obj.stock += cantidad
+        stock_obj.save()
+
+        # Registrar movimiento de inventario
+        MovInventario.objects.create(
+            cantidad=cantidad,
+            fecha=timezone.now(),
+            productos_fk=producto,
+            usuario_fk=request.user,
+            motivo='Ingreso por pedido'
+        )
+
+        return {
+            'producto': producto.nombre_prodc,
+            'codigo_interno': producto.codigo_interno,
+            'cantidad': float(cantidad),
+            'stock_actual': float(stock_obj.stock),
+            'marca': producto.marca_fk.nombre_mprod,
+            'categoria': producto.categoria_fk.nombre,
+            'modelo': modelo,
+            'es_nuevo': not es_producto_existente
         }
-    )
-    
-    # Agregar la cantidad al stock existente
-    stock_obj.stock += cantidad
-    stock_obj.save()
-    
-    # Verificar si supera el stock máximo
-    if stock_obj.stock_maximo and stock_obj.stock > stock_obj.stock_maximo:
-        logger.warning(f"Producto {producto.nombre_prodc} supera el stock máximo: {stock_obj.stock} > {stock_obj.stock_maximo}")
-    
-    # Registrar movimiento de inventario
-    MovInventario.objects.create(
-        cantidad=cantidad,
-        fecha=timezone.now(),
-        productos_fk=producto,
-        usuario_fk=request.user,
-        motivo='Ingreso por pedido'
-    )
-    
-    return {
-        'producto': producto.nombre_prodc,
-        'codigo_interno': producto.codigo_interno,
-        'cantidad': float(cantidad),
-        'stock_actual': float(stock_obj.stock),
-        'marca': producto.marca_fk.nombre_mprod,
-        'categoria': producto.categoria_fk.nombre,
-        'modelo': modelo,
-        'es_nuevo': not es_producto_existente
-    }
 
 # Reemplazar la función anterior
 def generate_codigo_interno(producto, bodega):
@@ -2599,6 +2716,11 @@ def buscar_productos_similares_endpoint(request):
         return Response({
             'error': 'Error interno del servidor'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -3238,8 +3360,57 @@ def reactivar_producto_individual(request, producto_id):
             'error': f'Error al reactivar producto: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class HistorialEstadoPedidoView(APIView):
-    def get(self, request, pedido_id):
-        historial = HistorialEstadoPedido.objects.filter(pedido_fk=pedido_id).order_by('fecha')
-        serializer = HistorialEstadoPedidoSerializer(historial, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class HistorialPedidosViewSet(viewsets.ModelViewSet):
+    queryset = Historial.objects.all().order_by('-fecha')
+    serializer_class = HistorialPedidosDetalladoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Filtros opcionales por query params
+        fecha_inicio = self.request.query_params.get('fecha_inicio')
+        fecha_fin = self.request.query_params.get('fecha_fin')
+        usuario_id = self.request.query_params.get('usuario_id')
+        pedido_id = self.request.query_params.get('pedido_id')
+        producto_id = self.request.query_params.get('producto_id')
+        if fecha_inicio:
+            queryset = queryset.filter(fecha__gte=fecha_inicio)
+        if fecha_fin:
+            queryset = queryset.filter(fecha__lte=fecha_fin)
+        if usuario_id:
+            queryset = queryset.filter(usuario_fk__id_us=usuario_id)
+        if pedido_id:
+            queryset = queryset.filter(pedidos_fk__id_p=pedido_id)
+        if producto_id:
+            queryset = queryset.filter(producto_fk__id_prodc=producto_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        print("DEBUG - request.data:", self.request.data)
+        usuario = self.request.user
+        pedido_id = self.request.data.get('pedidos_fk')
+        producto_id = self.request.data.get('producto_fk')
+        if not pedido_id:
+            raise serializers.ValidationError({'pedidos_fk': 'Este campo es obligatorio.'})
+        if not producto_id:
+            raise serializers.ValidationError({'producto_fk': 'Este campo es obligatorio.'})
+        try:
+            pedido = Pedidos.objects.get(id_p=pedido_id)
+        except Pedidos.DoesNotExist:
+            raise serializers.ValidationError({'pedidos_fk': 'El pedido no existe.'})
+        try:
+            producto = Productos.objects.get(id_prodc=producto_id)
+        except Productos.DoesNotExist:
+            raise serializers.ValidationError({'producto_fk': 'El producto no existe.'})
+        serializer.save(usuario_fk=usuario, pedidos_fk=pedido, producto_fk=producto)
+
+
+class HistorialEstadoPedidoView(generics.ListAPIView):
+    serializer_class = HistorialEstadoPedidoSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        pedido_id = self.kwargs.get('pedido_id')
+        return HistorialEstadoPedido.objects.filter(pedido_fk=pedido_id).order_by('fecha')
+

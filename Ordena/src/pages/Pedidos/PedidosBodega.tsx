@@ -29,6 +29,7 @@ import { usuarioService } from "../../services/usuarioService";
 import { solicitudesService, pedidosService, personalEntregaService, informesService } from "../../services/api";
 import EstadoBadge from "../../components/EstadoBadge";
 import { buscarProductosSimilares } from '../../services/api';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 
 // Interfaces
@@ -625,12 +626,10 @@ export default function PedidosBodega() {
         let datos = opcion === 'ingresos' ? ingresos : salidas;
         datos = datos.filter((row) => {
             if (opcion === "ingresos") {
-                if (producto && !row.productos?.some((p: any) => p.nombre === producto)) return false;
                 if (fecha && row.fecha !== fecha) return false;
                 return true;
             }
             if (opcion === "salidas") {
-                if (producto && !row.productos?.some((p: any) => p.nombre === producto)) return false;
                 if (estado && row.estado !== estado) return false;
                 if (sucursal && row.sucursalDestino !== sucursal && row.sucursal !== sucursal) return false;
                 if (fecha && row.fecha !== fecha) return false;
@@ -638,13 +637,13 @@ export default function PedidosBodega() {
             }
             return false;
         });
-        if (orden === "desc") {
-            datos = [...datos].sort((a, b) => (b.cantidad || 0) - (a.cantidad || 0));
-        } else if (orden === "asc") {
-            datos = [...datos].sort((a, b) => (a.cantidad || 0) - (b.cantidad || 0));
-        }
-        return datos;
-    }, [ingresos, salidas, producto, estado, sucursal, fecha, opcion, orden]);
+        // Ordenar por fecha descendente (más recientes primero)
+        return [...datos].sort((a, b) => {
+            const fechaA = new Date(a.fecha_entrega || a.fecha).getTime();
+            const fechaB = new Date(b.fecha_entrega || b.fecha).getTime();
+            return fechaB - fechaA;
+        });
+    }, [ingresos, salidas, estado, sucursal, fecha, opcion]);
 
     const handleOpenDetailModal = (pedido: any) => {
         setPedidoSeleccionado(pedido);
@@ -806,85 +805,58 @@ export default function PedidosBodega() {
     // Función para manejar la decisión del usuario en el modal de validación múltiple
     const manejarDecisionProducto = async (decision: 'existente' | 'nuevo', productoExistente?: any) => {
         if (!productoActualValidacion) return;
-        
-        console.log('🔍 DEBUG - Decisión:', decision, 'para producto:', productoActualValidacion.nombre);
-        console.log('🔍 DEBUG - Producto actual validación:', productoActualValidacion);
-        console.log('🔍 DEBUG - Producto existente seleccionado:', productoExistente);
-        
+    
         let productoFinal;
-        
+    
         if (decision === 'existente' && productoExistente) {
-            // Usar SIEMPRE los datos exactos del producto existente
             productoFinal = {
                 id: productoExistente.id || productoExistente.id_prodc,
-                nombre: productoExistente.nombre_prodc,
-                marca: productoExistente.marca_nombre,
-                categoria: productoExistente.categoria_nombre,
                 cantidad: productoActualValidacion.cantidad,
                 es_producto_existente: true
             };
-            console.log('🔍 DEBUG - Usando producto existente, datos exactos:', productoFinal);
         } else {
-            // Crear nuevo producto
             productoFinal = {
                 ...productoActualValidacion,
                 es_producto_existente: false
             };
-            console.log('🔍 DEBUG - Creando nuevo producto:', productoFinal);
         }
-        
-        // Agregar a productos validados
-        setProductosValidados(prev => {
-            const nuevosProductosValidados = [...prev, productoFinal];
-            console.log('🔍 DEBUG - Productos validados actualizados:', nuevosProductosValidados);
-            return nuevosProductosValidados;
-        });
-        
+    
         // Remover TODOS los productos iguales de productos a validar
-        const productosRestantes = productosAValidar.filter(p => 
-            !(p.nombre === productoActualValidacion.nombre && 
-              p.marca === productoActualValidacion.marca && 
-              p.categoria === productoActualValidacion.categoria)
+        const productosRestantes = productosAValidar.filter(p =>
+            !(
+                p.nombre === productoActualValidacion.nombre &&
+                p.marca === productoActualValidacion.marca &&
+                p.categoria === productoActualValidacion.categoria
+            )
         );
-        
-        console.log('🔍 DEBUG - Productos restantes:', productosRestantes.length);
-        console.log('🔍 DEBUG - Productos restantes:', productosRestantes);
-        
-        setProductosAValidar(productosRestantes);
-        
-        if (productosRestantes.length > 0) {
-            // Hay más productos para validar
+    
+        if (productosRestantes.length === 0) {
+            setProductosValidados(prev => {
+                const nuevosProductosValidados = [...prev, productoFinal];
+                setModalValidacionMultiple(false);
+                // Llama a la función de procesamiento usando el array actualizado
+                procesarIngresoConProductosValidados(nuevosProductosValidados);
+                return nuevosProductosValidados;
+            });
+        } else {
+            setProductosValidados(prev => [...prev, productoFinal]);
+            setProductosAValidar(productosRestantes);
             setProductoActualValidacion(productosRestantes[0]);
             setProductosSimilaresActual([]);
             setProductoSeleccionado(null);
-        } else {
-            // Todos los productos han sido validados
-            console.log('🔍 DEBUG - Todos los productos validados, el useEffect procesará automáticamente');
-            console.log('🔍 DEBUG - Estado final de productosValidados:', productosValidados);
-            // El useEffect detectará que productosAValidar.length === 0 y procesará automáticamente
         }
     };
 
-    // Función para procesar el ingreso con todos los productos validados
-    const procesarIngresoConProductosValidados = async () => {
+    // Cambia la función de procesamiento para aceptar el array como parámetro
+    const procesarIngresoConProductosValidados = async (productosFinalesParam?: any[]) => {
         try {
-            // Evitar procesamiento múltiple
-            if (!modalValidacionMultiple) {
-                console.log('🔍 DEBUG - Modal cerrado, no procesando');
-                return;
-            }
-            
-            // Obtener el estado actual de productos validados
-            const productosFinales = [...productosValidados];
-            console.log('🔍 DEBUG - Procesando ingreso con productos validados:', productosFinales);
-            console.log('🔍 DEBUG - Longitud de productosFinales:', productosFinales.length);
-            console.log('🔍 DEBUG - Estado actual de productosValidados:', productosValidados);
-            
-            // Validar que haya productos
+            // Usa el array pasado como argumento, si viene, si no, usa el de estado
+            const productosFinales = productosFinalesParam || productosValidados;
+
             if (!productosFinales || productosFinales.length === 0) {
                 throw new Error('No hay productos para procesar. El array de productos está vacío.');
             }
-            
+
             const bodegaId = usuario?.bodega;
             if (!bodegaId) {
                 throw new Error('No se pudo obtener el ID de la bodega del usuario');
@@ -896,26 +868,35 @@ export default function PedidosBodega() {
             }
 
             const datosFinales = {
-                ...datosFormulario,
-                productos: productosFinales,
-                bodega_id: bodegaId
-            };
-
-            console.log('🔍 DEBUG - Datos finales a enviar:', datosFinales);
-            console.log('🔍 DEBUG - Productos en datosFinales:', datosFinales.productos);
-            console.log('🔍 DEBUG - Longitud de productos en datosFinales:', datosFinales.productos.length);
+                    ...datosFormulario,
+                    productos: productosFinales
+                        .filter((p: any) =>
+                            (p.es_producto_existente && p.id && p.cantidad > 0) ||
+                            (!p.es_producto_existente && p.nombre && p.marca && p.categoria && p.cantidad > 0)
+                        )
+                        .map((p: any) =>
+                            p.es_producto_existente
+                                ? { es_producto_existente: true, id: p.id, cantidad: p.cantidad }
+                                : {
+                                    nombre: p.nombre,
+                                    cantidad: p.cantidad,
+                                    marca: p.marca,
+                                    categoria: p.categoria,
+                                    modelo: p.modelo || undefined,
+                                    ...(p.codigo_interno ? { codigo_interno: p.codigo_interno } : {})
+                                }
+                        ),
+                    bodega_id: bodegaId
+                };
+                console.log("DEBUG productosFinales:", productosFinales);
+                console.log("DEBUG productos enviados:", datosFinales.productos);
 
             // Crear el ingreso en el backend
             const resultado = await pedidosService.crearIngresoBodega(datosFinales);
 
-            console.log('✅ Ingreso creado exitosamente:', resultado);
-
             // Obtener el ID real del pedido creado
             const pedidoIdReal = resultado.pedido_id;
             if (!pedidoIdReal) throw new Error('No se pudo obtener el ID real del pedido creado');
-
-            // El historial del proveedor se maneja automáticamente en el backend
-            // No es necesario llamar a addIngresoProveedor aquí
 
             // Recargar productos para mostrar el stock actualizado
             await fetchProductos(bodegaId);
@@ -954,8 +935,6 @@ export default function PedidosBodega() {
                 };
 
                 await informesService.crearInforme(contenidoInforme);
-                console.log('✅ Informe creado exitosamente');
-
             } catch (error) {
                 console.error('Error creando informe:', error);
             }
@@ -1075,172 +1054,19 @@ export default function PedidosBodega() {
                     </BotonAccion>
                     <Button
                         variant="outlined"
+                        startIcon={<RefreshIcon sx={{ color: '#FFD700' }} />}
                         onClick={() => {
-                            // Probar el modal de validación múltiple
-                            const productoEjemplo = {
-                                nombre: "Martillo de Acero",
-                                marca: "Stanley",
-                                categoria: "Herramientas",
-                                cantidad: 5
-                            };
-                            setProductosAValidar([productoEjemplo]);
-                            setProductosValidados([]);
-                            setProductoActualValidacion(productoEjemplo);
-                            setModalValidacionMultiple(true);
+                            setLoading(true);
+                            cargarPedidosRecientes().finally(() => setLoading(false));
                         }}
                         style={{
-                            borderColor: "#4CAF50",
-                            color: "#4CAF50",
+                            borderColor: "#FFD700",
+                            color: "#FFD700",
                             fontWeight: 600,
-                            marginLeft: 8
                         }}
                     >
-                        Probar Modal
+                        Refrescar
                     </Button>
-                    <ModalFormularioPedido
-                        open={isModalOpen}
-                        onClose={() => {
-                            setIsModalOpen(false);
-                            setModalTipo(null);
-                        }}
-                        tipo={modalTipo as "ingreso"}
-                        marcas={marcas}
-                        categorias={categorias}
-                        onSubmit={async data => {
-                            // Validar todos los productos del formulario antes de procesar
-                            const productosValidados = await validarTodosLosProductos(data.productos);
-                            if (!productosValidados) {
-                                // Guardar los datos del formulario para usarlos después
-                                setDatosFormularioPendiente(data);
-                                return; // El modal de validación múltiple se abrirá
-                            }
-
-                            // Si llegamos aquí, todos los productos están validados
-                            // Crear el pedido en la base de datos y agregar productos al inventario
-                            const crearIngresoEnBD = async () => {
-                                try {
-                                    // Debug: verificar la estructura del usuario
-                                    console.log('🔍 DEBUG - Usuario completo:', usuario);
-                                    console.log('🔍 DEBUG - Bodega del usuario:', usuario?.bodega);
-                                    
-                                    // La bodega es directamente el ID, no un objeto
-                                    const bodegaId = usuario?.bodega;
-                                    console.log('🔍 DEBUG - ID de bodega final:', bodegaId);
-                                    
-                                    if (!bodegaId) {
-                                        throw new Error('No se pudo obtener el ID de la bodega del usuario');
-                                    }
-
-                                    // 1. Crear el ingreso en el backend
-                                    const resultado = await pedidosService.crearIngresoBodega({
-                                        fecha: data.fecha,
-                                        num_rem: data.numRem,
-                                        num_guia_despacho: data.numGuiaDespacho,
-                                        observaciones: data.observacionesRecepcion,
-                                        productos: data.productos.map((prod: any) => ({
-                                            nombre: prod.nombre,
-                                            cantidad: prod.cantidad,
-                                            marca: prod.marca,
-                                            categoria: prod.categoria,
-                                            modelo: prod.modelo
-                                        })),
-                                        proveedor: {
-                                            nombre: data.proveedor.nombre,
-                                            rut: data.proveedor.rut,
-                                            contacto: data.proveedor.contacto,
-                                            telefono: data.proveedor.telefono,
-                                            email: data.proveedor.email
-                                        },
-                                        bodega_id: bodegaId
-                                    });
-
-                                    console.log('✅ Ingreso creado exitosamente:', resultado);
-
-                                    // 2. Obtener el ID real del pedido creado
-                                    const pedidoIdReal = resultado.pedido_id;
-                                    if (!pedidoIdReal) throw new Error('No se pudo obtener el ID real del pedido creado');
-
-                                    // 3. El historial del proveedor se maneja automáticamente en el backend
-                                    // No es necesario llamar a addIngresoProveedor aquí
-
-                                    // 4. Recargar productos para mostrar el stock actualizado
-                                    await fetchProductos(bodegaId);
-
-                                    setSnackbarMessage(`Ingreso creado exitosamente. ${resultado.productos_agregados?.length || 0} productos agregados al inventario.`);
-                                    setSnackbarSeverity("success");
-                                    setShowSnackbar(true);
-
-                                    // 5. Crear informe en la base de datos para el ingreso usando el ID real
-                                    try {
-                                        const contenidoInforme = {
-                                            ingreso_id: pedidoIdReal,
-                                            fecha: data.fecha,
-                                            proveedor: {
-                                                nombre: data.proveedor.nombre,
-                                                rut: data.proveedor.rut,
-                                                contacto: data.proveedor.contacto
-                                            },
-                                            productos: data.productos.map((prod: any) => ({
-                                                nombre: prod.nombre,
-                                                marca: prod.marca,
-                                                categoria: prod.categoria,
-                                                cantidad: prod.cantidad
-                                            })),
-                                            documentos: {
-                                                num_rem: data.numRem || '',
-                                                num_guia_despacho: data.numGuiaDespacho || '',
-                                                archivo_guia: data.nombreArchivo || ''
-                                            },
-                                            observaciones: data.observacionesRecepcion || '',
-                                            responsable: usuario?.nombre || '',
-                                            bodega: {
-                                                nombre: "Bodega Central",
-                                                direccion: "Camino a Penco 2500, Concepción"
-                                            }
-                                        };
-
-                                        await informesService.createInforme({
-                                            titulo: `Acta de Recepción - ${data.proveedor.nombre}`,
-                                            descripcion: `Acta de recepción generada para el ingreso ${pedidoIdReal} del proveedor ${data.proveedor.nombre}`,
-                                            modulo_origen: 'pedidos',
-                                            contenido: JSON.stringify(contenidoInforme),
-                                            archivo_url: `ActaRecepcion_${pedidoIdReal}.pdf`,
-                                            fecha_generado: new Date().toISOString(),
-                                            bodega_fk: usuario?.bodega || null,
-                                            pedidos_fk: pedidoIdReal
-                                        });
-
-                                        console.log('✅ Informe de acta de recepción creado exitosamente');
-                                    } catch (error) {
-                                        console.error('Error al crear informe de acta de recepción:', error);
-                                        // No mostrar error al usuario, solo log
-                                    }
-
-                                    // 6. Refrescar la lista de pedidos desde el backend
-                                    try {
-                                        setLoading(true);
-                                        const pedidosResponse = await pedidosService.getPedidos({ bodega_id: bodegaId.toString() });
-                                        setPedidosBackend(pedidosResponse.results || []);
-                                    } catch (error) {
-                                        setPedidosBackend([]);
-                                    } finally {
-                                        setLoading(false);
-                                    }
-
-                                } catch (error) {
-                                    console.error('❌ Error al crear ingreso:', error);
-                                    setSnackbarMessage(`Error al crear ingreso: ${error}`);
-                                    setSnackbarSeverity("error");
-                                    setShowSnackbar(true);
-                                }
-                            };
-                            // Ejecutar la creación en la base de datos
-                            await crearIngresoEnBD();
-                            setOpcion("ingresos");
-                            setIsModalOpen(false);
-                            setModalTipo(null);
-                        }}
-                    />
                 </div>
 
                 {/* Barra superior de la tabla */}
@@ -1286,37 +1112,7 @@ export default function PedidosBodega() {
                         </span>
                     </div>
 
-                    {/* Filtros */}
-                    <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-                        <Button
-                            variant="outlined"
-                            sx={{
-                                borderColor: "#949494",
-                                color: "#FFFFFF",
-                                borderWidth: 1.5,
-                                minWidth: 120,
-                                height: 40,
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 1,
-                                fontWeight: 600,
-                                '&:hover': {
-                                    borderColor: "#FFD700",
-                                    color: "#FFD700",
-                                }
-                            }}
-                            onClick={handleOrdenClick}
-                        >
-                            Productos
-                            {orden === "desc" ? (
-                                <ArrowDropDownIcon sx={{ color: "#FFFFFF" }} />
-                            ) : (
-                                <ArrowDropUpIcon sx={{ color: "#FFFFFF" }} />
-                            )}
-                        </Button>
-                        {/* ...Filtros de estado, sucursal y fecha igual que antes... */}
-                        {/* ... */}
-                    </div>
+                    
                 </div>
 
                 {opcion === 'ingresos' ? (
@@ -1330,7 +1126,7 @@ export default function PedidosBodega() {
                         variant="outlined"
                         onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))}
                         disabled={paginaActual === 1}
-                        style={{ marginRight: 8 }}
+                        style={{ marginRight: 8, borderColor: '#FFD700', color: '#FFD700', fontWeight: 600 }}
                     >
                         Anterior
                     </Button>
@@ -1341,7 +1137,7 @@ export default function PedidosBodega() {
                         variant="outlined"
                         onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))}
                         disabled={paginaActual === totalPaginas || totalPaginas === 0}
-                        style={{ marginLeft: 8 }}
+                        style={{ marginLeft: 8, borderColor: '#FFD700', color: '#FFD700', fontWeight: 600 }}
                     >
                         Siguiente
                     </Button>
@@ -1762,11 +1558,17 @@ export default function PedidosBodega() {
                                         Estado del pedido
                                     </Typography>
                                     <Chip
-                                        label={pedidoSeleccionado.estado || pedidoSeleccionado.estado_pedido_nombre || "Pendiente"}
+                                        label={
+                                            (pedidoSeleccionado.tipo === "ingreso")
+                                                ? "Completado"
+                                                : (pedidoSeleccionado.estado || pedidoSeleccionado.estado_pedido_nombre || "Pendiente")
+                                        }
                                         sx={{
-                                            bgcolor: pedidoSeleccionado.estado === "Completado" ? "#4CAF50" : 
-                                                    pedidoSeleccionado.estado === "En camino" ? "#2196F3" : 
-                                                    pedidoSeleccionado.estado === "Cancelado" ? "#f44336" : "#FF9800",
+                                            bgcolor: (pedidoSeleccionado.tipo === "ingreso" || (pedidoSeleccionado.tipo === "salida" && ((pedidoSeleccionado.estado || pedidoSeleccionado.estado_pedido_nombre) === "Completado")))
+                                                ? "#4CAF50"
+                                                : (pedidoSeleccionado.estado === "En camino" || pedidoSeleccionado.estado_pedido_nombre === "En camino") ? "#2196F3"
+                                                : (pedidoSeleccionado.estado === "Cancelado" || pedidoSeleccionado.estado_pedido_nombre === "Cancelado") ? "#f44336"
+                                                : "#FF9800",
                                             color: "#fff",
                                             fontWeight: 600,
                                             fontSize: "0.9rem"
@@ -1805,6 +1607,7 @@ export default function PedidosBodega() {
                                                 <TableHead>
                                                     <TableRow>
                                                         <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Producto</TableCell>
+                                                        <TableCell sx={{ color: "#FFD700", fontWeight: 600 }}>Código</TableCell>
                                                         <TableCell sx={{ color: "#FFD700", fontWeight: 600 }} align="right">Cantidad</TableCell>
                                                     </TableRow>
                                                 </TableHead>
@@ -1813,6 +1616,9 @@ export default function PedidosBodega() {
                                                         <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
                                                             <TableCell sx={{ color: "#fff" }}>
                                                                 {prod.nombre || prod.producto_nombre || 'N/A'}
+                                                            </TableCell>
+                                                            <TableCell sx={{ color: "#fff" }}>
+                                                                {prod.codigo || prod.codigo_interno || prod.producto_codigo || '—'}
                                                             </TableCell>
                                                             <TableCell align="right" sx={{ color: "#FFD700", fontWeight: 600 }}>
                                                                 {prod.cantidad || prod.cantidad_solicitada || 0}
@@ -1992,6 +1798,72 @@ export default function PedidosBodega() {
                         </Button>
                     </DialogActions>
                 </Dialog>
+
+                {/* Modal de ingreso/salida */}
+                <ModalFormularioPedido
+                    open={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    tipo={modalTipo || "ingreso"}
+                    onSubmit={async (data) => {
+                        // Validar productos similares antes de guardar
+                        const continuar = await validarTodosLosProductos(data.productos);
+                        if (!continuar) {
+                            setDatosFormularioPendiente(data);
+                            return;
+                        }
+                        try {
+                            // Filtra los campos no permitidos en productos
+                            const productosLimpios = data.productos.map((p: any) => ({
+                                nombre: p.nombre,
+                                cantidad: p.cantidad,
+                                marca: p.marca,
+                                categoria: p.categoria,
+                                modelo: p.modelo || undefined
+                            }));
+                            await pedidosService.crearIngresoBodega({
+                                fecha: data.fecha,
+                                num_guia_despacho: data.numGuiaDespacho,
+                                observaciones: data.observacionesRecepcion,
+                                productos: productosLimpios,
+                                proveedor: data.proveedor,
+                                bodega_id: usuario?.bodega?.toString() || "bodega_central"
+                            });
+                            // Generar acta de recepción
+                            generarActaRecepcion({
+                                numeroActa: `ACTA-${Date.now()}`,
+                                fechaRecepcion: data.fecha,
+                                sucursal: {
+                                    nombre: "Bodega Central",
+                                    direccion: "Camino a Penco 2500, Concepción"
+                                },
+                                personaRecibe: {
+                                    nombre: usuario?.nombre || "Responsable Bodega",
+                                    cargo: usuario?.rol || "Bodeguero"
+                                },
+                                productos: productosLimpios.map((p: any, idx: number) => ({
+                                    codigo: p.codigo || `PROD-${idx + 1}`,
+                                    descripcion: p.nombre,
+                                    cantidad: p.cantidad
+                                })),
+                                observaciones: data.observacionesRecepcion,
+                                conformidad: "Recibido conforme",
+                                responsable: usuario?.nombre || "Responsable Bodega",
+                                proveedor: data.proveedor
+                            });
+                            setSnackbarMessage("Ingreso registrado exitosamente");
+                            setSnackbarSeverity("success");
+                            setShowSnackbar(true);
+                            setIsModalOpen(false);
+                            cargarPedidosRecientes();
+                            // Forzar recarga del inventario con el mismo identificador
+                            fetchProductos(usuario?.bodega?.toString() || "bodega_central");
+                        } catch (error) {
+                            setSnackbarMessage("Error al registrar el ingreso");
+                            setSnackbarSeverity("error");
+                            setShowSnackbar(true);
+                        }
+                    }}
+                />
             </div>
         </Layout>
     );

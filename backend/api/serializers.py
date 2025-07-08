@@ -7,6 +7,7 @@ from .models import (
     HistorialEstadoPedido
 )
 import random
+import re
 
 class BodegaCentralSerializer(serializers.ModelSerializer):
     class Meta:
@@ -293,7 +294,15 @@ class PedidosSerializer(serializers.ModelSerializer):
     proveedor_nombre = serializers.CharField(source='proveedor_fk.nombres_provd', read_only=True)
     solicitud_id = serializers.IntegerField(source='solicitud_fk.id_solc', read_only=True)
     detalles_pedido = DetallePedidoSerializer(many=True, read_only=True)
-    
+    tipo = serializers.SerializerMethodField()
+
+    def get_tipo(self, obj):
+        if obj.proveedor_fk:
+            return "ingreso"
+        elif obj.sucursal_fk:
+            return "salida"
+        return "desconocido"
+
     class Meta:
         model = Pedidos
         fields = [
@@ -301,7 +310,7 @@ class PedidosSerializer(serializers.ModelSerializer):
             'sucursal_fk', 'sucursal_nombre', 'sucursal_direccion', 'personal_entrega_fk', 'personal_entrega_nombre', 'personal_entrega_patente',
             'usuario_fk', 'usuario_nombre', 'solicitud_fk', 'solicitud_id',
             'bodega_fk', 'bodega_nombre', 'bodega_direccion', 'proveedor_fk', 'proveedor_nombre',
-            'detalles_pedido'
+            'detalles_pedido', 'tipo'
         ]
         read_only_fields = ['id_p']
 
@@ -940,6 +949,9 @@ class ProductoSucursalSerializer(serializers.ModelSerializer):
         return float(stock_obj.stock) if stock_obj else 0
 
 class HistorialEstadoPedidoSerializer(serializers.ModelSerializer):
+    estado_anterior_obj = EstadoPedidoSerializer(source='estado_anterior', read_only=True)
+    estado_nuevo_obj = EstadoPedidoSerializer(source='estado_nuevo', read_only=True)
+    usuario_obj = UsuarioSerializer(source='usuario_fk', read_only=True)
     estado_anterior_nombre = serializers.CharField(source='estado_anterior.nombre', read_only=True)
     estado_nuevo_nombre = serializers.CharField(source='estado_nuevo.nombre', read_only=True)
     usuario_nombre = serializers.CharField(source='usuario_fk.nombre', read_only=True)
@@ -947,8 +959,88 @@ class HistorialEstadoPedidoSerializer(serializers.ModelSerializer):
     class Meta:
         model = HistorialEstadoPedido
         fields = [
-            'id_hist_ped', 'pedido_fk', 'estado_anterior', 'estado_anterior_nombre',
-            'estado_nuevo', 'estado_nuevo_nombre', 'usuario_fk', 'usuario_nombre',
+            'id_hist_ped', 'pedido_fk',
+            'estado_anterior', 'estado_anterior_nombre', 'estado_anterior_obj',
+            'estado_nuevo', 'estado_nuevo_nombre', 'estado_nuevo_obj',
+            'usuario_fk', 'usuario_nombre', 'usuario_obj',
             'fecha', 'comentario'
         ]
         read_only_fields = ['id_hist_ped', 'fecha']
+
+
+class HistorialPedidosDetalladoSerializer(serializers.ModelSerializer):
+    # Campos directos
+    id = serializers.IntegerField(source='id_hst', read_only=True)
+    fecha = serializers.DateTimeField(read_only=True)
+    producto_id = serializers.IntegerField(source='producto_fk.id_prodc', read_only=True)
+    producto_nombre = serializers.CharField(source='producto_fk.nombre_prodc', read_only=True)
+    usuario_id = serializers.IntegerField(source='usuario_fk.id_us', read_only=True)
+    usuario_nombre = serializers.CharField(source='usuario_fk.nombre', read_only=True)
+    # Contexto del pedido
+    pedido_id = serializers.IntegerField(source='pedidos_fk.id_p', read_only=True)
+    fecha_entrega = serializers.DateTimeField(source='pedidos_fk.fecha_entrega', read_only=True)
+    sucursal_id = serializers.SerializerMethodField()
+    sucursal_nombre = serializers.SerializerMethodField()
+    proveedor_id = serializers.SerializerMethodField()
+    proveedor_nombre = serializers.SerializerMethodField()
+    estado_nombre = serializers.CharField(source='pedidos_fk.estado_pedido_fk.nombre', read_only=True)
+    tipo = serializers.SerializerMethodField()
+    cantidad = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Historial
+        fields = [
+            'id', 'fecha', 'producto_id', 'producto_nombre',
+            'usuario_id', 'usuario_nombre',
+            'pedido_id', 'fecha_entrega',
+            'sucursal_id', 'sucursal_nombre',
+            'proveedor_id', 'proveedor_nombre',
+            'estado_nombre', 'tipo', 'cantidad'
+        ]
+
+    def get_sucursal_id(self, obj):
+        suc = getattr(obj.pedidos_fk, 'sucursal_fk', None)
+        return suc.id if suc else None
+
+    def get_sucursal_nombre(self, obj):
+        suc = getattr(obj.pedidos_fk, 'sucursal_fk', None)
+        return suc.nombre_sucursal if suc else None
+
+    def get_proveedor_id(self, obj):
+        prov = getattr(obj.pedidos_fk, 'proveedor_fk', None)
+        return prov.id_provd if prov else None
+
+    def get_proveedor_nombre(self, obj):
+        prov = getattr(obj.pedidos_fk, 'proveedor_fk', None)
+        return prov.nombres_provd if prov else None
+
+    def get_tipo(self, obj):
+        pedido = getattr(obj, 'pedidos_fk', None)
+        if not pedido:
+            return None
+        if getattr(pedido, 'proveedor_fk', None):
+            return "ingreso"
+        elif getattr(pedido, 'sucursal_fk', None):
+            return "salida"
+        return "otro"
+
+    def get_cantidad(self, obj):
+        DetallePedido = self.Meta.model._meta.apps.get_model('api', 'DetallePedido')
+        pedido = getattr(obj, 'pedidos_fk', None)
+        producto = getattr(obj, 'producto_fk', None)
+        if not pedido or not producto:
+            return None
+        detalle = DetallePedido.objects.filter(pedidos_fk=pedido, productos_pedido_fk=producto).first()
+        return detalle.cantidad if detalle else None
+
+    def clean_codigo_interno(self, codigo):
+        """
+        Limpia el código interno eliminando caracteres problemáticos (comillas, espacios, símbolos raros)
+        y lo deja en un formato seguro para la base de datos y búsquedas.
+        """
+        if not codigo:
+            return codigo
+        # Reemplazar comillas dobles y simples, espacios y caracteres no alfanuméricos (excepto guion y guion bajo)
+        codigo = re.sub(r'["\'\s]+', '-', codigo)
+        codigo = re.sub(r'[^A-Za-z0-9\-_]', '', codigo)
+        return codigo.upper()

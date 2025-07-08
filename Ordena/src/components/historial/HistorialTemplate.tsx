@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { BtnHistorial } from "../button/ButtonHist";
 import { InventarioHistorial } from "../modulosHistorial/InventarioHistorial";
-import { PedidoHistorial } from "../modulosHistorial/PedidosHistorial";     
+import { PedidoHistorial } from "../modulosHistorial/PedidosHistorial";
+import { PedidosHistorialSucursal } from "../modulosHistorial/PedidosHistorialSucursal";
 import { EmpleadoHistorial } from "../modulosHistorial/EmpleadosHistorial";
 import styled from "styled-components";
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
@@ -122,7 +123,9 @@ export function HistorialTemplate() {
                 historial && <InventarioHistorial setHistorial={() => setHistorial(false)} />
             }
             {
-                pedido && <PedidoHistorial setPedido={() => setPedido(false)} />
+                pedido && (usuario?.sucursal
+                    ? <PedidosHistorialSucursal setPedido={() => setPedido(false)} />
+                    : <PedidoHistorial setPedido={() => setPedido(false)} />)
             }
                 </div>
 

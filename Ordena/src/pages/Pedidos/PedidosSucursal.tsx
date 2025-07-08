@@ -93,6 +93,7 @@ export default function PedidosSucursal() {
             const pedidosTransformados = pedidosDB.map((pedidoDB: any) => {
                 const productos = pedidoDB.detalles_pedido?.map((detalle: any) => {
                     return {
+                        id: detalle.productos_pedido_fk,
                         nombre: detalle.producto_nombre || "Producto",
                         cantidad: detalle.cantidad,
                         codigo: detalle.producto_codigo || "",
@@ -851,7 +852,7 @@ export default function PedidosSucursal() {
                                                     </TableHead>
                                                     <TableBody>
                                                         {pedidoSeleccionado.productos.map((prod: any, idx: number) => (
-                                                            <TableRow key={idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
+                                                            <TableRow key={prod.id || prod.codigo || idx} sx={{ "&:hover": { bgcolor: "#2a2a2a" } }}>
                                                                 <TableCell sx={{ color: "#fff" }}>
                                                                     {prod.nombre || prod.nombre_prodc}
                                                                 </TableCell>

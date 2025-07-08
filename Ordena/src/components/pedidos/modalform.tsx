@@ -12,12 +12,14 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { Select } from "@mui/material";
 import { extraerProductosDesdePDFBackend } from '../../services/api';
+import { useInventariosStore } from '../../store/useProductoStore';
 
 interface Producto {
     nombre: string;
     cantidad: number;
     marca: string;
     categoria: string;
+    codigo?: string;
 }
 
 interface Props {
@@ -25,8 +27,8 @@ interface Props {
     onClose: () => void;
     tipo: "ingreso" | "salida";
     onSubmit: (data: any) => void;
-    marcas: string[];
-    categorias: string[];
+    // marcas: string[];
+    // categorias: string[];
 }
 
 // Servicio para generar documentos automáticamente
@@ -89,7 +91,7 @@ function normalizarFecha(fecha: string): string {
     return '';
 }
 
-export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, onSubmit, marcas, categorias }: Props) {
+export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, onSubmit }: Props) {
     // Estados para productos
     const [productos, setProductos] = useState<Producto[]>([]);
     const [productosExtraidos, setProductosExtraidos] = useState<Producto[]>([]);
@@ -118,6 +120,34 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
     const [sucursalDestino, setSucursalDestino] = useState("");
 
     const mostrarFeedback = (message: string, severity: 'success' | 'error' = 'success') => {};
+
+    // Acceso rápido para crear marcas/categorías
+    const ubicacionId = 'bodega-central';
+    const { addMarca, addCategoria, fetchMarcas, fetchCategorias, marcas: marcasStore, categorias: categoriasStore } = useInventariosStore();
+    const [marcas, setMarcas] = useState<string[]>([]);
+    const [categorias, setCategorias] = useState<string[]>([]);
+    const [nuevaMarca, setNuevaMarca] = useState('');
+    const [agregandoMarca, setAgregandoMarca] = useState(false);
+    const [nuevaCategoria, setNuevaCategoria] = useState('');
+    const [agregandoCategoria, setAgregandoCategoria] = useState(false);
+
+    // Validaciones para marcas/categorías
+    const marcaExiste = (nombre: string) => marcas.some(m => m.trim().toLowerCase() === nombre.trim().toLowerCase());
+    const categoriaExiste = (nombre: string) => categorias.some(c => c.trim().toLowerCase() === nombre.trim().toLowerCase());
+    const nombreMarcaValido = (nombre: string) => !!nombre.trim() && !marcaExiste(nombre);
+    const nombreCategoriaValido = (nombre: string) => !!nombre.trim() && !categoriaExiste(nombre);
+    const [errorMarca, setErrorMarca] = useState<string | null>(null);
+    const [errorCategoria, setErrorCategoria] = useState<string | null>(null);
+
+    // Cargar marcas y categorías del store al abrir el modal
+    useEffect(() => {
+        if (open) {
+            const marcasArr = (marcasStore[ubicacionId] || []).map((m: any) => m.nombre || m.nombre_mprod || m);
+            setMarcas(marcasArr);
+            const categoriasArr = (categoriasStore[ubicacionId] || []).map((c: any) => c.nombre || c);
+            setCategorias(categoriasArr);
+        }
+    }, [open, marcasStore, categoriasStore]);
 
     // Función para validar y corregir categorías inválidas
     const validarCategorias = (productos: Producto[]) => {
@@ -943,6 +973,17 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                                                     }
                                                 }
                                             }}
+                                            InputProps={{
+                                                endAdornment: (
+                                                    <Button
+                                                        size="small"
+                                                        sx={{ ml: 1, minWidth: 0, color: '#FFD700', fontWeight: 700 }}
+                                                        onClick={() => setAgregandoMarca(true)}
+                                                    >
+                                                        +
+                                                    </Button>
+                                                )
+                                            }}
                                         >
                                             {marcas.map((marca) => (
                                                 <MenuItem key={marca} value={marca}>
@@ -950,6 +991,46 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                                                 </MenuItem>
                                             ))}
                                         </TextField>
+                                        {agregandoMarca && (
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <TextField
+                                                    size="small"
+                                                    label="Nueva marca"
+                                                    value={nuevaMarca}
+                                                    onChange={e => {
+                                                        setNuevaMarca(e.target.value);
+                                                        if (!e.target.value.trim()) setErrorMarca('El nombre no puede estar vacío.');
+                                                        else if (marcaExiste(e.target.value)) setErrorMarca('Ya existe una marca con ese nombre.');
+                                                        else setErrorMarca(null);
+                                                    }}
+                                                    autoFocus
+                                                    error={!!errorMarca}
+                                                    helperText={errorMarca}
+                                                    sx={{ bgcolor: '#232323', color: '#FFD700', '& .MuiInputLabel-root': { color: '#FFD700' } }}
+                                                />
+                                                <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}
+                                                    disabled={!nombreMarcaValido(nuevaMarca)}
+                                                    onClick={async () => {
+                                                        if (!nombreMarcaValido(nuevaMarca)) return;
+                                                        await addMarca(ubicacionId, nuevaMarca.trim());
+                                                        await fetchMarcas(ubicacionId);
+                                                        setNuevaMarca('');
+                                                        setAgregandoMarca(false);
+                                                        setErrorMarca(null);
+                                                        // Seleccionar automáticamente la nueva marca en el producto
+                                                        const nuevosProductos = [...productos];
+                                                        nuevosProductos[index].marca = nuevaMarca.trim();
+                                                        setProductos(nuevosProductos);
+                                                    }}
+                                                >
+                                                    Crear
+                                                </Button>
+                                                <Button size="small" onClick={() => { setAgregandoMarca(false); setNuevaMarca(''); setErrorMarca(null); }} sx={{ color: '#ccc' }}>Cancelar</Button>
+                                            </Box>
+                                        )}
                                         <TextField
                                             select
                                             label="Categoría"
@@ -993,6 +1074,17 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                                                     }
                                                 }
                                             }}
+                                            InputProps={{
+                                                endAdornment: (
+                                                    <Button
+                                                        size="small"
+                                                        sx={{ ml: 1, minWidth: 0, color: '#FFD700', fontWeight: 700 }}
+                                                        onClick={() => setAgregandoCategoria(true)}
+                                                    >
+                                                        +
+                                                    </Button>
+                                                )
+                                            }}
                                         >
                                             {categorias.map((categoria) => (
                                                 <MenuItem key={categoria} value={categoria}>
@@ -1000,6 +1092,46 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                                                 </MenuItem>
                                             ))}
                                         </TextField>
+                                        {agregandoCategoria && (
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <TextField
+                                                    size="small"
+                                                    label="Nueva categoría"
+                                                    value={nuevaCategoria}
+                                                    onChange={e => {
+                                                        setNuevaCategoria(e.target.value);
+                                                        if (!e.target.value.trim()) setErrorCategoria('El nombre no puede estar vacío.');
+                                                        else if (categoriaExiste(e.target.value)) setErrorCategoria('Ya existe una categoría con ese nombre.');
+                                                        else setErrorCategoria(null);
+                                                    }}
+                                                    autoFocus
+                                                    error={!!errorCategoria}
+                                                    helperText={errorCategoria}
+                                                    sx={{ bgcolor: '#232323', color: '#FFD700', '& .MuiInputLabel-root': { color: '#FFD700' } }}
+                                                />
+                                                <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    sx={{ bgcolor: '#FFD700', color: '#232323', fontWeight: 700 }}
+                                                    disabled={!nombreCategoriaValido(nuevaCategoria)}
+                                                    onClick={async () => {
+                                                        if (!nombreCategoriaValido(nuevaCategoria)) return;
+                                                        await addCategoria(ubicacionId, nuevaCategoria.trim());
+                                                        await fetchCategorias(ubicacionId);
+                                                        setNuevaCategoria('');
+                                                        setAgregandoCategoria(false);
+                                                        setErrorCategoria(null);
+                                                        // Seleccionar automáticamente la nueva categoría en el producto
+                                                        const nuevosProductos = [...productos];
+                                                        nuevosProductos[index].categoria = nuevaCategoria.trim();
+                                                        setProductos(nuevosProductos);
+                                                    }}
+                                                >
+                                                    Crear
+                                                </Button>
+                                                <Button size="small" onClick={() => { setAgregandoCategoria(false); setNuevaCategoria(''); setErrorCategoria(null); }} sx={{ color: '#ccc' }}>Cancelar</Button>
+                                            </Box>
+                                        )}
                                     </Box>
                                 </Box>
                             ))}

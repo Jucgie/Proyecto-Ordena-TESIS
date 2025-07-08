@@ -4,12 +4,13 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import ( 
     login, register, ProductoViewSet, MarcaViewSet, CategoriaViewSet, 
     SolicitudesViewSet, UsuarioViewSet, InformeViewSet, PedidosViewSet, 
-    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,generar_qr_producto_view, producto_por_codigo, actualizar_stock_con_movimiento, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint, movimientos_inventario, pedidos_recientes, NotificacionViewSet,BodegaCentralViewSet, BuscarProductosSimilaresSucursalView, UsuarioNotificacionListView, UsuarioNotificacionDetailView, historial_producto, productos_con_movimientos_recientes, generar_codigo_automatico, productos_desactivados, reactivar_productos, reactivar_producto_individual, HistorialEstadoPedidoView
+    PersonalEntregaViewSet, ProveedorViewSet, ExtraerProductosPDF,generar_qr_producto_view, producto_por_codigo, actualizar_stock_con_movimiento, lista_productos_qr, validar_codigo_producto, verificar_producto_existente, producto_por_codigo_unico, buscar_productos_similares_endpoint, movimientos_inventario, 
+    pedidos_recientes, NotificacionViewSet,BodegaCentralViewSet, BuscarProductosSimilaresSucursalView, UsuarioNotificacionListView, UsuarioNotificacionDetailView, historial_producto, productos_con_movimientos_recientes, generar_codigo_automatico, productos_desactivados, reactivar_productos, reactivar_producto_individual, HistorialEstadoPedidoView, HistorialPedidosViewSet
 )
 
 router = DefaultRouter()
 
-router.register(r'bodegas',BodegaCentralViewSet, basename='bodega'),
+router.register(r'bodegas', BodegaCentralViewSet, basename='bodega')
 router.register(r'productos', ProductoViewSet, basename='producto')
 router.register(r'marcas', MarcaViewSet, basename='marca')
 router.register(r'categorias', CategoriaViewSet, basename='categoria')
@@ -20,6 +21,7 @@ router.register(r'pedidos', PedidosViewSet, basename='pedido')
 router.register(r'personal-entrega', PersonalEntregaViewSet, basename='personal-entrega')
 router.register(r'proveedores', ProveedorViewSet, basename='proveedor')
 router.register(r'notificaciones', NotificacionViewSet, basename='notificacion')
+router.register(r'historial-pedidos', HistorialPedidosViewSet, basename='historial-pedidos')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -38,7 +40,6 @@ urlpatterns = [
     
     path('pedidos/<int:pedido_id>/historial-estado/', HistorialEstadoPedidoView.as_view(), name='historial-estado-pedido'),
     # URL eliminada: actualizar_stock_por_codigo (causaba duplicación de movimientos)
-    path('qr/lista-productos/', lista_productos_qr, name='lista_productos_qr'),
     path('verificar-producto/', verificar_producto_existente, name='verificar_producto_existente'),
     path('producto-codigo-unico/<str:codigo_interno>/', producto_por_codigo_unico, name='producto_por_codigo_unico'),
     path('buscar-productos-similares/', buscar_productos_similares_endpoint, name='buscar_productos_similares_endpoint'),

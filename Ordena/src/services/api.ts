@@ -151,6 +151,11 @@ export const pedidosService = {
         return response.data;
     },
 
+    getHistorialEstado: async (pedidoId: string | number) => {
+        const response = await api.get(`/pedidos/${pedidoId}/historial-estado/`);
+        return response.data;
+    },
+
     // Crear ingreso de bodega
     crearIngresoBodega: async (data: {
         fecha: string;

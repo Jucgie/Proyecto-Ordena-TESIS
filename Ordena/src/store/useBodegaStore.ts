@@ -168,9 +168,30 @@ export const useBodegaStore = create<BodegaState>()(
       clearSolicitudes: () => set({ solicitudes: [] }),
       
       // Funciones de pedidos
-      addPedido: (pedido: any) => set(state => ({ 
-        pedidos: [...state.pedidos, pedido] 
-      })),
+      addPedido: (pedido: any) => {
+        set(state => ({ 
+          pedidos: [...state.pedidos, pedido] 
+        }));
+        // Registrar en historial de pedidos
+        try {
+          // Por cada producto del pedido, registra en historial
+          if (Array.isArray(pedido.productos)) {
+            pedido.productos.forEach((prod: any) => {
+              console.log("Registrando historial:", {
+                pedidos_fk: pedido.id,
+                producto_fk: prod.id || prod.id_prodc,
+                prod
+              });
+              historialService.registrarHistorialPedido({
+                pedidos_fk: pedido.id,
+                producto_fk: prod.id,
+              });
+            });
+          }
+        } catch (error) {
+          console.error('Error registrando en historial de pedidos:', error);
+        }
+      },
       
       updatePedido: (id: number, cambios: any) => set(state => ({
         pedidos: state.pedidos.map(p =>

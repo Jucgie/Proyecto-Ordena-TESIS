@@ -65,7 +65,7 @@ export const useInventariosStore = create<InventariosState>()(
                     console.log("🔍 DEBUG - Store - Respuesta del backend:", productosArr);
                     // Usamos el helper para mapear
                     const productosMapeados = productosArr.map(mapBackendToFrontend);
-                    console.log("🔍 DEBUG - Store - Productos mapeados:", productosMapeados);
+                    console.log("🔍 [STORE] Array de productos mapeados:", productosMapeados);
                     set(state => ({
                         inventarios: {
                             ...state.inventarios,
