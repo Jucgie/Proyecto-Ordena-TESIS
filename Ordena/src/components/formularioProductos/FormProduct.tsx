@@ -15,9 +15,12 @@ import {
     MenuItem,
     Box,
     Typography,
-    IconButton
+    IconButton,
+    Tooltip
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import { productoService } from "../../services/productoService";
 
 interface Props {
     open: boolean;
@@ -25,10 +28,13 @@ interface Props {
     onAddProduct: (product: ProductInt) => void;
     marcas?: string[];
     categorias?: string[];
+    ubicacionId?: string;
+    esBodega?: boolean;
 }
 
-export function AddProduct({ open, onClose, onAddProduct, marcas = [], categorias = [] }: Props) {
+export function AddProduct({ open, onClose, onAddProduct, marcas = [], categorias = [], ubicacionId, esBodega }: Props) {
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
+    const [isGeneratingCode, setIsGeneratingCode] = useState(false);
 
     const [form, setForm] = useState<ProductInt>({
         name: "",
@@ -37,20 +43,57 @@ export function AddProduct({ open, onClose, onAddProduct, marcas = [], categoria
         category: "",
         description: "",
         stock: 0,
+        stock_minimo: 5,
+        stock_maximo: 100,
         im: null as File | null,
     });
 
+    const [modelo, setModelo] = useState("");
+
     const handleChange = (
-        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | { target: { name: string; value: unknown } }
     ) => {
-        const { name, value, type } = e.target;
-        if (type === "file") {
-            setForm({ ...form, [name]: (e.target as HTMLInputElement).files?.[0] || null });
-        } else if (type === "number") {
+        const { name, value } = e.target;
+        if (name === "im" && 'files' in e.target) {
+            setForm({ ...form, [name]: e.target.files?.[0] || null });
+        } else if (typeof value === "string" && (name === "stock" || name === "stock_minimo" || name === "stock_maximo")) {
             // Convertir a número para campos numéricos
             setForm(f => ({ ...f, [name]: value === "" ? 0 : parseInt(value) || 0 }));
-        } else {
+        } else if (typeof value === "string") {
             setForm(f => ({ ...f, [name]: value }));
+        }
+    };
+
+    const handleGenerateCode = async () => {
+        if (!form.name.trim() || !form.brand.trim() || !form.category.trim() || !ubicacionId) {
+            setErrors({
+                ...errors,
+                code: "Complete nombre, marca y categoría para generar el código automáticamente"
+            });
+            return;
+        }
+
+        setIsGeneratingCode(true);
+        try {
+            const response = await productoService.generarCodigoAutomatico({
+                nombre: form.name,
+                marca: form.brand,
+                categoria: form.category,
+                modelo: modelo,
+                ubicacion_id: ubicacionId,
+                es_bodega: esBodega || false
+            });
+
+            setForm(prev => ({ ...prev, code: response.codigo }));
+            setErrors(prev => ({ ...prev, code: "" }));
+        } catch (error) {
+            console.error("Error generando código:", error);
+            setErrors({
+                ...errors,
+                code: "Error al generar código automático"
+            });
+        } finally {
+            setIsGeneratingCode(false);
         }
     };
 
@@ -78,6 +121,8 @@ export function AddProduct({ open, onClose, onAddProduct, marcas = [], categoria
             category: "",
             description: "",
             stock: 0,
+            stock_minimo: 5,
+            stock_maximo: 100,
             im: null,
         });
         // Cerrar el modal
@@ -92,6 +137,8 @@ export function AddProduct({ open, onClose, onAddProduct, marcas = [], categoria
             category: "",
             description: "",
             stock: 0,
+            stock_minimo: 5,
+            stock_maximo: 100,
             im: null,
         });
         setErrors({});
@@ -155,26 +202,47 @@ export function AddProduct({ open, onClose, onAddProduct, marcas = [], categoria
                                 '& .MuiFormHelperText-root': { color: "#ff6b6b" }
                             }}
                         />
-                        <TextField
-                            label="Código Interno"
-                            name="code"
-                            value={form.code}
-                            onChange={handleChange}
-                            error={!!errors.code}
-                            helperText={errors.code}
-                            required
-                            fullWidth
-                            InputLabelProps={{ style: { color: "#E0E0E0" } }}
-                            sx={{
-                                '& .MuiOutlinedInput-root': {
-                                    color: "#FFFFFF",
-                                    '& fieldset': { borderColor: "#666666" },
-                                    '&:hover fieldset': { borderColor: "#888888" },
-                                    '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
-                                },
-                                '& .MuiFormHelperText-root': { color: "#ff6b6b" }
-                            }}
-                        />
+                        <Box sx={{ display: "flex", gap: 1 }}>
+                            <TextField
+                                label="Código Interno"
+                                name="code"
+                                value={form.code}
+                                onChange={handleChange}
+                                error={!!errors.code}
+                                helperText={errors.code}
+                                required
+                                fullWidth
+                                InputLabelProps={{ style: { color: "#E0E0E0" } }}
+                                sx={{
+                                    '& .MuiOutlinedInput-root': {
+                                        color: "#FFFFFF",
+                                        '& fieldset': { borderColor: "#666666" },
+                                        '&:hover fieldset': { borderColor: "#888888" },
+                                        '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                                    },
+                                    '& .MuiFormHelperText-root': { color: "#ff6b6b" }
+                                }}
+                            />
+                            <Tooltip title="Generar código automáticamente">
+                                <IconButton
+                                    onClick={handleGenerateCode}
+                                    disabled={isGeneratingCode || !form.name.trim() || !form.brand.trim() || !form.category.trim()}
+                                    sx={{
+                                        color: "#FFD700",
+                                        border: "1px solid #FFD700",
+                                        '&:hover': {
+                                            backgroundColor: "#FFD70022"
+                                        },
+                                        '&:disabled': {
+                                            color: "#666666",
+                                            borderColor: "#666666"
+                                        }
+                                    }}
+                                >
+                                    <AutoFixHighIcon />
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
                     </Box>
 
                     {/* Segunda fila */}
@@ -271,6 +339,24 @@ export function AddProduct({ open, onClose, onAddProduct, marcas = [], categoria
                             )}
                         </FormControl>
                     </Box>
+
+                    {/* Campo de modelo */}
+                    <TextField
+                        label="Modelo/Variante (Opcional)"
+                        value={modelo}
+                        onChange={(e) => setModelo(e.target.value)}
+                        fullWidth
+                        placeholder="Ej: 500W, Rojo, Grande, etc."
+                        InputLabelProps={{ style: { color: "#E0E0E0" } }}
+                        sx={{
+                            '& .MuiOutlinedInput-root': {
+                                color: "#FFFFFF",
+                                '& fieldset': { borderColor: "#666666" },
+                                '&:hover fieldset': { borderColor: "#888888" },
+                                '&.Mui-focused fieldset': { borderColor: "#4CAF50" }
+                            }
+                        }}
+                    />
 
                     {/* Tercera fila */}
                     <TextField

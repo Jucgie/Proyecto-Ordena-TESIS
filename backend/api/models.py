@@ -353,6 +353,7 @@ class MovInventario(models.Model):
     productos_fk = models.ForeignKey(Productos, on_delete=models.CASCADE)
     usuario_fk = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='usuario_fk')
     motivo = models.TextField(null=True, blank=True)
+    stock_fk = models.ForeignKey(Stock, null=True, blank=True, on_delete=models.SET_NULL, db_column='stock_fk')
 
     class Meta:
         db_table = 'mov_inventario'
@@ -361,6 +362,27 @@ class MovInventario(models.Model):
     @property
     def id(self):
         return self.id_mvin
+
+    @property
+    def ubicacion_nombre(self):
+        if self.stock_fk:
+            # Si es por bodega
+            if self.stock_fk.bodega_fk:
+                from api.models import BodegaCentral
+                try:
+                    bodega = BodegaCentral.objects.get(id_bdg=self.stock_fk.bodega_fk)
+                    return f"Bodega: {bodega.nombre_bdg}"
+                except BodegaCentral.DoesNotExist:
+                    return "Bodega desconocida"
+            # Si es por sucursal
+            elif self.stock_fk.sucursal_fk:
+                from api.models import Sucursal
+                try:
+                    sucursal = Sucursal.objects.get(id=self.stock_fk.sucursal_fk)
+                    return f"Sucursal: {sucursal.nombre_sucursal}"
+                except Sucursal.DoesNotExist:
+                    return "Sucursal desconocida"
+        return "Sin ubicación"
 
 class Notificacion(models.Model):
     TIPO_CHOICES = [
@@ -465,3 +487,19 @@ class UsuarioNotificacion(models.Model):
 
     class Meta:
         db_table = 'usuario_notificacion'
+
+class HistorialEstadoPedido(models.Model):
+    id_hist_ped = models.BigAutoField(primary_key=True)
+    pedido_fk = models.ForeignKey(Pedidos, on_delete=models.CASCADE, db_column='pedido_fk')
+    estado_anterior = models.ForeignKey(EstadoPedido, on_delete=models.SET_NULL, null=True, related_name='historial_estado_anterior', db_column='estado_anterior')
+    estado_nuevo = models.ForeignKey(EstadoPedido, on_delete=models.CASCADE, related_name='historial_estado_nuevo', db_column='estado_nuevo')
+    usuario_fk = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, db_column='usuario_fk')
+    fecha = models.DateTimeField(auto_now_add=True)
+    comentario = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'historial_estado_pedido'
+        managed = True
+
+    def __str__(self):
+        return f"Pedido {self.pedido_fk.id_p}: {self.estado_anterior} → {self.estado_nuevo} por {self.usuario_fk} en {self.fecha}"

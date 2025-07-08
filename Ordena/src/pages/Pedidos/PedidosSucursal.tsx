@@ -19,6 +19,7 @@ import EstadoBadge from "../../components/EstadoBadge";
 import { pedidosService, informesService, buscarProductosSimilaresSucursal } from "../../services/api";
 import { useInventariosStore } from "../../store/useProductoStore";
 import { formatFechaChile } from '../../utils/formatFechaChile';
+import ModalComparacion from "../../components/formularioProductos/ModalComparacion";
 
 export default function PedidosSucursal() {
     const { pedidos, updatePedido, addPedido, clearPedidos } = useBodegaStore();
@@ -34,6 +35,11 @@ export default function PedidosSucursal() {
     const PEDIDOS_POR_PAGINA = 10;
 
     const sucursalActualId = usuario?.sucursal || "";
+
+    const [showComparacion, setShowComparacion] = useState(false);
+    const [productosSimilares, setProductosSimilares] = useState<any[]>([]);
+    const [productoPendiente, setProductoPendiente] = useState<any>(null);
+    const [productoSeleccionadoComparacion, setProductoSeleccionadoComparacion] = useState<any>(null);
     
     // --- ESTADOS para validación múltiple de productos ---
     const [modalValidacionMultiple, setModalValidacionMultiple] = useState(false);
@@ -269,6 +275,76 @@ export default function PedidosSucursal() {
         setPedidoSeleccionado(null);
     };
 
+    // --- FUNCIONES de comparación de productos ---
+    const buscarProductosSimilaresParaComparacion = async (producto: any) => {
+        try {
+            const codigo_interno = producto.codigo_interno || producto.codigo || undefined;
+            const sucursal_id = usuario?.sucursal ? String(usuario.sucursal) : undefined;
+            
+            // Prioridad 1: Buscar por código interno exacto si está disponible
+            // Prioridad 2: Buscar por nombre exacto (sin marca/categoría para dar máxima prioridad al nombre)
+            const payload: any = {
+                nombre: producto.nombre,
+            };
+            if (sucursal_id) payload.sucursal_id = sucursal_id;
+            if (codigo_interno) payload.codigo_interno = codigo_interno;
+            // Solo enviar marca y categoría si NO hay código interno
+            if (!codigo_interno) {
+                if (producto.marca) payload.marca = producto.marca;
+                if (producto.categoria) payload.categoria = producto.categoria;
+            }
+
+            console.log("Payload a buscarProductosSimilaresSucursal:", payload);
+
+            const response = await buscarProductosSimilaresSucursal(payload);
+            console.log("Similares recibidos:", response.productos_similares);
+            if (response.productos_similares && response.productos_similares.length > 0) {
+                setProductosSimilares(response.productos_similares);
+                setProductoPendiente(producto);
+                setShowComparacion(true);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error("Error en buscarProductosSimilaresParaComparacion:", error);
+            return false;
+        }
+    };
+
+    const handleUsarExistente = (productoExistente: any) => {
+        if (!productoPendiente) return;
+        
+        // Aquí puedes agregar la lógica para usar el producto existente
+        console.log("Usando producto existente:", productoExistente);
+        console.log("Producto pendiente:", productoPendiente);
+        
+        // Cerrar el modal
+        setShowComparacion(false);
+        setProductosSimilares([]);
+        setProductoPendiente(null);
+        setProductoSeleccionadoComparacion(null);
+    };
+
+    const handleCrearNuevo = () => {
+        if (!productoPendiente) return;
+        
+        // Aquí puedes agregar la lógica para crear un nuevo producto
+        console.log("Creando nuevo producto:", productoPendiente);
+        
+        // Cerrar el modal
+        setShowComparacion(false);
+        setProductosSimilares([]);
+        setProductoPendiente(null);
+        setProductoSeleccionadoComparacion(null);
+    };
+
+    const handleCancelarComparacion = () => {
+        setShowComparacion(false);
+        setProductosSimilares([]);
+        setProductoPendiente(null);
+        setProductoSeleccionadoComparacion(null);
+    };
+
     // --- FUNCIONES de validación múltiple ---
     const buscarProductosSimilaresLocal = async (producto: any) => {
         try {
@@ -494,6 +570,27 @@ export default function PedidosSucursal() {
                             }}
                         >
                             Actualizar
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            onClick={() => {
+                                // Ejemplo de producto para probar el modal
+                                const productoEjemplo = {
+                                    nombre: "Martillo de Acero",
+                                    codigo: "MART001",
+                                    marca: "Stanley",
+                                    categoria: "Herramientas",
+                                    cantidad: 5
+                                };
+                                buscarProductosSimilaresParaComparacion(productoEjemplo);
+                            }}
+                            style={{
+                                borderColor: "#4CAF50",
+                                color: "#4CAF50",
+                                fontWeight: 600
+                            }}
+                        >
+                            Probar Comparación
                         </Button>
                     </div>
                 </div>
@@ -912,7 +1009,6 @@ export default function PedidosSucursal() {
                     </DialogActions>
                 </Dialog>
                 {/* --- MODAL de validación múltiple --- */}
-                {console.log("Render modalValidacionMultiple:", modalValidacionMultiple, "Producto actual:", productoActualValidacion, "Similares:", productosSimilaresActual)}
                 <Dialog 
                     open={modalValidacionMultiple} 
                     onClose={() => setModalValidacionMultiple(false)}
@@ -1036,6 +1132,33 @@ export default function PedidosSucursal() {
                         </Button>
                     </DialogActions>
                 </Dialog>
+                
+                {/* Modal de comparación de productos */}
+                {showComparacion && productoPendiente && (
+                    <ModalComparacion
+                        productoNuevo={{
+                            nombre: productoPendiente.nombre || productoPendiente.nombre_prodc || "",
+                            codigo_interno: productoPendiente.codigo || productoPendiente.codigo_interno || "",
+                            marca: productoPendiente.marca || productoPendiente.marca_nombre || "",
+                            categoria: productoPendiente.categoria || productoPendiente.categoria_nombre || "",
+                            stock_actual: productoPendiente.cantidad || productoPendiente.stock || 0,
+                            descripcion: productoPendiente.descripcion || ""
+                        }}
+                        productosSimilares={productosSimilares.map((prod: any) => ({
+                            nombre: prod.nombre || prod.nombre_prodc || "",
+                            codigo_interno: prod.codigo || prod.codigo_interno || "",
+                            marca: prod.marca || prod.marca_nombre || "",
+                            categoria: prod.categoria || prod.categoria_nombre || "",
+                            stock_actual: prod.stock || prod.stock_actual || 0,
+                            descripcion: prod.descripcion || ""
+                        }))}
+                        onUsarExistente={handleUsarExistente}
+                        onCrearNuevo={handleCrearNuevo}
+                        onCancelar={handleCancelarComparacion}
+                        productoSeleccionado={productoSeleccionadoComparacion}
+                        setProductoSeleccionado={setProductoSeleccionadoComparacion}
+                    />
+                )}
             </div>
         </Layout>
     );

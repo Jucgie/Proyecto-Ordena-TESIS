@@ -2,6 +2,7 @@ import React from "react";
 import styled from "styled-components";
 import { useEffect, useState } from "react";
 import { historialService } from "../../services/historialService";
+import { productoService } from '../../services/productoService';
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
     Select, MenuItem, TextField, Button, Box, Typography, Chip, Card, CardContent,
@@ -81,9 +82,14 @@ interface Estadisticas {
     balance: number;
 }
 
+// Definir un type guard para los objetos de estadística
+function isEstadisticaObj(val: any): val is { cantidad: number, unidades?: number } {
+    return val && typeof val === 'object' && 'cantidad' in val;
+}
+
 export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Props) {
     const usuario = useAuthStore((state: any) => state.usuario);
-    const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
+    const [movimientos, setMovimientos] = useState<any[]>([]);
     const [productosAgrupados, setProductosAgrupados] = useState<ProductoAgrupado[]>([]);
     const [estadisticas, setEstadisticas] = useState<Estadisticas | null>(null);
     const [loading, setLoading] = useState(false);
@@ -117,7 +123,9 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
                 bodega: usuario?.bodega || bodegaId || undefined,
                 sucursal: (!usuario?.bodega && usuario?.sucursal) ? usuario.sucursal : (sucursalId || undefined),
             };
+            console.log("🔍 Filtros enviados a movimientos-inventario:", params);
             const data = await historialService.getMovimientosInventario(params);
+            console.log("🔍 Respuesta de movimientos-inventario:", data);
             setMovimientos(data.movimientos);
             setEstadisticas(data.estadisticas);
             agruparProductos(data.movimientos);
@@ -132,26 +140,21 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
     const agruparProductos = (movimientosData: Movimiento[]) => {
         const agrupados = new Map<string, ProductoAgrupado>();
 
-        // Ordenar movimientos por fecha (más reciente primero)
-        const movimientosOrdenados = [...movimientosData].sort((a, b) => 
-            new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-        );
-
-        movimientosOrdenados.forEach(mov => {
-            const key = `${mov.producto_nombre}-${mov.producto_codigo}`;
-            
+        // Agrupar movimientos por producto + ubicación
+        movimientosData.forEach(mov => {
+            const key = `${mov.producto_nombre}-${mov.producto_codigo}-${mov.ubicacion}`;
             if (!agrupados.has(key)) {
                 agrupados.set(key, {
                     nombre: mov.producto_nombre,
                     codigo: mov.producto_codigo,
                     producto_id: mov.producto_id,
                     movimientos: [],
-                    stock_actual: mov.stock_actual,
-                    stock_minimo: 5, // Valor por defecto
-                    stock_maximo: 100, // Valor por defecto
+                    stock_actual: 0, // Se calculará después
+                    stock_minimo: 5,
+                    stock_maximo: 100,
                     ubicacion: mov.ubicacion,
-                    marca: '', // Se puede obtener de otro lugar si es necesario
-                    categoria: '', // Se puede obtener de otro lugar si es necesario
+                    marca: '',
+                    categoria: '',
                     estadisticas: {
                         total_movimientos: 0,
                         entradas: 0,
@@ -162,11 +165,9 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
                     ultimo_movimiento: mov
                 });
             }
-
             const grupo = agrupados.get(key)!;
             grupo.movimientos.push(mov);
             grupo.estadisticas.total_movimientos++;
-            
             if (mov.tipo_movimiento === 'ENTRADA') {
                 grupo.estadisticas.entradas++;
                 grupo.estadisticas.balance += mov.cantidad;
@@ -177,14 +178,25 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
                 grupo.estadisticas.ajustes++;
                 grupo.estadisticas.balance += mov.cantidad;
             }
-
-            // Actualizar stock actual con el más reciente
-            grupo.stock_actual = mov.stock_actual;
-            
-            // Actualizar último movimiento (como ya están ordenados por fecha descendente, 
-            // el primer movimiento que encontremos será el más reciente)
+            // Actualizar último movimiento
             if (!grupo.ultimo_movimiento || new Date(mov.fecha).getTime() > new Date(grupo.ultimo_movimiento.fecha).getTime()) {
                 grupo.ultimo_movimiento = mov;
+            }
+        });
+
+        // Calcular stock_actual para cada grupo: stock_despues del movimiento más reciente (mayor fecha)
+        agrupados.forEach(grupo => {
+            if (grupo.movimientos.length > 0) {
+                // Buscar el movimiento con la fecha más reciente
+                const movMasReciente = grupo.movimientos.reduce((a, b) => new Date(a.fecha) > new Date(b.fecha) ? a : b);
+                if (movMasReciente.stock_despues !== undefined && movMasReciente.stock_despues !== null) {
+                    grupo.stock_actual = movMasReciente.stock_despues;
+                } else {
+                    // Fallback: usar stock_actual del movimiento si existe, si no, 0
+                    grupo.stock_actual = movMasReciente.stock_actual !== undefined ? movMasReciente.stock_actual : 0;
+                }
+            } else {
+                grupo.stock_actual = 0;
             }
         });
 
@@ -271,14 +283,16 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
         return { status: 'NORMAL', color: '#4CAF50' };
     };
 
-    const productosFiltrados = productosAgrupados.filter(producto => 
-        filtros.search === '' || 
-        producto.nombre.toLowerCase().includes(filtros.search.toLowerCase()) ||
-        producto.codigo.toLowerCase().includes(filtros.search.toLowerCase())
-    );
+    const productosFiltrados = productosAgrupados.filter(producto => {
+        return (
+            filtros.search === '' ||
+            producto.nombre.toLowerCase().includes(filtros.search.toLowerCase()) ||
+            producto.codigo.toLowerCase().includes(filtros.search.toLowerCase())
+        );
+    });
 
     const exportarExcel = () => {
-        const data = movimientos.map(mov => ({
+        const data = movimientos.map((mov: any) => ({
             ID: mov.id_mvin,
             Fecha: formatFechaChile(mov.fecha),
             Hora: formatFechaChile(mov.fecha),
@@ -310,7 +324,7 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
         autoTable(doc, {
             startY: 22,
             head: [["ID", "Fecha", "Hora", "Tipo", "Producto", "Código", "Cantidad", "Stock Antes", "Stock Después", "Motivo", "Usuario", "Ubicación"]],
-            body: movimientos.map(mov => [
+            body: movimientos.map((mov: any) => [
                 mov.id_mvin,
                 formatFechaChile(mov.fecha),
                 formatFechaChile(mov.fecha),
@@ -329,6 +343,8 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
         });
         doc.save('historial_inventario.pdf');
     };
+
+    console.log("🔍 Renderizando productos agrupados:", productosAgrupados);
 
     return (
         <>
@@ -371,11 +387,11 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center' }}>
                                     <Box sx={{ flex: '1 1 300px', maxWidth: '400px' }}>
                                         <StatCard color="#4CAF50" icon="📥" title="Entradas" 
-                                            valor={estadisticas.entradas.cantidad} subtitulo={`${estadisticas.entradas.unidades} unidades`} />
+                                            valor={typeof estadisticas.entradas === 'object' && estadisticas.entradas !== null ? estadisticas.entradas.cantidad : estadisticas.entradas} subtitulo={`${typeof estadisticas.entradas === 'object' && estadisticas.entradas !== null && estadisticas.entradas.unidades !== undefined ? estadisticas.entradas.unidades : ''} unidades`} />
                                     </Box>
                                     <Box sx={{ flex: '1 1 300px', maxWidth: '400px' }}>
                                         <StatCard color="#F44336" icon="📤" title="Salidas" 
-                                            valor={estadisticas.salidas.cantidad} subtitulo={`${estadisticas.salidas.unidades} unidades`} />
+                                            valor={typeof estadisticas.salidas === 'object' && estadisticas.salidas !== null ? estadisticas.salidas.cantidad : estadisticas.salidas} subtitulo={`${typeof estadisticas.salidas === 'object' && estadisticas.salidas !== null && estadisticas.salidas.unidades !== undefined ? estadisticas.salidas.unidades : ''} unidades`} />
                                     </Box>
                                     <Box sx={{ flex: '1 1 300px', maxWidth: '400px' }}>
                                         <StatCard color={estadisticas.balance >= 0 ? "#4CAF50" : "#F44336"} 
@@ -520,10 +536,9 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
                                             </TableHead>
                                             <TableBody>
                                             {productosFiltrados.map((producto) => {
-                                                const key = `${producto.nombre}-${producto.codigo}`;
+                                                const key = `${producto.nombre}-${producto.codigo}-${producto.ubicacion}`;
                                                 const isExpanded = expandedRows.has(key);
                                                 const stockStatus = getStockStatus(producto.stock_actual, producto.stock_minimo, producto.stock_maximo);
-
                                                     return (
                                                     <React.Fragment key={key}>
                                                         <TableRow sx={{ 
@@ -562,20 +577,17 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
                                                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                                         <TrendingUpIcon sx={{ color: '#4CAF50', fontSize: 16 }} />
-                                                                        <Typography variant="body2" sx={{ color: '#4CAF50' }}>
-                                                                            +{producto.estadisticas.entradas}
-                                                                        </Typography>
+                                                                        <Typography variant="body2" sx={{ color: '#4CAF50' }}>{isEstadisticaObj(producto.estadisticas.entradas) ? (producto.estadisticas.entradas as any).cantidad : producto.estadisticas.entradas}{isEstadisticaObj(producto.estadisticas.entradas) && (producto.estadisticas.entradas as any).unidades !== undefined ? ` (${(producto.estadisticas.entradas as any).unidades} unidades)` : ''}</Typography>
                                                                     </Box>
                                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                                         <TrendingDownIcon sx={{ color: '#F44336', fontSize: 16 }} />
-                                                                        <Typography variant="body2" sx={{ color: '#F44336' }}>
-                                                                            -{producto.estadisticas.salidas}
-                                                                        </Typography>
+                                                                        <Typography variant="body2" sx={{ color: '#F44336' }}>{isEstadisticaObj(producto.estadisticas.salidas) ? (producto.estadisticas.salidas as any).cantidad : producto.estadisticas.salidas}{isEstadisticaObj(producto.estadisticas.salidas) && (producto.estadisticas.salidas as any).unidades !== undefined ? ` (${(producto.estadisticas.salidas as any).unidades} unidades)` : ''}</Typography>
                                                                     </Box>
-                                                                    <Typography variant="body2" sx={{ 
-                                                                        color: producto.estadisticas.balance >= 0 ? '#4CAF50' : '#F44336',
-                                                                        fontWeight: 600
-                                                                    }}>
+                                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                                        <SettingsIcon sx={{ color: '#FF9800', fontSize: 16 }} />
+                                                                        <Typography variant="body2" sx={{ color: '#FF9800' }}>{isEstadisticaObj(producto.estadisticas.ajustes) ? (producto.estadisticas.ajustes as any).cantidad : producto.estadisticas.ajustes}{isEstadisticaObj(producto.estadisticas.ajustes) && (producto.estadisticas.ajustes as any).unidades !== undefined ? ` (${(producto.estadisticas.ajustes as any).unidades} unidades)` : ''}</Typography>
+                                                                    </Box>
+                                                                    <Typography variant="body2" sx={{ color: producto.estadisticas.balance >= 0 ? '#4CAF50' : '#F44336', fontWeight: 600 }}>
                                                                         Balance: {producto.estadisticas.balance >= 0 ? '+' : ''}{producto.estadisticas.balance}
                                                                     </Typography>
                                                                 </Box>
@@ -640,41 +652,33 @@ export function InventarioHistorial({ setHistorial, bodegaId, sucursalId }: Prop
                                                                                     </TableRow>
                                                                                 </TableHead>
                                                                                 <TableBody>
-                                                                                    {producto.movimientos.map((mov) => (
-                                                                                        <TableRow key={mov.id_mvin} sx={{ '&:hover': { bgcolor: '#333' } }}>
-                                                                                            <TableCell sx={{ color: '#fff' }}>
-                                                                {formatFechaChile(mov.fecha)}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <Chip
-                                                                                                    label={mov.tipo_movimiento}
-                                                                    size="small"
-                                                                    sx={{
-                                                                                                        bgcolor: getTipoColor(mov.tipo_movimiento),
-                                                                        color: "#fff",
-                                                                        fontWeight: 600
-                                                                    }}
-                                                                />
-                                                            </TableCell>
-                                                                                            <TableCell sx={{ color: '#fff', fontWeight: 600 }}>
-                                                                <span style={{ color: mov.cantidad > 0 ? "#4CAF50" : "#F44336" }}>
-                                                                    {mov.cantidad > 0 ? '+' : ''}{mov.cantidad}
-                                                                </span>
-                                                            </TableCell>
-                                                                                            <TableCell sx={{ color: '#fff' }}>
-                                                                {mov.stock_antes !== undefined ? mov.stock_antes : ''}
-                                                            </TableCell>
-                                                                                                                                                                                        <TableCell sx={{ color: '#fff' }}>
-                                                                                                {mov.stock_despues !== undefined ? mov.stock_despues : mov.stock_actual}
-                                                            </TableCell>
-                                                                                            <TableCell sx={{ color: '#fff' }}>
-                                                                {mov.motivo || ''}
-                                                            </TableCell>
-                                                                                            <TableCell sx={{ color: '#fff' }}>
-                                                                {mov.usuario_nombre}
-                                                            </TableCell>
-                                                                                        </TableRow>
-                                                                                    ))}
+                                                                                    {(() => {
+                                                                                        // Ordenar los movimientos de más reciente a más antiguo
+                                                                                        const movimientosOrdenados = [...producto.movimientos].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+                                                                                        return movimientosOrdenados.map((mov, idx) => (
+                                                                                            <TableRow key={mov.id_mvin || idx} sx={{ '&:hover': { bgcolor: '#333' } }}>
+                                                                                                <TableCell sx={{ color: '#fff' }}>{formatFechaChile(mov.fecha)}</TableCell>
+                                                                                                <TableCell>
+                                                                                                    <Chip
+                                                                                                        label={mov.tipo_movimiento}
+                                                                                                        size="small"
+                                                                                                        sx={{
+                                                                                                            bgcolor: getTipoColor(mov.tipo_movimiento),
+                                                                                                            color: "#fff",
+                                                                                                            fontWeight: 600
+                                                                                                        }}
+                                                                                                    />
+                                                                                                </TableCell>
+                                                                                                <TableCell sx={{ color: mov.tipo_movimiento === 'SALIDA' ? '#F44336' : '#4CAF50', fontWeight: 700 }}>
+                                                                                                    {mov.cantidad > 0 ? '+' : ''}{mov.cantidad}
+                                                                                                </TableCell>
+                                                                                                <TableCell sx={{ color: '#FFD700' }}>{mov.stock_antes !== undefined ? mov.stock_antes : ''}</TableCell>
+                                                                                                <TableCell sx={{ color: '#FFD700' }}>{mov.stock_despues !== undefined ? mov.stock_despues : ''}</TableCell>
+                                                                                                <TableCell sx={{ color: '#fff' }}>{mov.motivo}</TableCell>
+                                                                                                <TableCell sx={{ color: '#fff' }}>{mov.usuario_nombre}</TableCell>
+                                                                                            </TableRow>
+                                                                                        ));
+                                                                                    })()}
                                                                                 </TableBody>
                                                                             </Table>
                                                                         </TableContainer>

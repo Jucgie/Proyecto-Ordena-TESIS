@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { COLORS } from '../../constants/colors';
 import { productoService } from '../../services/productoService';
 import ProductoHistorialDetalle from '../modulosHistorial/ProductoHistorialDetalle';
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 interface ProductoConMovimientos {
     id_prodc: number;
@@ -60,13 +61,7 @@ export function ProductosConMovimientos({ ubicacionId }: Props) {
     };
 
     const formatFecha = (fecha: string) => {
-        return new Date(fecha).toLocaleString('es-CL', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        return formatFechaChile(fecha);
     };
 
     const getTipoIcono = (tipo: string) => {
@@ -403,4 +398,4 @@ const VerHistorialButton = styled.button`
     &:hover {
         background: ${COLORS.primaryDark};
     }
-`; 
+`;
