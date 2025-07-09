@@ -361,7 +361,9 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
     // Validación instantánea de guía de despacho duplicada
     useEffect(() => {
         if (tipo === "ingreso" && existeGuiaProveedor && numGuiaDespacho.trim()) {
-            if (existeGuiaProveedor(numGuiaDespacho, proveedorNombre)) {
+            const resultado = existeGuiaProveedor(numGuiaDespacho, proveedorNombre);
+            console.log('[VALIDACIÓN GUIA] numGuiaDespacho:', numGuiaDespacho, 'proveedorNombre:', proveedorNombre, 'resultado:', resultado);
+            if (resultado) {
                 setErrorGuiaDespacho("Ya existe un ingreso con este número de guía de despacho.");
             } else {
                 setErrorGuiaDespacho(null);
@@ -384,6 +386,21 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                 submitLock.current = false;
                 return;
             }
+            // Validar que todos los productos tengan marca y categoría seleccionada
+            const productosSinMarca = productosValidos.filter(p => !p.marca || !p.marca.trim());
+            const productosSinCategoria = productosValidos.filter(p => !p.categoria || !p.categoria.trim());
+            if (productosSinMarca.length > 0) {
+                mostrarFeedback('Todos los productos deben tener una marca seleccionada.', 'error');
+                setLoadingSubmit(false);
+                submitLock.current = false;
+                return;
+            }
+            if (productosSinCategoria.length > 0) {
+                mostrarFeedback('Todos los productos deben tener una categoría seleccionada.', 'error');
+                setLoadingSubmit(false);
+                submitLock.current = false;
+                return;
+            }
             // Validar campo obligatorio de guía de despacho (solo para ingreso)
             if (tipo === "ingreso" && (!numGuiaDespacho || !numGuiaDespacho.trim())) {
                 mostrarFeedback('El campo N° Guía de Despacho es obligatorio.', 'error');
@@ -393,6 +410,7 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
             }
             // Validar duplicado de guía de despacho (solo para ingreso)
             if (tipo === "ingreso" && errorGuiaDespacho) {
+                console.log('[SUBMIT] Duplicado detectado, errorGuiaDespacho:', errorGuiaDespacho);
                 setAlertaGuiaDuplicada(true);
                 setLoadingSubmit(false);
                 submitLock.current = false;
@@ -449,7 +467,7 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
             };
             console.log("DEBUG SUBMIT MODALFORM:", datosEnvio);
             await onSubmit(datosEnvio);
-            // Limpiar formulario
+            // Limpiar formulario solo si el submit fue exitoso
             setProveedorNombre("");
             setProveedorRut("");
             setProveedorContacto("");
@@ -465,14 +483,16 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
             setProductos([]);
             setProductosExtraidos([]);
             setMostrarProductosExtraidos(false);
-            onClose();
+            onClose(); // Solo cerrar si no hubo error
         } catch (error: any) {
             // Mostrar error del backend si es duplicado
             if (error?.response?.data?.error?.includes('guía de despacho')) {
-                mostrarFeedback(error.response.data.error, 'error');
+                setErrorGuiaDespacho(error.response.data.error); // <-- Mostrar en el input
+                mostrarFeedback(error.response.data.error, 'error'); // <-- Mostrar en el snackbar
             } else {
                 mostrarFeedback('Error al registrar el ingreso', 'error');
             }
+            // NO cerrar el modal si hay error
         } finally {
             setLoadingSubmit(false);
             submitLock.current = false;
@@ -1237,7 +1257,7 @@ export default React.memo(function ModalFormularioPedido({ open, onClose, tipo, 
                     <Button
                         onClick={handleSubmit}
                         variant="contained"
-                        disabled={loadingSubmit || !proveedorNombre || !proveedorRut || productos.length === 0}
+                        disabled={loadingSubmit || !proveedorNombre || !proveedorRut || productos.length === 0 || !!errorGuiaDespacho}
                         sx={{
                             bgcolor: "#FFD700",
                             color: "#000",

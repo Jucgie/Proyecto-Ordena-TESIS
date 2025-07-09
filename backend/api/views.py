@@ -212,6 +212,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
                             fecha=producto.fecha_creacion,
                             productos_fk=producto,
                             usuario_fk=usuario,
+                            stock_fk=stock_obj,
                             motivo=motivo
                         )
                         logger.info(f"[CREAR PRODUCTO] ✅ Movimiento inicial creado: id={mov.id_mvin}, cantidad={stock_inicial}, motivo='{motivo}', usuario={usuario}")
@@ -1046,6 +1047,7 @@ class PedidosViewSet(viewsets.ModelViewSet):
                         fecha=timezone.now(),
                         productos_fk=sp.producto_fk,
                         usuario_fk=request.user,
+                        stock_fk=stock_obj,
                         motivo='Salida por pedido a sucursal'
                     )
                 except Exception as e:
@@ -1151,7 +1153,14 @@ class PedidosViewSet(viewsets.ModelViewSet):
                     fecha=timezone.now(),
                     productos_fk=detalle.productos_pedido_fk,
                     usuario_fk=request.user,
+                    stock_fk=stock_obj,
                     motivo='Ingreso por pedido desde bodega central'
+                )
+                Historial.objects.create(
+                    fecha=timezone.now(),
+                    usuario_fk=request.user,
+                    pedidos_fk=pedido,
+                    producto_fk=detalle.productos_pedido_fk
                 )
                 productos_agregados.append({
                     'producto': detalle.productos_pedido_fk.nombre_prodc,
@@ -1616,7 +1625,7 @@ class ProveedorViewSet(viewsets.ModelViewSet):
                 
                 historiales_data.append({
                     'id': pedido.id_p,
-                    'fecha': pedido.fecha_entrega.strftime('%Y-%m-%d'),
+                    'fecha': pedido.fecha_entrega.isoformat(),
                     'num_rem': num_rem,
                     'num_guia_despacho': num_guia_despacho,
                     'archivo_guia': f'ActaRecepcion_{pedido.id_p}.pdf',

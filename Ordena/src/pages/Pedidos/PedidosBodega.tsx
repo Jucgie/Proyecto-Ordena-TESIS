@@ -118,19 +118,20 @@ function TablaIngresos({ ingresos, onVerDetalles, loading }: { ingresos: any[], 
                         <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Fecha</TableCell>
                         <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Proveedor</TableCell>
                         <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>N° de productos</TableCell>
+                        <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Guía de Despacho</TableCell>
                         <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Acción</TableCell>
                     </TableRow>
                 </TableHead>
                 <TableBody>
                     {loading ? (
                         <TableRow>
-                            <TableCell colSpan={5} align="center" style={{ color: "#FFD700", fontWeight: 600, fontSize: 18 }}>
+                            <TableCell colSpan={6} align="center" style={{ color: "#FFD700", fontWeight: 600, fontSize: 18 }}>
                                 Cargando pedidos...
                             </TableCell>
                         </TableRow>
                     ) : ingresos.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={5} align="center" style={{ color: "#8A8A8A" }}>
+                            <TableCell colSpan={6} align="center" style={{ color: "#8A8A8A" }}>
                                 No hay ingresos para mostrar.
                             </TableCell>
                         </TableRow>
@@ -141,6 +142,7 @@ function TablaIngresos({ ingresos, onVerDetalles, loading }: { ingresos: any[], 
                                 <TableCell style={{ color: "#fff" }}>{formatFechaChile(row.fecha_entrega || row.fecha)}</TableCell>
                                 <TableCell style={{ color: "#fff" }}>{row.proveedor_nombre || "Sin proveedor"}</TableCell>
                                 <TableCell style={{ color: "#fff" }}>{Array.isArray(row.detalles_pedido) ? row.detalles_pedido.reduce((acc: number, p: any) => acc + parseFloat(p.cantidad || '0'), 0) : 0}</TableCell>
+                                <TableCell style={{ color: "#fff" }}>{row.numGuiaDespacho || row.num_guia_despacho || '—'}</TableCell>
                                 <TableCell>
                                     <Button
                                         variant="outlined"
@@ -1039,11 +1041,14 @@ export default function PedidosBodega() {
         setPaginaActual(1);
     }, [opcion, ingresos, salidas]);
 
-    // Función para validar si ya existe un ingreso con el mismo número de guía y proveedor
-    const existeGuiaProveedor = (numGuia, proveedorNombre) => {
-        return pedidosBackend.some(
-            p => (p.num_guia_despacho || p.numGuiaDespacho) === numGuia
-        );
+    const existeGuiaProveedor = (numGuia: string) => {
+        const normalizar = (str: string) => (str || "").trim().toLowerCase();
+        // Filtra solo ingresos de proveedores (donde existe proveedor_fk o proveedor_nombre)
+        return pedidosBackend
+            .filter(p => p.proveedor_fk || p.proveedor_nombre)
+            .some(
+                p => normalizar(p.num_guia_despacho || p.numGuiaDespacho) === normalizar(numGuia)
+            );
     };
 
     return (
@@ -1183,18 +1188,16 @@ export default function PedidosBodega() {
                                 <TableRow>
                                     <TableCell style={{ color: "#FFD700" }}>ID</TableCell>
                                     <TableCell style={{ color: "#FFD700" }}>Fecha</TableCell>
-                                    <TableCell style={{ color: "#FFD700" }}>Sucursal</TableCell>
-                                    <TableCell style={{ color: "#FFD700" }}>Responsable</TableCell>
-                                    <TableCell style={{ color: "#FFD700" }}>Estado</TableCell>
-                                    <TableCell style={{ color: "#FFD700" }}>Observaciones</TableCell>
-                                    <TableCell style={{ color: "#FFD700" }}>Cantidad Total</TableCell>
-                                    <TableCell style={{ color: "#FFD700" }}>Acción</TableCell>
+                                    <TableCell style={{ color: "#FFD700" }}>Proveedor</TableCell>
+                                    <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>N° de productos</TableCell>
+                                    <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Guía de Despacho</TableCell>
+                                    <TableCell style={{ color: "#FFD700", fontWeight: 700 }}>Acción</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {solicitudesTransferidas.filter(s => Number(s.id) > 0 && Array.isArray(s.productos) && s.productos.length > 0).length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={8} align="center" style={{ color: "#8A8A8A" }}>
+                                        <TableCell colSpan={6} align="center" style={{ color: "#8A8A8A" }}>
                                             No hay solicitudes transferidas.
                                         </TableCell>
                                     </TableRow>
@@ -1209,19 +1212,7 @@ export default function PedidosBodega() {
                                                 <TableRow key={`${s.id}-${idx}`}>
                                                     <TableCell style={{ color: "#fff" }}>{s.id}</TableCell>
                                                     <TableCell style={{ color: "#fff" }}>{formatFechaChile(s.fecha)}</TableCell>
-                                                    <TableCell style={{ color: "#fff" }}>
-                                                        {typeof s.sucursal === "object"
-                                                            ? s.sucursal?.nombre
-                                                            : s.sucursal}
-                                                    </TableCell>
                                                     <TableCell style={{ color: "#fff" }}>{s.responsable}</TableCell>
-                                                    <TableCell>
-                                                        <EstadoBadge 
-                                                            estado={s.estado || "pendiente"} 
-                                                            tipo="solicitud"
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell style={{ color: "#fff" }}>{s.observacion || "Ninguna"}</TableCell>
                                                     <TableCell style={{ color: "#fff" }}>
                                                         {(() => {
                                                             if (!s.productos || !Array.isArray(s.productos)) return 0;
@@ -1232,6 +1223,7 @@ export default function PedidosBodega() {
                                                             return isNaN(total) ? 0 : Math.round(total);
                                                         })()}
                                                     </TableCell>
+                                                    <TableCell style={{ color: "#fff" }}>{s.numGuiaDespacho || s.num_guia_despacho || '—'}</TableCell>
                                                     <TableCell>
                                                         {s.estado === "pendiente" && (
                                                             <Button
@@ -1600,6 +1592,17 @@ export default function PedidosBodega() {
                                         }}
                                     />
                                 </Box>
+                                {/* Número de guía de despacho para ingresos */}
+                                {opcion === "ingresos" && (pedidoSeleccionado.numGuiaDespacho || pedidoSeleccionado.num_guia_despacho) && (
+                                    <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
+                                        <Typography variant="subtitle2" sx={{ color: "#FFD700", mb: 1 }}>
+                                            📄 Número de Guía de Despacho
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ color: "#fff", fontWeight: 600 }}>
+                                            {pedidoSeleccionado.numGuiaDespacho || pedidoSeleccionado.num_guia_despacho}
+                                        </Typography>
+                                    </Box>
+                                )}
                                 {/* Información adicional para salidas */}
                                 {opcion === "salidas" && pedidoSeleccionado.asignado && (
                                     <Box sx={{ mb: 3, p: 2, bgcolor: "#232323", borderRadius: 2, border: "1px solid #333" }}>
@@ -1889,6 +1892,8 @@ export default function PedidosBodega() {
                             setSnackbarMessage("Error al registrar el ingreso");
                             setSnackbarSeverity("error");
                             setShowSnackbar(true);
+                            // Lanzar el error para que el modal lo capture y lo muestre
+                            throw error;
                         }
                     }}
                     existeGuiaProveedor={existeGuiaProveedor}
