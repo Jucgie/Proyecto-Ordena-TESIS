@@ -45,8 +45,8 @@ export const historialService ={
 }
 
 export const HistProductService ={
-    getProducts:async()=>{
-            const response = await api.get('/productos/');
+    getProducts:async(params ={})=>{
+            const response = await api.get('/productos/',{params});
             return response.data;
     }
 }

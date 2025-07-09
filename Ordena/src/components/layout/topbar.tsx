@@ -55,6 +55,7 @@ export default function Topbar() {
                     onClick={() => setMenuOpen(v => !v)}
                 >
                     {usuario?.nombre || "Usuario"}
+                  
                 </span>
                 {menuOpen && (
                     <div

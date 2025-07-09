@@ -99,6 +99,7 @@ export const useHistorialStore = create<HistorialState>()(
             pedidos: [],
             loading: false,
             error: null,
+
             //llamada a la api
             fetchPedidos: async (params = {}) => {
                 set({ loading: true, error: null });
@@ -116,6 +117,7 @@ export const useHistorialStore = create<HistorialState>()(
                     set({error: errorMessage,loading:false});
                 }
             },
+
         }),
         { name: "historial-storage" }
     )
@@ -148,7 +150,7 @@ interface productStock {
     productos: Productos[];
     loading: boolean;
     error: string | null;
-    fetchProducts: () => Promise<void>;
+    fetchProducts:(params?: {bodega_id?:string})=>Promise<void>;
 }
 
 
@@ -162,10 +164,11 @@ create<productStock>()(
             productos:[],
             loading:false,
             error:null,
-            fetchProducts:async () => {
+            fetchProducts:async (params = {}) => {
+
                 set({loading:true,error:null});
                 try {
-                    const data = await HistProductService.getProducts();
+                    const data = await HistProductService.getProducts(params);
                     if (data && data.length > 0) {
                         console.log("DEBUG: Primer producto recibido de la API:", data[0]);
                     }

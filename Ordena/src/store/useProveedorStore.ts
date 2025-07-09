@@ -29,6 +29,7 @@ interface ProveedoresState {
   error: string | null;
   
   // Acciones
+  fetchDashbProveedores: () => Promise<void>;
   fetchProveedores: () => Promise<void>;
   addIngresoProveedor: (proveedor: any, ingreso: Ingreso) => Promise<void>;
   createProveedor: (proveedorData: any) => Promise<void>;
@@ -43,6 +44,20 @@ export const useProveedoresStore = create<ProveedoresState>()(
       proveedores: [],
       loading: false,
       error: null,
+      
+        fetchDashbProveedores: async () => {
+        set({ loading: true, error: null });
+        try {
+          // Esta función solo trae la lista de proveedores, sin el historial. Es mucho más rápida.
+          const proveedores = await proveedoresService.getProveedores();
+          set({ proveedores: proveedores, loading: false });
+        } catch (error: any) {
+          set({ 
+            error: error.response?.data?.error || "Error al cargar proveedores", 
+            loading: false 
+          });
+        }
+      },
 
       fetchProveedores: async () => {
         set({ loading: true, error: null });

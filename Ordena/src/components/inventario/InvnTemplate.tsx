@@ -245,7 +245,7 @@ export function InvnTemplate({ products = [], onAddProduct, onUpdateProduct, onD
                                     sx={
                                         {
                                             borderRadius: "6px",
-
+                                         
                                         }
                                     }
                                 />
