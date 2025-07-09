@@ -105,7 +105,7 @@ export default function PedidosSucursal() {
                 return {
                     id: pedidoDB.id_p,
                     tipo: "salida",
-                    fecha: formatFechaChile(pedidoDB.fecha_entrega),
+                    fecha: pedidoDB.fecha_entrega,
                     responsable: pedidoDB.usuario_nombre || "Responsable Bodega",
                     productos: productos,
                     sucursalDestino: pedidoDB.sucursal_fk?.toString() || "",
@@ -647,7 +647,7 @@ export default function PedidosSucursal() {
                                 pedidosPaginados.map((row: any, index: number) => (
                                     <TableRow key={`${row.id}-${row.fecha}-${index}`}>
                                         <TableCell style={{ color: "#fff" }}>{row.id}</TableCell>
-                                        <TableCell style={{ color: "#fff" }}>{row.fecha}</TableCell>
+                                        <TableCell style={{ color: "#fff" }}>{formatFechaChile(row.fecha)}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>{row.asignado || "-"}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {SUCURSALES.find(s => s.id === row.sucursalDestino)?.nombre || row.sucursalDestino || "-"}
@@ -756,7 +756,7 @@ export default function PedidosSucursal() {
                                 />
                                 <TextField
                                         label="Fecha de entrega"
-                                    value={pedidoSeleccionado.fecha}
+                                    value={formatFechaChile(pedidoSeleccionado.fecha)}
                                         InputProps={{ 
                                             readOnly: true,
                                             sx: { color: "#fff" }

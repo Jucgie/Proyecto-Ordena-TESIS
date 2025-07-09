@@ -58,19 +58,8 @@ export function PedidoDetalle({ id, setDetalle }: Props) {
 
     // Productos del pedido
     const productos = pedido.detalles_pedido || pedido.solicitud_fk?.productos || [];
-    // Formato de fecha
-    let fecha = null;
-    if (pedido.fecha_entrega) {
-        try {
-            const fechaObj = new Date(pedido.fecha_entrega);
-            fecha = {
-                fecha: fechaObj.toLocaleDateString(),
-                hora: fechaObj.toLocaleTimeString()
-            };
-        } catch {
-            fecha = { fecha: pedido.fecha_entrega, hora: '' };
-        }
-    }
+    // Usar formatFechaChile para la fecha de entrega
+    const fechaFormateada = pedido.fecha_entrega ? formatFechaChile(pedido.fecha_entrega) : '—';
 
     // --- AJUSTE: Ordenar timeline de salida por flujo lógico ---
     let historialFiltrado = historialEstados;
@@ -157,7 +146,7 @@ export function PedidoDetalle({ id, setDetalle }: Props) {
                                 <ScheduleIcon sx={{ color: '#FFD700', fontSize: 20 }} />
                                 <Box>
                                     <Typography sx={{ color: '#FFD700', fontSize: 12, fontWeight: 600 }}>FECHA</Typography>
-                                    <Typography sx={{ color: '#fff', fontSize: 14 }}>{fecha ? fecha.fecha + ' ' + fecha.hora : '—'}</Typography>
+                                    <Typography sx={{ color: '#fff', fontSize: 14 }}>{fechaFormateada}</Typography>
                                 </Box>
                             </Box>
                             {/* PROVEEDOR (solo para ingresos de proveedor) */}
@@ -366,13 +355,7 @@ export function PedidoDetalle({ id, setDetalle }: Props) {
                                                             }}
                                                         />
                                                         <Typography sx={{ color: '#FFD700', fontWeight: 600, fontSize: 14 }}>
-                                                            {h.fecha ? new Date(h.fecha).toLocaleString('es-CL', { 
-                                                                day: '2-digit', 
-                                                                month: '2-digit', 
-                                                                year: 'numeric', 
-                                                                hour: '2-digit', 
-                                                                minute: '2-digit' 
-                                                            }) : '—'}
+                                                            {h.fecha ? formatFechaChile(h.fecha) : '—'}
                                                         </Typography>
                                                     </Box>
                                                     

@@ -122,7 +122,7 @@ export default function NotificationCenter() {
                     <span>
                       <Typography component="span" sx={{ color: "#ccc", fontSize: 14, display: 'block' }}>{n.notificacion.descripcion}</Typography>
                       <Typography component="span" sx={{ color: "#888", fontSize: 12, mt: 0.5, display: 'block' }}>
-                        {n.notificacion.fecha_hora_ntd && formatFechaChile(n.notificacion.fecha_hora_ntd)}
+                        {n.notificacion.fecha_hora_ntd ? formatFechaChile(n.notificacion.fecha_hora_ntd) : ''}
                       </Typography>
                       {n.notificacion.link && (
                         <Button

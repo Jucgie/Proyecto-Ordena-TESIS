@@ -74,14 +74,6 @@ class InformeSerializer(serializers.ModelSerializer):
         validated_data['fecha_generado'] = timezone.now()
         return super().create(validated_data)
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        fecha_utc = instance.fecha_generado
-        if fecha_utc:
-            tz = pytz.timezone('America/Santiago')
-            fecha_chile = fecha_utc.astimezone(tz)
-            rep['fecha_generado'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
-        return rep
 
 class InformeCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -141,22 +133,6 @@ class MovInventarioSerializer(serializers.ModelSerializer):
             'icono_movimiento', 'color_movimiento', 'descripcion_movimiento'
         ]
     
-    def to_representation(self, instance):
-        """Sobrescribe la representación para agregar logs de debug"""
-        representation = super().to_representation(instance)
-        
-        # Logs de debug para el motivo
-        print(f"🔍 DEBUG - Serializando movimiento {instance.id_mvin}:")
-        print(f"  - Motivo original: '{instance.motivo}' (longitud: {len(instance.motivo) if instance.motivo else 0})")
-        motivo_rep = representation.get('motivo')
-        print(f"  - Motivo en representation: '{motivo_rep}' (longitud: {len(motivo_rep) if motivo_rep else 0})")
-        # Conversión de fecha
-        fecha_utc = getattr(instance, 'fecha', None)
-        if fecha_utc:
-            tz = pytz.timezone('America/Santiago')
-            fecha_chile = fecha_utc.astimezone(tz)
-            representation['fecha'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
-        return representation
 
     def get_tipo_movimiento(self, obj):
         """Determina el tipo de movimiento basado en la cantidad"""
@@ -381,14 +357,7 @@ class ProductosSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id_prodc', 'fecha_creacion']
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        fecha_utc = instance.fecha_creacion
-        if fecha_utc:
-            tz = pytz.timezone('America/Santiago')
-            fecha_chile = fecha_utc.astimezone(tz)
-            rep['fecha_creacion'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
-        return rep
+
 
 class ProveedorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -463,15 +432,7 @@ class SolicitudesSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id_solc', 'fecha_creacion']
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        # Convertir fecha_creacion a hora local de Chile
-        fecha_utc = instance.fecha_creacion
-        if fecha_utc:
-            tz = pytz.timezone('America/Santiago')
-            fecha_chile = fecha_utc.astimezone(tz)
-            rep['fecha_creacion'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
-        return rep
+
 
     def create(self, validated_data):
         validated_data['fecha_creacion'] = timezone.now()
@@ -925,14 +886,7 @@ class ProductoBodegaSerializer(serializers.ModelSerializer):
     # Hacer la descripción opcional
     descripcion_prodc = serializers.CharField(required=False, allow_blank=True)
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        fecha_utc = instance.fecha_creacion
-        if fecha_utc:
-            tz = pytz.timezone('America/Santiago')
-            fecha_chile = fecha_utc.astimezone(tz)
-            rep['fecha_creacion'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
-        return rep
+
 
     class Meta:
         model = Productos
@@ -958,14 +912,6 @@ class ProductoSucursalSerializer(serializers.ModelSerializer):
     # Hacer la descripción opcional
     descripcion_prodc = serializers.CharField(required=False, allow_blank=True)
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        fecha_utc = instance.fecha_creacion
-        if fecha_utc:
-            tz = pytz.timezone('America/Santiago')
-            fecha_chile = fecha_utc.astimezone(tz)
-            rep['fecha_creacion'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
-        return rep
 
     class Meta:
         model = Productos
@@ -1014,15 +960,6 @@ class HistorialEstadoPedidoSerializer(serializers.ModelSerializer):
             'fecha', 'comentario'
         ]
         read_only_fields = ['id_hist_ped', 'fecha']
-
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        fecha_utc = getattr(instance, 'fecha', None)
-        if fecha_utc:
-            tz = pytz.timezone('America/Santiago')
-            fecha_chile = fecha_utc.astimezone(tz)
-            rep['fecha'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
-        return rep
 
 
 class HistorialPedidosDetalladoSerializer(serializers.ModelSerializer):
@@ -1101,21 +1038,3 @@ class HistorialPedidosDetalladoSerializer(serializers.ModelSerializer):
         codigo = re.sub(r'["\'\s]+', '-', codigo)
         codigo = re.sub(r'[^A-Za-z0-9\-_]', '', codigo)
         return codigo.upper()
-
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        # fecha
-        fecha_utc = getattr(instance, 'fecha', None)
-        if fecha_utc:
-            tz = pytz.timezone('America/Santiago')
-            fecha_chile = fecha_utc.astimezone(tz)
-            rep['fecha'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
-        # fecha_entrega
-        fecha_entrega_utc = getattr(instance, 'pedidos_fk', None)
-        if fecha_entrega_utc and hasattr(fecha_entrega_utc, 'fecha_entrega'):
-            fecha_entrega = fecha_entrega_utc.fecha_entrega
-            if fecha_entrega:
-                tz = pytz.timezone('America/Santiago')
-                fecha_chile = fecha_entrega.astimezone(tz)
-                rep['fecha_entrega'] = fecha_chile.strftime('%Y-%m-%d %H:%M:%S')
-        return rep

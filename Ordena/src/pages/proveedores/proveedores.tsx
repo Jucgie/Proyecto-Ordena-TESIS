@@ -11,6 +11,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { generarActaRecepcion } from "../../utils/pdf/generarActaRecepcion";
 import { informesService } from "../../services/api";
 import { useAuthStore } from "../../store/useAuthStore";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 interface Proveedor {
     id_provd?: number;
@@ -216,7 +217,7 @@ export default function Proveedores() {
                                         <TableCell style={{ color: "#fff" }}>{proveedor.correo}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>{proveedor.direccion_provd}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>
-                                            {proveedor.ingresos?.[0]?.fecha || "Sin ingresos"}
+                                            {proveedor.ingresos?.[0]?.fecha ? formatFechaChile(proveedor.ingresos[0].fecha) : "Sin ingresos"}
                                         </TableCell>
                                         <TableCell style={{ color: "#fff" }}>
                                             {proveedor.ingresos?.length || 0} ingresos
@@ -258,7 +259,7 @@ export default function Proveedores() {
                                                 <TableBody>
                                                     {proveedor.ingresos.map((ing: any, index: number) => (
                                                         <TableRow key={index}>
-                                                            <TableCell style={{ color: "#fff" }}>{ing.fecha}</TableCell>
+                                                            <TableCell style={{ color: "#fff" }}>{formatFechaChile(ing.fecha)}</TableCell>
                                                             <TableCell style={{ color: "#fff" }}>{ing.num_guia_despacho || "-"}</TableCell>
                                                             <TableCell style={{ color: "#fff" }}>
                                                                 <Button

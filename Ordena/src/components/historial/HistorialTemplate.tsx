@@ -130,42 +130,6 @@ export function HistorialTemplate() {
                 </div>
 
             </section>
-            {/* Tabla de movimientos recientes */}
-            <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mt: 6, mb: 4 }}>
-                <Box sx={{ width: '100%', maxWidth: 1100, px: { xs: 1, sm: 3, md: 6 }, py: 3, bgcolor: '#232323', borderRadius: 4, boxShadow: '0 4px 24px 0 rgba(0,0,0,0.18)' }}>
-                    <Typography variant="h6" sx={{ color: '#FFD700', fontWeight: 700, mb: 2, textAlign: 'center' }}>
-                        Movimientos recientes de inventario y pedidos
-                    </Typography>
-                    <TableContainer component={Paper} sx={{ bgcolor: '#232323', borderRadius: 3, boxShadow: '0 2px 12px 0 rgba(0,0,0,0.10)' }}>
-                        <Table>
-                            <TableHead>
-                                <TableRow sx={{ bgcolor: '#232323' }}>
-                                    <TableCell sx={{ color: '#FFD700', fontWeight: 700, fontSize: 16 }}>Tipo</TableCell>
-                                    <TableCell sx={{ color: '#FFD700', fontWeight: 700, fontSize: 16 }}>Fecha</TableCell>
-                                    <TableCell sx={{ color: '#FFD700', fontWeight: 700, fontSize: 16 }}>Descripción</TableCell>
-                                    <TableCell sx={{ color: '#FFD700', fontWeight: 700, fontSize: 16 }}>Usuario</TableCell>
-                                    <TableCell sx={{ color: '#FFD700', fontWeight: 700, fontSize: 16 }}>Ubicación</TableCell> {/* NUEVA COLUMNA */}
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {loadingMov ? (
-                                    <TableRow><TableCell colSpan={5} sx={{ color: '#FFD700', textAlign: 'center', py: 4 }}>Cargando...</TableCell></TableRow>
-                                ) : movimientos.length === 0 ? (
-                                    <TableRow><TableCell colSpan={5} sx={{ color: '#FFD700', textAlign: 'center', py: 4 }}>No hay movimientos recientes</TableCell></TableRow>
-                                ) : movimientos.map((mov, idx) => (
-                                    <TableRow key={idx} sx={{ borderBottom: '1px solid #333', '&:last-child td': { borderBottom: 0 }, '&:hover': { bgcolor: '#292929' } }}>
-                                        <TableCell sx={{ color: mov.tipo === 'Inventario' ? '#4CAF50' : '#2196F3', fontWeight: 700 }}>{mov.tipo}</TableCell>
-                                        <TableCell sx={{ color: '#fff' }}>{formatFechaChile(mov.fecha)}</TableCell>
-                                        <TableCell sx={{ color: '#fff' }}>{mov.descripcion}</TableCell>
-                                        <TableCell sx={{ color: '#fff' }}>{mov.usuario}</TableCell>
-                                        <TableCell sx={{ color: '#fff' }}>{mov.ubicacion}</TableCell> {/* NUEVO */}
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </Box>
-            </Box>
         </div>
     );
 }

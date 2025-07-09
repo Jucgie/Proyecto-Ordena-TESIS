@@ -8,6 +8,7 @@ import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import PersonIcon from '@mui/icons-material/Person';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 //Obtención de datos de la api por medio del archivo store
 import { useHistorialStore } from "../../store/useHistorialStore";
@@ -36,15 +37,21 @@ export function DespachoDetalle({ id, setDespacho }: Props) {
     const pedidos = useHistorialStore(state => state.pedidos);
     const pedido = pedidos.find((p) => p.id_p === id);
 
+    // Mostrar fecha de entrega si existe
+    const fechaEntrega = pedido?.fecha_entrega ? formatFechaChile(pedido.fecha_entrega) : null;
+
     return (
         <Container>
             <div className="cerr">
                 <span onClick={setDespacho} className="vol"> X</span>
             </div>
             <div className="titulo">
-
                 <h2>Pedido #{pedido?.id_p}</h2>
-
+                {fechaEntrega && (
+                    <Typography sx={{ color: '#FFD700', fontWeight: 600, fontSize: 16, mt: 1 }}>
+                        Fecha de Entrega: {fechaEntrega}
+                    </Typography>
+                )}
             </div>
             <div className="table-container">
                 {/*Tarjeta que muestra los datos del transportista*/}
@@ -57,8 +64,6 @@ export function DespachoDetalle({ id, setDespacho }: Props) {
                     {/* Recorrido de los datos para obtener los correctos según el pedido */}
                       {pedido?.personal_entrega_fk && (
                     <CardContent sx={{background:"#FFD700" }}>
-                      
-
                         <Typography gutterBottom sx={{ color: 'text.secondary', display:'flex',justifyContent:'center' }}>
                         <PersonIcon sx={{fontSize:85, display:"flex",justifyContent:"center", color:"#1E1E1E",margin:"0px"}}/>
                         </Typography>
@@ -90,7 +95,6 @@ export function DespachoDetalle({ id, setDespacho }: Props) {
 
             </div>
         </Container>
-
     );
 }
 

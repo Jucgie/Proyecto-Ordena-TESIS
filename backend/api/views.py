@@ -834,7 +834,7 @@ class InformeViewSet(viewsets.ModelViewSet):
 
 
 class PedidosViewSet(viewsets.ModelViewSet):
-    queryset = Pedidos.objects.all()
+    queryset = Pedidos.objects.all().order_by('-fecha_entrega')
     serializer_class = PedidosSerializer
     lookup_field = 'id_p'
     authentication_classes = [JWTAuthentication]
@@ -1151,7 +1151,7 @@ class PedidosViewSet(viewsets.ModelViewSet):
                     fecha=timezone.now(),
                     productos_fk=detalle.productos_pedido_fk,
                     usuario_fk=request.user,
-                    motivo='Ingreso por pedido'
+                    motivo='Ingreso por pedido desde bodega central'
                 )
                 productos_agregados.append({
                     'producto': detalle.productos_pedido_fk.nombre_prodc,
@@ -2334,7 +2334,8 @@ def procesar_producto_ingreso(producto_data, bodega, proveedor, request):
             fecha=timezone.now(),
             productos_fk=producto,
             usuario_fk=request.user,
-            motivo='Ingreso por pedido'
+            stock_fk=stock_obj,
+            motivo=f'Ingreso por pedido de proveedor{f" - {proveedor.nombres_provd}" if proveedor else ""}'
         )
         return {
             'producto': producto.nombre_prodc,
@@ -2407,7 +2408,8 @@ def procesar_producto_ingreso(producto_data, bodega, proveedor, request):
             fecha=timezone.now(),
             productos_fk=producto,
             usuario_fk=request.user,
-            motivo='Ingreso por pedido'
+            motivo='Ingreso por pedido',
+            stock_fk=stock_obj
         )
 
         return {

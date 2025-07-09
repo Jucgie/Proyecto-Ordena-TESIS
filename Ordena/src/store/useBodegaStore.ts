@@ -185,6 +185,7 @@ export const useBodegaStore = create<BodegaState>()(
               historialService.registrarHistorialPedido({
                 pedidos_fk: pedido.id,
                 producto_fk: prod.id,
+                fecha: new Date().toISOString(),
               });
             });
           }

@@ -19,6 +19,7 @@ import autoTable from 'jspdf-autotable';
 import { useHistorialStore } from "../../store/useHistorialStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { PedidoDetalle } from "./DetallePedido";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 
 interface Props {
     setPedido: () => void;
@@ -47,27 +48,6 @@ const FiltrosCard = styled.div`
   padding: 16px;
   border: 1px solid #444;
 `;
-
-// Función helper para formatear fecha y hora
-function formatearFechaHora(fechaString: string | null | undefined): string {
-    if (!fechaString) return '—';
-    
-    try {
-        const fecha = new Date(fechaString);
-        if (isNaN(fecha.getTime())) return '—';
-        
-        // Formato: DD/MM/YYYY HH:MM
-        const dia = fecha.getDate().toString().padStart(2, '0');
-        const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
-        const año = fecha.getFullYear();
-        const hora = fecha.getHours().toString().padStart(2, '0');
-        const minutos = fecha.getMinutes().toString().padStart(2, '0');
-        
-        return `${dia}/${mes}/${año} ${hora}:${minutos}`;
-    } catch (error) {
-        return '—';
-    }
-}
 
 export function PedidosHistorialSucursal({ setPedido }: Props) {
     const usuario = useAuthStore((state: any) => state.usuario);
@@ -116,7 +96,7 @@ export function PedidosHistorialSucursal({ setPedido }: Props) {
     const exportarExcel = () => {
         const datosExportar = pedidosFiltros.map((pedido: any) => ({
             'ID': pedido.id_p,
-            'Fecha': formatearFechaHora(pedido.fecha_entrega),
+            'Fecha': formatFechaChile(pedido.fecha_entrega),
             'Sucursal': pedido.sucursal_nombre || '—',
             'Usuario': pedido.usuario_nombre || '—',
             'Estado': pedido.estado_pedido_nombre || '—',
@@ -175,7 +155,7 @@ export function PedidosHistorialSucursal({ setPedido }: Props) {
         // Tabla principal de pedidos
         const datosTabla = pedidosFiltros.map((pedido: any) => [
             pedido.id_p,
-            formatearFechaHora(pedido.fecha_entrega),
+            formatFechaChile(pedido.fecha_entrega),
             pedido.sucursal_nombre || '—',
             pedido.usuario_nombre || '—',
             pedido.estado_pedido_nombre || '—',
@@ -226,7 +206,7 @@ export function PedidosHistorialSucursal({ setPedido }: Props) {
                 // Título del pedido
                 doc.setFontSize(12);
                 doc.setTextColor(0, 0, 0);
-                doc.text(`Pedido ID: ${pedido.id_p} - ${formatearFechaHora(pedido.fecha_entrega)}`, 20, currentY);
+                doc.text(`Pedido ID: ${pedido.id_p} - ${formatFechaChile(pedido.fecha_entrega)}`, 20, currentY);
                 currentY += 10;
                 
                 // Tabla de productos del pedido
@@ -476,7 +456,7 @@ export function PedidosHistorialSucursal({ setPedido }: Props) {
                                     return (
                                         <TableRow key={pedido.id_p || idx} hover>
                                             <TableCell sx={{ color: '#fff' }}>{pedido.id_p}</TableCell>
-                                            <TableCell sx={{ color: '#fff' }}>{formatearFechaHora(pedido.fecha_entrega)}</TableCell>
+                                            <TableCell sx={{ color: '#fff' }}>{formatFechaChile(pedido.fecha_entrega)}</TableCell>
                                             <TableCell sx={{ color: '#fff' }}>{pedido.sucursal_nombre || '—'}</TableCell>
                                             <TableCell sx={{ color: '#fff' }}>{pedido.usuario_nombre || '—'}</TableCell>
                                             <TableCell>

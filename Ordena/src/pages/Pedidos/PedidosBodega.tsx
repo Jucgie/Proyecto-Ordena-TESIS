@@ -107,19 +107,6 @@ function BotonAccion({ children, startIcon, ...props }: { children: React.ReactN
     );
 }
 
-function formatFecha(fecha: string) {
-    if (!fecha) return '-';
-    const d = new Date(fecha);
-    return d.toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
-// Función para formatear fecha legible
-function formatFechaLegible(fecha: string) {
-    if (!fecha) return '-';
-    const d = new Date(fecha);
-    return d.toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
 // Componente para tabla de ingresos
 function TablaIngresos({ ingresos, onVerDetalles, loading }: { ingresos: any[], onVerDetalles: (row: any) => void, loading: boolean }) {
     return (
@@ -496,7 +483,7 @@ export default function PedidosBodega() {
             const sucursalId = SUCURSALES.find(s => s.nombre === solicitud.sucursalDestino)?.id || "";
             nuevoPedido = {
                 id: pedidoCreado.pedido.id_p, // Usar ID real de la BD
-                fecha: new Date().toISOString().slice(0, 10),
+                fecha: new Date().toISOString(),
                 responsable: usuario?.nombre || "Responsable Bodega",
                 productos: solicitud.productos,
                 sucursalDestino: sucursalId,
@@ -1215,21 +1202,13 @@ export default function PedidosBodega() {
                                     solicitudesTransferidas
                                         .filter(s => Number(s.id) > 0 && Array.isArray(s.productos) && s.productos.length > 0)
                                         .map((s: any, idx: number) => {
-                                            // Formatear fecha
-                                            const fechaFormateada = s.fecha ? new Date(s.fecha).toLocaleDateString('es-CL', {
-                                                day: '2-digit',
-                                                month: '2-digit',
-                                                year: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit'
-                                            }) : '-';
-                                            
+
                                             // Calcular cantidad total
                                             
                                             return (
                                                 <TableRow key={`${s.id}-${idx}`}>
                                                     <TableCell style={{ color: "#fff" }}>{s.id}</TableCell>
-                                                    <TableCell style={{ color: "#fff" }}>{fechaFormateada}</TableCell>
+                                                    <TableCell style={{ color: "#fff" }}>{formatFechaChile(s.fecha)}</TableCell>
                                                     <TableCell style={{ color: "#fff" }}>
                                                         {typeof s.sucursal === "object"
                                                             ? s.sucursal?.nombre

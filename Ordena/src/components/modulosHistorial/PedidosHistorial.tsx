@@ -21,6 +21,7 @@ import { useHistorialStore } from "../../store/useHistorialStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { PedidoDetalle } from "./DetallePedido";
 import { DespachoDetalle } from "./DetalleDespacho";
+import { formatFechaChile } from '../../utils/formatFechaChile';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -161,7 +162,7 @@ export function PedidoHistorial({ setPedido }: Props) {
     const exportarExcel = () => {
         const datosExportar = pedidosFiltros.map((pedido: any) => ({
             'ID': pedido.id_p,
-            'Fecha': formatearFechaHora(pedido.fecha_entrega),
+            'Fecha': formatFechaChile(pedido.fecha_entrega),
             'Tipo': tab === 'salida' ? 'Sucursal' : 'Proveedor',
             'Destino': tab === 'salida' ? (pedido.sucursal_nombre || '—') : (pedido.proveedor_nombre || '—'),
             'Usuario': pedido.usuario_nombre || '—',
@@ -222,7 +223,7 @@ export function PedidoHistorial({ setPedido }: Props) {
         // Tabla principal de pedidos
         const datosTabla = pedidosFiltros.map((pedido: any) => [
             pedido.id_p,
-            formatearFechaHora(pedido.fecha_entrega),
+            formatFechaChile(pedido.fecha_entrega),
             tab === 'salida' ? (pedido.sucursal_nombre || '—') : (pedido.proveedor_nombre || '—'),
             pedido.usuario_nombre || '—',
             mostrarEstado(pedido),
@@ -273,7 +274,7 @@ export function PedidoHistorial({ setPedido }: Props) {
                 // Título del pedido
                 doc.setFontSize(12);
                 doc.setTextColor(0, 0, 0);
-                doc.text(`Pedido ID: ${pedido.id_p} - ${formatearFechaHora(pedido.fecha_entrega)}`, 20, currentY);
+                doc.text(`Pedido ID: ${pedido.id_p} - ${formatFechaChile(pedido.fecha_entrega)}`, 20, currentY);
                 currentY += 10;
                 
                 // Tabla de productos del pedido
@@ -330,7 +331,7 @@ export function PedidoHistorial({ setPedido }: Props) {
         // Hoja TODOS
         const datosTodos = todosLosPedidos.map((pedido: any) => ({
             'ID': pedido.id_p,
-            'Fecha': formatearFechaHora(pedido.fecha_entrega),
+            'Fecha': formatFechaChile(pedido.fecha_entrega),
             'Tipo': pedido.tipo === 'salida' ? 'Salida a Sucursal' : 'Ingreso de Proveedor',
             'Destino': pedido.tipo === 'salida' ? (pedido.sucursal_nombre || '—') : (pedido.proveedor_nombre || '—'),
             'Usuario': pedido.usuario_nombre || '—',
@@ -342,7 +343,7 @@ export function PedidoHistorial({ setPedido }: Props) {
         // Hoja SALIDAS
         const datosSalidas = pedidosSalidas.map((pedido: any) => ({
             'ID': pedido.id_p,
-            'Fecha': formatearFechaHora(pedido.fecha_entrega),
+            'Fecha': formatFechaChile(pedido.fecha_entrega),
             'Sucursal': pedido.sucursal_nombre || '—',
             'Usuario': pedido.usuario_nombre || '—',
             'Estado': mostrarEstado(pedido),
@@ -353,7 +354,7 @@ export function PedidoHistorial({ setPedido }: Props) {
         // Hoja INGRESOS
         const datosIngresos = pedidosIngresos.map((pedido: any) => ({
             'ID': pedido.id_p,
-            'Fecha': formatearFechaHora(pedido.fecha_entrega),
+            'Fecha': formatFechaChile(pedido.fecha_entrega),
             'Proveedor': pedido.proveedor_nombre || '—',
             'Usuario': pedido.usuario_nombre || '—',
             'Estado': mostrarEstado(pedido),
@@ -453,7 +454,7 @@ export function PedidoHistorial({ setPedido }: Props) {
             // Tabla de salidas
             const datosSalida = pedidosSalida.map((pedido: any) => [
                     pedido.id_p,
-                formatearFechaHora(pedido.fecha_entrega),
+                formatFechaChile(pedido.fecha_entrega),
                 pedido.sucursal_nombre || '—',
                 pedido.usuario_nombre || '—',
                 mostrarEstado(pedido),
@@ -511,7 +512,7 @@ export function PedidoHistorial({ setPedido }: Props) {
             // Tabla de ingresos
             const datosIngreso = pedidosIngreso.map((pedido: any) => [
                 pedido.id_p,
-                formatearFechaHora(pedido.fecha_entrega),
+                formatFechaChile(pedido.fecha_entrega),
                 pedido.proveedor_nombre || '—',
                 pedido.usuario_nombre || '—',
                 mostrarEstado(pedido),
@@ -564,7 +565,7 @@ export function PedidoHistorial({ setPedido }: Props) {
                 doc.setFontSize(12);
                 doc.setTextColor(0, 0, 0);
                 const tipoPedido = pedido.tipo === 'salida' ? 'SALIDA' : 'INGRESO';
-                doc.text(`Pedido ID: ${pedido.id_p} (${tipoPedido}) - ${formatearFechaHora(pedido.fecha_entrega)}`, 20, currentY);
+                doc.text(`Pedido ID: ${pedido.id_p} (${tipoPedido}) - ${formatFechaChile(pedido.fecha_entrega)}`, 20, currentY);
                 currentY += 10;
                 
                 // Tabla de productos del pedido
@@ -865,7 +866,7 @@ export function PedidoHistorial({ setPedido }: Props) {
                                         return (
                                         <TableRow key={pedido.id_p || idx} hover>
                                             <TableCell sx={{ color: '#fff' }}>{pedido.id_p}</TableCell>
-                                            <TableCell sx={{ color: '#fff' }}>{formatearFechaHora(pedido.fecha_entrega)}</TableCell>
+                                            <TableCell sx={{ color: '#fff' }}>{formatFechaChile(pedido.fecha_entrega)}</TableCell>
                                             {tab === 'salida' ? (
                                                 <TableCell sx={{ color: '#fff' }}>{pedido.sucursal_nombre || '—'}</TableCell>
                                             ) : (

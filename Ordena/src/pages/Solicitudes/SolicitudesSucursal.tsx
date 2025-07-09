@@ -236,15 +236,15 @@ export default function SolicitudesSucursal() {
         // Limpiar el estado de la nueva solicitud
         setNuevaSolicitud({
             id: Math.floor(Math.random() * 9000) + 1000,
-            fecha: new Date().toLocaleDateString(),
+            fecha: formatFechaChile(new Date().toISOString()),
             sucursal: sucursalData,
             bodega: "Bodega Central",
             responsable: usuario?.nombre || "",
-                            cargo: usuario?.rol || "",
+            cargo: usuario?.rol || "",
             observacion: "",
             productos: [],
             estado: "Pendiente",
-                            aprobador: ""
+            aprobador: ""
         });
     };
 
@@ -325,7 +325,7 @@ export default function SolicitudesSucursal() {
             rut: sucursalData.rut
         },
         bodega: "Bodega Central",
-        fecha: new Date().toISOString().slice(0, 10),
+        fecha: formatFechaChile(new Date().toISOString()),
         responsable: usuario?.nombre || "",
         cargo: usuario?.rol || "",
         observacion: "",
