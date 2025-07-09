@@ -353,7 +353,7 @@ export function CountElementSucursal() {
                                     <TableRow>
                                         <TableCell>Id</TableCell>
                                         <TableCell>Fecha</TableCell>
-                                        <TableCell align="right">N° Productos</TableCell>
+                                        <TableCell align="right">Total Productos</TableCell>
                                         <TableCell align="right">Estado</TableCell>
                                     </TableRow>
                                 </TableHead>
@@ -369,7 +369,9 @@ export function CountElementSucursal() {
                                                 {solicitud.id_solc}
                                             </TableCell>
                                             <TableCell align="right">{formatFechaChile(solicitud.fecha_creacion)}</TableCell>
-                                            <TableCell align="right">{solicitud.productos?.length ?? 0}</TableCell>
+                                            <TableCell align="right">    {(solicitud.productos || []).reduce((total, producto) => 
+        total + (Number(producto.cantidad) || 0), 0
+    )}</TableCell>
                                             <TableCell>{getEstadoSolicitud(solicitud.estado)}</TableCell>
                                         </TableRow>
                                     ))}
