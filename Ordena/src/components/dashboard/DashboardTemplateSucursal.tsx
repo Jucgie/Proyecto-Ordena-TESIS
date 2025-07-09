@@ -179,6 +179,9 @@ export function CountElementSucursal() {
     };
 
     const getEstadoSolicitud = (estado: string) => {
+            if (!estado){
+            return <Chip label="Pendiente" color="warning" size="small" sx={{ color: 'white', backgroundColor: '#FF9800' }}/>;
+        }
         switch (estado?.toLowerCase()) {
             case 'aprobada':
                 return <Chip label="Aprobada" color="success" size="small" sx={{ color: 'white', backgroundColor: '#4CAF50' }} />;
@@ -226,8 +229,14 @@ export function CountElementSucursal() {
 
     return (
         <Contenedor_Dashboard>
-            <h1 className="titulo_bn">Bienvenido, {usuario?.nombre || 'usuario'} </h1>
 
+            <h1 className="titulo_bn">Bienvenido,  {usuario?.nombre || ' usuario'} 
+
+                <span style={{color:'#FFD700', marginLeft:'8px',justifyContent:'start',width:'100%',fontSize:'18px',}}>
+                    {usuario?.rol} 
+                    </span>
+            </h1>
+        
             {/* container para los cuadrados resumen */}
             <Container>
                 <ul className="cuadroEstd">
@@ -276,7 +285,7 @@ export function CountElementSucursal() {
                         <h3 className="tituloTopProdc">Productos más pedidos</h3>
                         <div style={{ display: "flex", color: "grey", justifyContent: "center", fontSize: "14px" }}>
                             <InfoOutlineIcon />
-                            <p>Los 5 productos más pedidos</p>
+                            <p>Se muestran los 5 productos más pedidos</p>
                         </div>
                         <div style={{
                             border: ' 1px solid #5B5B5B', borderRadius: '10px',
@@ -418,7 +427,7 @@ export function CountElementSucursal() {
                                     <TableCell>Id</TableCell>
                                     <TableCell>Sucursal</TableCell>
                                     <TableCell>Productos</TableCell>
-                                    <TableCell>Fecha Inicio</TableCell>
+                                    <TableCell>Fecha Entrega</TableCell>
                                     <TableCell>Estado</TableCell>
 
                                 </TableRow>
@@ -439,7 +448,12 @@ export function CountElementSucursal() {
                                         <TableCell>                       {(row.detalles_pedido || []).reduce((total, producto) =>
                                             total + (parseInt(producto.cantidad, 10) || 0), 0
                                         )}</TableCell>
-                                        <TableCell>{formatFechaChile(row.fecha_entrega)}</TableCell>
+                                        <TableCell> {(() => {
+                                                if (!row.fecha_entrega) return 'N/A';
+                                            
+                                                const datePart = row.fecha_entrega.split('T')[0];
+                                                return new Date(datePart + 'T00:00:00').toLocaleDateString('es-CL');
+                                            })()}</TableCell>
                                         <TableCell>{getEstadoPedido(row.estado_pedido_fk)}</TableCell>
 
 
@@ -519,10 +533,12 @@ const Container = styled.div`
 
     .titulo_bn{
         display:flex;
+        flex-direction:column;
         color: yellow;
         align-items:start;
-        justify-content:center;
+        justify-content:start;
         width:50%;
+        margin-left:5vw;
         font-size:30px;
         margin-top:10px;
 

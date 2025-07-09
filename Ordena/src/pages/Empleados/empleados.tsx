@@ -2,7 +2,7 @@ import styled from "styled-components";
 
 import ordena from "../../assets/ordena.svg";
 
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useMemo, useState } from "react";
 
 import Layout from "../../components/layout/layout";
 
@@ -20,6 +20,8 @@ import { useUsuariosStore } from "../../store/useUsuarioStore";
 import type { Usuario, CreateUsuarioData } from "../../store/useUsuarioStore";
 
 export default function Empleados() {
+
+    const [busqueda, setBusqueda] = useState("");
 
     const usuario = useAuthStore(state => state.usuario);
 
@@ -54,6 +56,34 @@ export default function Empleados() {
         fetchUsuarios();
     }, [fetchUsuarios]);
 
+    //se obtiene el total de empleados
+    const totalEmpleadosActivos = useMemo(() => {
+        if(!usuario) return 0;
+        return (Array.isArray(usuarios) ? usuarios : []).filter(
+            (emp:Usuario) =>emp.sucursal_fk == usuario.sucursal&& emp.is_active
+        ).length;
+    },[usuarios,usuario?.sucursal]);
+
+    //obtiene los empleados y la busqueda
+    const empleadosFiltrados = useMemo(()=>{
+        const empleadosActivosSucursal = (Array.isArray(usuarios) ? usuarios : []).filter(
+            (emp: Usuario)=>emp.sucursal_fk == usuario.sucursal && emp.is_active
+        );
+        if (!busqueda) {
+            return empleadosActivosSucursal;
+        }
+
+        const lowercaseBusqueda =busqueda.toLowerCase();
+        return empleadosActivosSucursal.filter(emp => 
+            emp.nombre.toLowerCase().includes(lowercaseBusqueda) ||
+            emp.correo.toLowerCase().includes(lowercaseBusqueda) ||
+            emp.rut.toLowerCase().includes(lowercaseBusqueda) ||
+            emp.rol_nombre.toLowerCase().includes(lowercaseBusqueda)
+            
+        );
+    },[usuarios,usuario?.sucursal,busqueda]);
+
+    
     if (!usuario || usuario.rol !== "supervisor") {
         return (
             <Layout>
@@ -103,13 +133,14 @@ export default function Empleados() {
     };
 
     // Solo empleados de la sucursal del supervisor
-    const empleadosSucursal = usuarios.filter(
+  /*  const empleadosSucursal = usuarios.filter(
         (emp: Usuario) => emp.sucursal_fk == usuario.sucursal
     );
 
     const empleadosActivosSucursal = empleadosSucursal.filter(
         (emp: Usuario) => emp.is_active
-    );
+    );*/
+   
 
 
     // --- INICIO DEPURACIÓN ---
@@ -118,8 +149,8 @@ export default function Empleados() {
     console.log("--- DEPURANDO VISTA DE EMPLEADOS ---");
     console.log("Usuario Supervisor:", usuario);
     console.log("Todos los usuarios recibidos de la API:", usuarios);
-    console.log(`Empleados encontrados en la sucursal (${usuario.sucursal}):`, empleadosSucursal);
-    console.log("Empleados activos (los que se deberían mostrar en la tabla):", empleadosActivosSucursal);
+    console.log(`Empleados encontrados en la sucursal (${usuario.sucursal}):`, empleadosFiltrados);
+    console.log("Empleados activos (los que se deberían mostrar en la tabla):", empleadosFiltrados);
     console.log("--- FIN DEPURACIÓN ---")
 
     //
@@ -235,7 +266,7 @@ return (
 
         <ContainerE>
 
-            <h2 style={{ color: "#FFD700", margin: "24px 0" }}>Gestión de Empleados</h2>
+            <h2 style={{ color: "#FFD700", margin: "10px 0" }}>Gestión de Empleados</h2>
 
             <Button
                 variant="contained"
@@ -244,13 +275,40 @@ return (
             >
                 Agregar empleado
             </Button>
-
+            
+                <TextField
+                label ="Buscar Empleado..."
+                value={busqueda}
+                onChange={(e)=>setBusqueda(e.target.value)}
+                sx={{
+                    marginBottom: '10px',
+                    width: '100%',
+                    height:'10%',
+                    maxWidth: '500px',
+                    maxHeight:'49px',
+                    '& .MuiInputBase-root': {
+                        color: 'white',
+                    },
+                    '& .MuiOutlinedInput-root': {
+                        '& fieldset': {
+                            borderColor: '#FFD700',
+                        },
+                        '&:hover fieldset': {
+                            borderColor: 'white',
+                        },
+                    },
+                    '& .MuiInputLabel-root': { color: '#FFD700' },
+                }}
+                />
+            <p style={{display:'flex',justifyContent:"flex-start",width:'90%',color:'grey'}}> Mostrando {empleadosFiltrados.length} de {totalEmpleadosActivos} Empleados Activos</p>
             <div className="tablaPrincipal">
                 <TableContainer component={Paper}
                     sx={{
                         background: "#1b1a1a",
                         border: "1px solid rgb(36, 34, 34)",
-                        maxHeight: "25vw"
+                        maxHeight: "25vw",
+                        minWidth:'75vw',
+                        maxWidth:'75vw',
                     }}>
                     <Table stickyHeader sx={{ minWidth: 150 }} aria-label="simple table">
                         <TableHead sx={{
@@ -269,9 +327,9 @@ return (
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {empleadosActivosSucursal.length > 0 ? (
+                            {empleadosFiltrados.length > 0 ? (
 
-                                empleadosActivosSucursal.map((emp: Usuario) => (
+                                empleadosFiltrados.map((emp: Usuario) => (
                                     <TableRow key={emp.id_us}>
                                         <TableCell style={{ color: "#fff" }}>{emp.nombre}</TableCell>
                                         <TableCell style={{ color: "#fff" }}>{emp.correo}</TableCell>
@@ -315,10 +373,11 @@ return (
             </div>
 
             <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
-                <DialogTitle style={{ background: "#232323", color: "#FFD700" }}>
+                <DialogTitle style={{ background: "#232323", color: "#FFD700"}}>
                     {isNew ? "Agregar Empleado" : "Editar Empleado"}
                 </DialogTitle>
-                <DialogContent style={{ background: "#232323" }}>
+                <hr />
+                <DialogContent style={{ background: "#232323",border:'10px' }}>
                     {empleadoSeleccionado && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                             <TextField

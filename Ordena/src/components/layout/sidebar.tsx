@@ -40,7 +40,24 @@ export default function Sidebar() {
                         padding: "1rem"}}>
             <div style={{ display: "flex", alignItems: "center", marginBottom: "32px" }}>
                 <img src={OrdenaLogo} alt="Logo" style={{ width: "40px", height: "40px", marginRight: "10px" }} />
-                <h2 style={{ color: "#FFFFFF", fontSize: "24px", margin: 0 }}>Ordena</h2>
+                <div style={{position:'relative'}}>
+                    <h2 style={{ color: "#FFFFFF", fontSize: "24px", margin: 0}}>Ordena
+                    </h2>
+                    
+                    <p style={{position:'absolute',
+                        top:'-5px', right:'-45px',fontSize:'11px',margin:0,color:'#1a1a1a',
+                        fontWeight:'bold',
+                        background:'#ffd700',
+                        padding:'1px 5px',
+                        borderRadius:'6px'}}
+                        >
+                        {usuario?.tipo
+                            ?(usuario.tipo.charAt(0).toUpperCase()+usuario.tipo.slice(1))
+                            : ''
+                        }
+
+                           </p>
+                </div>
             </div>
             <nav>
                 <ul style={{ listStyle: "none", padding: 0 }}>

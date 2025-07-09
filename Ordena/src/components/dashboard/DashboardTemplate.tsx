@@ -242,7 +242,12 @@ export function CountElement() {
     return (
         <Contenedor_Dashboard>
             {(state || prod) && <Backdrop onClick={()=>{setState(false);setProd(false);}}/>}
-            <h1 className="titulo_bn">Bienvenido, {usuario?.nombre || 'usuario'}</h1>
+            <h1 className="titulo_bn">Bienvenido,  {usuario?.nombre || ' usuario'} 
+
+                <span style={{color:'#FFD700', marginLeft:'8px',justifyContent:'start',width:'100%',fontSize:'18px',}}>
+                    {usuario?.rol} 
+                    </span>
+            </h1>
 
             {state && <PedidosSucursal pedidos={pedidosMostrados} setState={() => setState(false)} />}
             
@@ -539,10 +544,12 @@ const Container = styled.div`
 
     .titulo_bn{
         display:flex;
+        flex-direction:column;
         color: yellow;
         align-items:start;
-        justify-content:center;
+        justify-content:start;
         width:50%;
+        margin-left:5vw;
         font-size:30px;
         margin-top:10px;
     }

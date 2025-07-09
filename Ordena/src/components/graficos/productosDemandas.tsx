@@ -13,6 +13,8 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import InfoOutlineIcon from '@mui/icons-material/InfoOutline';
 
 import noEncontrado from '../../assets/noEncontrado.png'
+import { formatFechaChile } from '../../utils/formatFechaChile';
+
 //Definición de interfaces
 interface DetallePedido {
     producto_nombre: string;
@@ -115,15 +117,18 @@ export function ProductoMasPedido({ pedidos, inventario, setProd }: ProductoMasP
             return { labels: [], datasets: [] };
         }
         //oredenar por fecha
-        const sortedEntries = [...demandByDate.entries()].sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime());
+        const sortedEntries = [...demandByDate.entries()].sort((a, b) => new Date(a[0] +'T00:00:00').getTime() - new Date(b[0]+ 'T00:00:00').getTime());
 
         //formato de hora localizado
-        const labels = sortedEntries.map(entry => {
-            const date = new Date(entry[0]);
-            const userTimeZonaOffset = date.getTimezoneOffset();
-            return new Date(date.getTime() + userTimeZonaOffset).toLocaleDateString('es-CL')
+      const labels = sortedEntries.map(entry => {
+            // entry[0] es una fecha en formato "YYYY-MM-DD".
+            // new Date("YYYY-MM-DD") la interpreta como medianoche UTC.
+            // Para evitar el desfase de día en zonas horarias como la de Chile (UTC-4),
+            // creamos la fecha usando los componentes para que se interprete en la zona local.
+            const parts = entry[0].split('-').map(p => parseInt(p, 10));
+            // new Date(año, mes - 1, día) usa la zona horaria local.
+            return new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString('es-CL');
         });
-
 
         //definición de la data        
         const data = sortedEntries.map(entry => entry[1]

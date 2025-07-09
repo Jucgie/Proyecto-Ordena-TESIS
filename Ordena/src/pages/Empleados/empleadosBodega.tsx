@@ -2,7 +2,7 @@ import styled from "styled-components";
 
 import ordena from "../../assets/ordena.svg";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import Layout from "../../components/layout/layout";
 
@@ -22,6 +22,9 @@ import { useBodegaStore } from "../../store/useBodegaStore";
 import { Message } from "@mui/icons-material";
 
 export default function EmpleadosBodega() {
+
+    const [busqueda, setBusqueda] = useState("");
+
 
     const usuario = useAuthStore(state => state.usuario);
 
@@ -58,6 +61,33 @@ export default function EmpleadosBodega() {
         fetchUsuarios();
         fetchBodegas();
     }, [fetchUsuarios, fetchBodegas]);
+
+    //se obtiene el total de empleados
+    const totalEmpleadosActivos = useMemo(() => {
+        if (!usuario) return 0;
+        return (Array.isArray(usuarios) ? usuarios : []).filter(
+            (emp: Usuario) => emp.bodeg_fk == usuario.bodega && emp.is_active
+        ).length;
+    }, [usuarios, usuario?.bodega]);
+
+    //obtiene los empleados y la busqueda
+    const empleadosFiltrados = useMemo(() => {
+        const empleadosActivosBodega = (Array.isArray(usuarios) ? usuarios : []).filter(
+            (emp: Usuario) => emp.bodeg_fk == usuario.bodega && emp.is_active
+        );
+        if (!busqueda) {
+            return empleadosActivosBodega;
+        }
+
+        const lowercaseBusqueda = busqueda.toLowerCase();
+        return empleadosActivosBodega.filter(emp =>
+            emp.nombre.toLowerCase().includes(lowercaseBusqueda) ||
+            emp.correo.toLowerCase().includes(lowercaseBusqueda) ||
+            emp.rut.toLowerCase().includes(lowercaseBusqueda) ||
+            emp.rol_nombre.toLowerCase().includes(lowercaseBusqueda)
+
+        );
+    }, [usuarios, usuario, busqueda]);
 
     if (!usuario || usuario.rol !== "supervisor") {
         return (
@@ -111,13 +141,14 @@ export default function EmpleadosBodega() {
     };
 
     // Solo empleados de la bodega del supervisor
-    const empleadosBodega = (Array.isArray(usuarios) ? usuarios : []).filter(
+    /*const empleadosBodega = (Array.isArray(usuarios) ? usuarios : []).filter(
         (emp: Usuario) => emp.bodeg_fk == usuario.bodega
-    );
+    );*/
 
+    /*
     const empleadosActivosBodega = empleadosBodega.filter(
         (emp: Usuario) => emp.is_active
-    );
+    );*/
 
 
     // --- INICIO DEPURACIÓN ---
@@ -126,9 +157,9 @@ export default function EmpleadosBodega() {
     console.log("--- DEPURANDO VISTA DE EMPLEADOS ---");
     console.log("Usuario Supervisor:", usuario);
     console.log("Todos los usuarios recibidos de la API:", usuarios);
-    console.log(`Empleados encontrados en la bodega (${usuario.sucursal}):`, empleadosBodega);
-    console.log(`Empleados encontrados en la bodega (${usuario.bodega}):`, empleadosBodega);
-    console.log("Empleados activos (los que se deberían mostrar en la tabla):", empleadosActivosBodega);
+    console.log(`Empleados encontrados en la bodega (${usuario.sucursal}):`, empleadosFiltrados);
+    console.log(`Empleados encontrados en la bodega (${usuario.bodega}):`, empleadosFiltrados);
+    console.log("Empleados activos (los que se deberían mostrar en la tabla):", empleadosFiltrados);
     console.log("--- FIN DEPURACIÓN ---")
 
     //
@@ -194,7 +225,7 @@ export default function EmpleadosBodega() {
                 removeUsuario(id);
             }
         }; */
-        
+
     //Deshabilitar Empleado
     const ModalDeshabilitar = (id: string) => {
         setEmployeeToDisable(id);
@@ -244,7 +275,7 @@ export default function EmpleadosBodega() {
 
             <ContainerE>
 
-                <h2 style={{ color: "#FFD700", margin: "24px 0" }}>Gestión de Empleados</h2>
+                <h2 style={{ color: "#FFD700", margin: "10px 0" }}>Gestión de Empleados</h2>
 
                 <Button
                     variant="contained"
@@ -253,13 +284,39 @@ export default function EmpleadosBodega() {
                 >
                     Agregar empleado
                 </Button>
-
+                <TextField
+                    label="Buscar Empleado..."
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    sx={{
+                        marginBottom: '10px',
+                        width: '100%',
+                        height: '10%',
+                        maxWidth: '500px',
+                        maxHeight: '49px',
+                        '& .MuiInputBase-root': {
+                            color: 'white',
+                        },
+                        '& .MuiOutlinedInput-root': {
+                            '& fieldset': {
+                                borderColor: '#FFD700',
+                            },
+                            '&:hover fieldset': {
+                                borderColor: 'white',
+                            },
+                        },
+                        '& .MuiInputLabel-root': { color: '#FFD700' },
+                    }}
+                />
+                <p style={{ display: 'flex', justifyContent: "flex-start", width: '90%', color: 'grey' }}> Mostrando {empleadosFiltrados.length} de {totalEmpleadosActivos} Empleados Activos</p>
                 <div className="tablaPrincipal">
                     <TableContainer component={Paper}
                         sx={{
                             background: "#1b1a1a",
                             border: "1px solid rgb(36, 34, 34)",
-                            maxHeight: "25vw"
+                            maxHeight: "25vw",
+                            minWidth: '75vw',
+                            maxWidth: '75vw',
                         }}>
                         <Table stickyHeader sx={{ minWidth: 150 }} aria-label="simple table">
                             <TableHead sx={{
@@ -278,9 +335,9 @@ export default function EmpleadosBodega() {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {empleadosActivosBodega.length > 0 ? (
+                                {empleadosFiltrados.length > 0 ? (
 
-                                    empleadosActivosBodega.map((emp: Usuario) => (
+                                    empleadosFiltrados.map((emp: Usuario) => (
                                         <TableRow key={emp.id_us}>
                                             <TableCell style={{ color: "#fff" }}>{emp.nombre}</TableCell>
                                             <TableCell style={{ color: "#fff" }}>{emp.correo}</TableCell>
